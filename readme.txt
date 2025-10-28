@@ -18,16 +18,16 @@ It removes the need for merchants to manually create/delete admin users or share
 
 = Key Features =
 
-* **🔐 OTP-Based Authentication** - Generate secure 6-digit codes instead of sharing passwords.
-* **⏱ Time-Limited Access** - Automatically expires after the set duration (1 hour to 30 days).
-* **🧹 Automatic Cleanup** - Temporary users are deleted automatically when access expires.
-* **📝 Full Audit Log** - Track all access and actions with CSV export for compliance.
-* **✉️ Email Notifications** - Optionally send access codes to admin email for secure sharing.
-* **🚨 Emergency Lock** - One-click button to instantly revoke all active tokens.
-* **✅ GDPR Compliant** - Built-in consent workflow and data protection features.
-* **🎨 Native WordPress UI** - Uses WordPress admin styles with helpful tooltips.
-* **🛡️ Advanced Security** - Rate limiting, IP tracking, and failed attempt lockouts.
-* **📊 Active Token Management** - View all active codes, see usage status, and revoke anytime.
+* ** OTP-Based Authentication** - Generate secure 6-digit codes instead of sharing passwords.
+* ** Time-Limited Access** - Automatically expires after the set duration (1 hour to 30 days).
+* ** Automatic Cleanup** - Temporary users are deleted automatically when access expires.
+* ** Full Audit Log** - Track all access and actions with CSV export for compliance.
+* ** Email Notifications** - Optionally send access codes to admin email for secure sharing.
+* ** Emergency Lock** - One-click button to instantly revoke all active tokens.
+* ** GDPR Compliant** - Built-in consent workflow and data protection features.
+* ** Native WordPress UI** - Uses WordPress admin styles with helpful tooltips.
+* ** Advanced Security** - Rate limiting, IP tracking, and failed attempt lockouts.
+* ** Active Token Management** - View all active codes, see usage status, and revoke anytime.
 
 = How It Works =
 
