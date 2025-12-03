@@ -139,7 +139,9 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 * IMPROVED: GDPR consent message is clearer with link to GDPR documentation.
 * IMPROVED: Audit logs show temp_username for OTP Verified events.
 * IMPROVED: Token Created logs now show masked OTP code (e.g., "12****").
+* IMPROVED: OTP Verified logs now show masked OTP code for traceability.
 * IMPROVED: Login Failed events now show masked attempted code.
+* FIXED: Reference Note not displaying in Active Tokens table.
 * IMPROVED: Duration now displays as human-readable (e.g., "7 days" instead of "604800").
 * IMPROVED: OTP codes can now be reused unlimited times until expiry.
 * FIXED: OTP reuse bug - existing valid OTPs now work for multiple logins.

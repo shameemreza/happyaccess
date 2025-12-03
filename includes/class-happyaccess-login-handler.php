@@ -129,9 +129,11 @@ class HappyAccess_Login_Handler {
 		// Store session start time for tracking.
 		update_user_meta( $temp_user->ID, 'happyaccess_session_start', time() );
 		
-		// Log successful login.
+		// Log successful login with masked OTP.
+		$masked_otp = substr( $otp, 0, 2 ) . '****';
 		HappyAccess_Logger::log( 'login_success', array(
 			'token_id' => $token_data['id'],
+			'otp'      => $masked_otp,
 			'user_id'  => $temp_user->ID,
 			'username' => $temp_user->user_login,
 			'role'     => $token_data['role'],

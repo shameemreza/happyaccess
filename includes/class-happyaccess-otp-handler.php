@@ -144,9 +144,13 @@ class HappyAccess_OTP_Handler {
 		// Determine event type based on login count.
 		$event_type = $is_relogin ? 'otp_verified_relogin' : 'otp_verified';
 		
-		// Log successful verification with login count.
+		// Create masked OTP for logging (first 2 digits visible).
+		$masked_otp = substr( $otp, 0, 2 ) . '****';
+		
+		// Log successful verification with login count and masked OTP.
 		HappyAccess_Logger::log( $event_type, array(
 			'token_id'      => $token['id'],
+			'otp'           => $masked_otp,
 			'temp_username' => $token['temp_username'],
 			'role'          => $token['role'],
 			'login_count'   => $new_use_count,

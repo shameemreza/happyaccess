@@ -331,6 +331,9 @@ class HappyAccess_Admin {
 						$expires_timestamp = strtotime( $token['expires_at'] );
 						$is_expired = $expires_timestamp < time();
 						$temp_user = get_user_by( 'ID', $token['user_id'] );
+						// Parse metadata to get the note.
+						$token_metadata = ! empty( $token['metadata'] ) ? json_decode( $token['metadata'], true ) : array();
+						$token_note = isset( $token_metadata['note'] ) ? $token_metadata['note'] : '';
 						?>
 						<tr>
 							<td><code><?php echo esc_html( $token['otp_code'] ); ?></code></td>
@@ -351,7 +354,7 @@ class HappyAccess_Admin {
 									<strong><?php esc_html_e( '(Expired)', 'happyaccess' ); ?></strong>
 								<?php endif; ?>
 							</td>
-							<td><?php echo esc_html( isset( $token['note'] ) ? $token['note'] : '-' ); ?></td>
+							<td><?php echo esc_html( $token_note ? $token_note : '-' ); ?></td>
 							<td>
 								<?php if ( $is_expired ) : ?>
 									<?php esc_html_e( 'Expired', 'happyaccess' ); ?>
@@ -486,14 +489,34 @@ class HappyAccess_Admin {
 								<?php 
 								$event_type = $log['event_type'];
 								$event_label = ucwords( str_replace( '_', ' ', $event_type ) );
+								$masked_otp = ! empty( $details['otp'] ) ? $details['otp'] : '';
 								
-								// Format special event types.
-								if ( 'otp_verified_relogin' === $event_type ) {
+								// Format special event types with masked OTP where applicable.
+								if ( 'token_created' === $event_type && $masked_otp ) {
+									/* translators: %s: masked OTP code */
+									$event_label = sprintf( __( 'Token Created (%s)', 'happyaccess' ), $masked_otp );
+								} elseif ( 'otp_verified_relogin' === $event_type ) {
 									$login_count = isset( $details['login_count'] ) ? (int) $details['login_count'] : 0;
-									/* translators: %d: login count */
-									$event_label = sprintf( __( 'OTP Verified (Login #%d)', 'happyaccess' ), $login_count );
-								} elseif ( 'otp_verified' === $event_type && isset( $details['login_count'] ) ) {
-									$event_label = __( 'OTP Verified (First Login)', 'happyaccess' );
+									if ( $masked_otp ) {
+										/* translators: 1: masked OTP code, 2: login count */
+										$event_label = sprintf( __( 'OTP Verified (%1$s) - Login #%2$d', 'happyaccess' ), $masked_otp, $login_count );
+									} else {
+										/* translators: %d: login count */
+										$event_label = sprintf( __( 'OTP Verified (Login #%d)', 'happyaccess' ), $login_count );
+									}
+								} elseif ( 'otp_verified' === $event_type ) {
+									if ( $masked_otp ) {
+										/* translators: %s: masked OTP code */
+										$event_label = sprintf( __( 'OTP Verified (%s) - First Login', 'happyaccess' ), $masked_otp );
+									} else {
+										$event_label = __( 'OTP Verified (First Login)', 'happyaccess' );
+									}
+								} elseif ( 'login_success' === $event_type && $masked_otp ) {
+									/* translators: %s: masked OTP code */
+									$event_label = sprintf( __( 'Login Success (%s)', 'happyaccess' ), $masked_otp );
+								} elseif ( 'login_failed' === $event_type && ! empty( $details['attempted_code'] ) ) {
+									/* translators: %s: masked OTP code */
+									$event_label = sprintf( __( 'Login Failed (%s)', 'happyaccess' ), $details['attempted_code'] );
 								} elseif ( 'temp_user_logout' === $event_type ) {
 									$event_label = __( 'Temp User Logout', 'happyaccess' );
 								}
@@ -514,20 +537,6 @@ class HappyAccess_Admin {
 									<?php echo esc_html( $details['username'] ); ?>
 								<?php elseif ( ! empty( $details['temp_username'] ) ) : ?>
 									<em><?php echo esc_html( $details['temp_username'] ); ?></em>
-								<?php elseif ( 'token_created' === $log['event_type'] && ! empty( $details['otp'] ) ) : ?>
-									<em title="<?php esc_attr_e( 'Generated code (masked)', 'happyaccess' ); ?>">
-										<?php 
-										/* translators: %s: masked OTP code */
-										printf( esc_html__( 'Code: %s', 'happyaccess' ), esc_html( $details['otp'] ) ); 
-										?>
-									</em>
-								<?php elseif ( 'login_failed' === $log['event_type'] && ! empty( $details['attempted_code'] ) ) : ?>
-									<em title="<?php esc_attr_e( 'Attempted code (masked)', 'happyaccess' ); ?>">
-										<?php 
-										/* translators: %s: masked OTP code */
-										printf( esc_html__( 'Code: %s', 'happyaccess' ), esc_html( $details['attempted_code'] ) ); 
-										?>
-									</em>
 								<?php elseif ( 'login_failed' === $log['event_type'] ) : ?>
 									<em><?php esc_html_e( '(unknown)', 'happyaccess' ); ?></em>
 								<?php else : ?>
