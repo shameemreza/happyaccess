@@ -40,14 +40,14 @@ class HappyAccess_Cleanup {
 	 */
 	public static function cleanup_old_attempts() {
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_attempts';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_attempts' );
 		
 		// Delete attempts older than 24 hours.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"DELETE FROM $table WHERE attempted_at < DATE_SUB(%s, INTERVAL 24 HOUR)",
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"DELETE FROM `$table` WHERE attempted_at < DATE_SUB(%s, INTERVAL 24 HOUR)",
 				current_time( 'mysql' )
 			)
 		);

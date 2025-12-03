@@ -29,12 +29,12 @@ class HappyAccess_Temp_User {
 		global $wpdb;
 		
 		// Get token details.
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$token = $wpdb->get_row(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-			$wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $token_id ),
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+			$wpdb->prepare( "SELECT * FROM `$table` WHERE id = %d", $token_id ),
 			ARRAY_A
 		);
 		

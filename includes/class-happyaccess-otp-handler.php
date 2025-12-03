@@ -45,13 +45,13 @@ class HappyAccess_OTP_Handler {
 	 */
 	private static function otp_exists( $otp ) {
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$exists = $wpdb->get_var(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"SELECT COUNT(*) FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT COUNT(*) FROM `$table` 
 				WHERE otp_code = %s 
 				AND expires_at > %s 
 				AND revoked_at IS NULL",
@@ -90,13 +90,13 @@ class HappyAccess_OTP_Handler {
 		}
 		
 		// Get token from database.
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$token = $wpdb->get_row(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"SELECT * FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT * FROM `$table` 
 				WHERE otp_code = %s 
 				AND expires_at > %s 
 				AND revoked_at IS NULL 
@@ -123,12 +123,17 @@ class HappyAccess_OTP_Handler {
 			}
 		}
 		
+		// Get current use count before incrementing.
+		$current_use_count = (int) $token['use_count'];
+		$new_use_count = $current_use_count + 1;
+		$is_relogin = $current_use_count > 0;
+		
 		// Update use count and last used time.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, safe table name.
 		$wpdb->update(
 			$table,
 			array(
-				'use_count' => $token['use_count'] + 1,
+				'use_count' => $new_use_count,
 				'used_at'   => current_time( 'mysql' ),
 			),
 			array( 'id' => $token['id'] ),
@@ -136,11 +141,20 @@ class HappyAccess_OTP_Handler {
 			array( '%d' )
 		);
 		
-		// Log successful verification.
-		HappyAccess_Logger::log( 'otp_verified', array(
-			'token_id' => $token['id'],
-			'ip'       => self::get_client_ip(),
+		// Determine event type based on login count.
+		$event_type = $is_relogin ? 'otp_verified_relogin' : 'otp_verified';
+		
+		// Log successful verification with login count.
+		HappyAccess_Logger::log( $event_type, array(
+			'token_id'      => $token['id'],
+			'temp_username' => $token['temp_username'],
+			'role'          => $token['role'],
+			'login_count'   => $new_use_count,
+			'ip'            => self::get_client_ip(),
 		) );
+		
+		// Update token with new use count for return.
+		$token['use_count'] = $new_use_count;
 		
 		return $token;
 	}

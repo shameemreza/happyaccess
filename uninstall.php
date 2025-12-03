@@ -12,33 +12,34 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 }
 
 // Delete all temporary users first.
-$users = get_users( array(
+$happyaccess_users = get_users( array(
 	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Required for cleanup during uninstall.
 	'meta_key'   => 'happyaccess_temp_user',
 	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Required for cleanup during uninstall.
 	'meta_value' => true,
 ) );
 
-foreach ( $users as $user ) {
-	wp_delete_user( $user->ID );
+foreach ( $happyaccess_users as $happyaccess_user ) {
+	wp_delete_user( $happyaccess_user->ID );
 }
 
 // Drop custom tables.
 global $wpdb;
 
-$tables = array(
+$happyaccess_tables = array(
 	$wpdb->prefix . 'happyaccess_tokens',
 	$wpdb->prefix . 'happyaccess_logs',
 	$wpdb->prefix . 'happyaccess_attempts',
 );
 
-foreach ( $tables as $table ) {
+foreach ( $happyaccess_tables as $happyaccess_table ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Uninstall cleanup, safe table name.
-	$wpdb->query( "DROP TABLE IF EXISTS $table" );
+	$wpdb->query( "DROP TABLE IF EXISTS $happyaccess_table" );
 }
 
 // Delete options.
-$options = array(
+$happyaccess_options = array(
+	'happyaccess_version',
 	'happyaccess_db_version',
 	'happyaccess_activated',
 	'happyaccess_max_attempts',
@@ -50,8 +51,8 @@ $options = array(
 	'happyaccess_gdpr_consent_text',
 );
 
-foreach ( $options as $option ) {
-	delete_option( $option );
+foreach ( $happyaccess_options as $happyaccess_option ) {
+	delete_option( $happyaccess_option );
 }
 
 // Clear scheduled cron events.

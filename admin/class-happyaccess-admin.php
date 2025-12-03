@@ -28,6 +28,7 @@ class HappyAccess_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'wp_ajax_happyaccess_generate_token', array( $this, 'ajax_generate_token' ) );
 		add_action( 'wp_ajax_happyaccess_revoke_token', array( $this, 'ajax_revoke_token' ) );
+		add_action( 'wp_ajax_happyaccess_logout_sessions', array( $this, 'ajax_logout_sessions' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_init', array( $this, 'handle_settings' ) );
 	}
@@ -71,24 +72,18 @@ class HappyAccess_Admin {
 			'ajax_url' => admin_url( 'admin-ajax.php' ),
 			'nonce'    => wp_create_nonce( 'happyaccess_ajax' ),
 			'strings'  => array(
-				'copied'         => __( 'Copied!', 'happyaccess' ),
-				'copy_failed'    => __( 'Copy failed. Please copy manually.', 'happyaccess' ),
-				'confirm_revoke' => __( 'Are you sure you want to revoke this token?', 'happyaccess' ),
+				'copied'                  => __( 'Copied!', 'happyaccess' ),
+				'copy_failed'             => __( 'Copy failed. Please copy manually.', 'happyaccess' ),
+				'confirm_revoke'          => __( 'Are you sure you want to revoke this token?', 'happyaccess' ),
+				'confirm_logout_sessions' => __( 'This will log out all temporary users but keep their tokens active. They can log in again with the same code. Continue?', 'happyaccess' ),
+				'logging_out'             => __( 'Logging out...', 'happyaccess' ),
+				'logout_sessions'         => __( 'Logout All Temp Sessions', 'happyaccess' ),
+				'gdpr_required'           => __( 'Please confirm that third-party access is disclosed in your Privacy Policy or Terms of Service.', 'happyaccess' ),
 			),
 		) );
 		
-		// Add inline styles for help tooltips - simple inline approach.
+		// Minimal styling - relies on WordPress native styles.
 		$custom_css = '
-			.dashicons-editor-help {
-				color: #666;
-				cursor: help;
-				vertical-align: middle;
-				margin-left: 5px;
-				font-size: 20px;
-			}
-			.dashicons-editor-help:hover {
-				color: #0073aa;
-			}
 			.form-table th {
 				font-weight: 600;
 			}
@@ -156,12 +151,10 @@ class HappyAccess_Admin {
 			<table class="form-table">
 				<tr>
 					<th scope="row">
-						<label for="duration">
-							<?php esc_html_e( 'Access Duration', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'How long the access code will remain valid. After this time, the code expires and the temporary user is automatically deleted.', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="duration"><?php esc_html_e( 'Access Duration', 'happyaccess' ); ?></label>
 					</th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'How long the access code will remain valid. After this time, the code expires and the temporary user is automatically deleted.', 'happyaccess' ); ?>"></span>
 						<select name="duration" id="duration">
 							<option value="3600" <?php selected( $default_duration, 3600 ); ?>><?php esc_html_e( '1 Hour', 'happyaccess' ); ?></option>
 							<option value="14400" <?php selected( $default_duration, 14400 ); ?>><?php esc_html_e( '4 Hours', 'happyaccess' ); ?></option>
@@ -176,12 +169,10 @@ class HappyAccess_Admin {
 				</tr>
 				<tr>
 					<th scope="row">
-						<label for="role">
-							<?php esc_html_e( 'User Role', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'The permission level for the temporary user. Administrator has full access, Editor can manage content, Shop Manager handles WooCommerce orders.', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="role"><?php esc_html_e( 'User Role', 'happyaccess' ); ?></label>
 					</th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'The permission level for the temporary user. Administrator has full access, Editor can manage content, Shop Manager handles WooCommerce orders.', 'happyaccess' ); ?>"></span>
 						<select name="role" id="role">
 							<?php wp_dropdown_roles( 'administrator' ); ?>
 						</select>
@@ -189,21 +180,27 @@ class HappyAccess_Admin {
 				</tr>
 				<tr>
 					<th scope="row">
-						<label for="note">
-							<?php esc_html_e( 'Reference Note', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Optional note to identify this access request. Example: Ticket #12345 or Payment issue investigation.', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="note"><?php esc_html_e( 'Reference Note', 'happyaccess' ); ?></label>
 					</th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Optional note to identify this access request. Example: Ticket #12345 or Payment issue investigation.', 'happyaccess' ); ?>"></span>
 						<input type="text" name="note" id="note" class="regular-text" placeholder="<?php esc_attr_e( 'e.g., Ticket #12345', 'happyaccess' ); ?>" />
 					</td>
 				</tr>
 				<tr>
 					<th scope="row">
-						<?php esc_html_e( 'Email Confirmation', 'happyaccess' ); ?>
-						<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Receive a copy of the access code via email for your records and secure sharing.', 'happyaccess' ); ?>"></span>
+						<label for="ip_restrictions"><?php esc_html_e( 'IP Allowlist', 'happyaccess' ); ?></label>
 					</th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Optional: Restrict access to specific IP addresses. Leave empty to allow access from any IP.', 'happyaccess' ); ?>"></span>
+						<input type="text" name="ip_restrictions" id="ip_restrictions" class="regular-text" placeholder="<?php esc_attr_e( 'e.g., 192.168.1.100, 10.0.0.50', 'happyaccess' ); ?>" />
+						<p class="description"><?php esc_html_e( 'Comma-separated IP addresses. Only these IPs can use this access code. Leave empty for no restriction.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Email Confirmation', 'happyaccess' ); ?></th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Receive a copy of the access code via email for your records and secure sharing.', 'happyaccess' ); ?>"></span>
 						<label>
 							<input type="checkbox" name="email_admin" id="happyaccess-email-admin" value="1" />
 							<?php 
@@ -218,15 +215,18 @@ class HappyAccess_Admin {
 					</td>
 				</tr>
 				<tr>
-					<th scope="row">
-						<?php esc_html_e( 'Terms & Conditions', 'happyaccess' ); ?>
-						<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'GDPR requires disclosure when sharing customer data with third parties. Ensure your Terms of Service or Privacy Policy mentions technical support access.', 'happyaccess' ); ?>"></span>
-					</th>
+					<th scope="row"><?php esc_html_e( 'GDPR Compliance', 'happyaccess' ); ?></th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'GDPR requires you to disclose when sharing site access with third parties. Your Privacy Policy should mention that you may grant temporary admin access for technical support purposes.', 'happyaccess' ); ?>"></span>
 						<label>
 							<input type="checkbox" name="gdpr_consent" id="happyaccess-gdpr-consent" value="1" required />
-							<?php esc_html_e( 'I confirm that granting third-party admin access is disclosed in my Terms & Conditions as required by GDPR.', 'happyaccess' ); ?>
+							<?php esc_html_e( 'I confirm that granting temporary admin access to third parties (e.g., support engineers) is disclosed in my Privacy Policy or Terms of Service.', 'happyaccess' ); ?>
 						</label>
+						<p class="description">
+							<a href="https://woocommerce.com/posts/the-gdpr-and-you-the-woocommerce-store-owner/" target="_blank" rel="noopener noreferrer">
+								<?php esc_html_e( 'Learn more about GDPR responsibilities for store owners →', 'happyaccess' ); ?>
+							</a>
+						</p>
 					</td>
 				</tr>
 			</table>
@@ -292,23 +292,38 @@ class HappyAccess_Admin {
 	private function render_active_tokens() {
 		$token_manager = new HappyAccess_Token_Manager();
 		$active_tokens = $token_manager->get_active_tokens();
+		
+		// Check if any tokens have active sessions (users).
+		$has_active_sessions = false;
+		foreach ( $active_tokens as $token ) {
+			if ( ! empty( $token['user_id'] ) && get_user_by( 'ID', $token['user_id'] ) ) {
+				$has_active_sessions = true;
+				break;
+			}
+		}
 		?>
-		<h2><?php esc_html_e( 'Active Access Tokens', 'happyaccess' ); ?></h2>
+		<h2 class="wp-heading-inline"><?php esc_html_e( 'Active Access Tokens', 'happyaccess' ); ?></h2>
+		<?php if ( $has_active_sessions ) : ?>
+			<button type="button" id="happyaccess-logout-sessions" class="page-title-action" style="color:#d63638;">
+				<?php esc_html_e( 'Logout All Temp Sessions', 'happyaccess' ); ?>
+			</button>
+		<?php endif; ?>
+		<hr class="wp-header-end">
 		
 		<?php if ( empty( $active_tokens ) ) : ?>
 			<p><?php esc_html_e( 'No active tokens found.', 'happyaccess' ); ?></p>
 		<?php else : ?>
-			<table class="wp-list-table widefat fixed striped">
+			<table class="wp-list-table widefat fixed striped" role="table" aria-label="<?php esc_attr_e( 'Active access tokens', 'happyaccess' ); ?>">
 				<thead>
 					<tr>
-						<th><?php esc_html_e( 'Access Code', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Username', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Role', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Created', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Expires', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Note', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Status', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Actions', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Access Code', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Username', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Role', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Created', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Expires', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Note', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Status', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Actions', 'happyaccess' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -400,11 +415,11 @@ class HappyAccess_Admin {
 		
 		// Get unique event types for filter dropdown.
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_logs';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$event_types = $wpdb->get_col( 
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-			"SELECT DISTINCT event_type FROM $table ORDER BY event_type"
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe, no user input.
+			"SELECT DISTINCT event_type FROM `$table` ORDER BY event_type"
 		);
 		?>
 		<h2 class="wp-heading-inline"><?php esc_html_e( 'Audit Logs', 'happyaccess' ); ?></h2>
@@ -450,27 +465,40 @@ class HappyAccess_Admin {
 		<?php if ( empty( $logs ) ) : ?>
 			<p><?php esc_html_e( 'No logs found.', 'happyaccess' ); ?></p>
 		<?php else : ?>
-			<table class="wp-list-table widefat fixed striped">
+			<table class="wp-list-table widefat fixed striped" role="table" aria-label="<?php esc_attr_e( 'Audit logs', 'happyaccess' ); ?>">
 				<thead>
 					<tr>
-						<th><?php esc_html_e( 'Date/Time', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Event', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'User', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'IP Address', 'happyaccess' ); ?></th>
-						<th><?php esc_html_e( 'Details', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Date/Time', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Event', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'User', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'IP Address', 'happyaccess' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Details', 'happyaccess' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
 					<?php foreach ( $logs as $log ) : 
 						$user = $log['user_id'] ? get_user_by( 'ID', $log['user_id'] ) : null;
-						$details = ! empty( $log['details'] ) ? json_decode( $log['details'], true ) : array();
+						$details = ! empty( $log['metadata'] ) ? json_decode( $log['metadata'], true ) : array();
 						?>
 						<tr>
 							<td><?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $log['created_at'] ) ) ); ?></td>
 							<td>
 								<?php 
-								$event_label = ucwords( str_replace( '_', ' ', $log['event_type'] ) );
-								if ( strpos( $log['event_type'], 'failed' ) !== false ) {
+								$event_type = $log['event_type'];
+								$event_label = ucwords( str_replace( '_', ' ', $event_type ) );
+								
+								// Format special event types.
+								if ( 'otp_verified_relogin' === $event_type ) {
+									$login_count = isset( $details['login_count'] ) ? (int) $details['login_count'] : 0;
+									/* translators: %d: login count */
+									$event_label = sprintf( __( 'OTP Verified (Login #%d)', 'happyaccess' ), $login_count );
+								} elseif ( 'otp_verified' === $event_type && isset( $details['login_count'] ) ) {
+									$event_label = __( 'OTP Verified (First Login)', 'happyaccess' );
+								} elseif ( 'temp_user_logout' === $event_type ) {
+									$event_label = __( 'Temp User Logout', 'happyaccess' );
+								}
+								
+								if ( strpos( $event_type, 'failed' ) !== false ) {
 									echo '<strong>' . esc_html( $event_label ) . '</strong>';
 								} else {
 									echo esc_html( $event_label );
@@ -484,6 +512,24 @@ class HappyAccess_Admin {
 									</a>
 								<?php elseif ( ! empty( $details['username'] ) ) : ?>
 									<?php echo esc_html( $details['username'] ); ?>
+								<?php elseif ( ! empty( $details['temp_username'] ) ) : ?>
+									<em><?php echo esc_html( $details['temp_username'] ); ?></em>
+								<?php elseif ( 'token_created' === $log['event_type'] && ! empty( $details['otp'] ) ) : ?>
+									<em title="<?php esc_attr_e( 'Generated code (masked)', 'happyaccess' ); ?>">
+										<?php 
+										/* translators: %s: masked OTP code */
+										printf( esc_html__( 'Code: %s', 'happyaccess' ), esc_html( $details['otp'] ) ); 
+										?>
+									</em>
+								<?php elseif ( 'login_failed' === $log['event_type'] && ! empty( $details['attempted_code'] ) ) : ?>
+									<em title="<?php esc_attr_e( 'Attempted code (masked)', 'happyaccess' ); ?>">
+										<?php 
+										/* translators: %s: masked OTP code */
+										printf( esc_html__( 'Code: %s', 'happyaccess' ), esc_html( $details['attempted_code'] ) ); 
+										?>
+									</em>
+								<?php elseif ( 'login_failed' === $log['event_type'] ) : ?>
+									<em><?php esc_html_e( '(unknown)', 'happyaccess' ); ?></em>
 								<?php else : ?>
 									-
 								<?php endif; ?>
@@ -494,7 +540,12 @@ class HappyAccess_Admin {
 								if ( is_array( $details ) ) {
 									$detail_parts = array();
 									foreach ( $details as $key => $value ) {
-										if ( ! in_array( $key, array( 'username', 'user_id' ), true ) ) {
+										// Exclude fields that are shown in other columns.
+										if ( ! in_array( $key, array( 'username', 'user_id', 'temp_username', 'attempted_code', 'ip', 'otp', 'login_count' ), true ) ) {
+											// Format duration if it's a raw number (legacy logs).
+											if ( 'duration' === $key && is_numeric( $value ) ) {
+												$value = HappyAccess_Token_Manager::format_duration( (int) $value );
+											}
 											$detail_parts[] = ucwords( str_replace( '_', ' ', $key ) ) . ': ' . ( is_array( $value ) ? wp_json_encode( $value ) : $value );
 										}
 									}
@@ -584,13 +635,42 @@ class HappyAccess_Admin {
 		// Add data rows.
 		foreach ( $logs as $log ) {
 			$user = $log['user_id'] ? get_user_by( 'ID', $log['user_id'] ) : null;
-			$details = ! empty( $log['details'] ) ? json_decode( $log['details'], true ) : array();
+			$details = ! empty( $log['metadata'] ) ? json_decode( $log['metadata'], true ) : array();
+			
+			// Determine user display.
+			$user_display = '-';
+			if ( $user ) {
+				$user_display = $user->user_login;
+			} elseif ( ! empty( $details['username'] ) ) {
+				$user_display = $details['username'];
+			} elseif ( ! empty( $details['temp_username'] ) ) {
+				$user_display = $details['temp_username'];
+			} elseif ( 'token_created' === $log['event_type'] && ! empty( $details['otp'] ) ) {
+				$user_display = 'Code: ' . $details['otp'];
+			} elseif ( 'login_failed' === $log['event_type'] && ! empty( $details['attempted_code'] ) ) {
+				$user_display = 'Code: ' . $details['attempted_code'];
+			}
+			
+			// Format event type.
+			$event_type = $log['event_type'];
+			if ( 'otp_verified_relogin' === $event_type ) {
+				$login_count = isset( $details['login_count'] ) ? (int) $details['login_count'] : 0;
+				$event_label = sprintf( 'OTP Verified (Login #%d)', $login_count );
+			} elseif ( 'otp_verified' === $event_type && isset( $details['login_count'] ) ) {
+				$event_label = 'OTP Verified (First Login)';
+			} else {
+				$event_label = ucwords( str_replace( '_', ' ', $event_type ) );
+			}
 			
 			// Format details.
 			$detail_parts = array();
 			if ( is_array( $details ) ) {
 				foreach ( $details as $key => $value ) {
-					if ( ! in_array( $key, array( 'username', 'user_id' ), true ) ) {
+					if ( ! in_array( $key, array( 'username', 'user_id', 'temp_username', 'attempted_code', 'ip', 'otp', 'login_count' ), true ) ) {
+						// Format duration if it's a raw number (legacy logs).
+						if ( 'duration' === $key && is_numeric( $value ) ) {
+							$value = HappyAccess_Token_Manager::format_duration( (int) $value );
+						}
 						$detail_parts[] = ucwords( str_replace( '_', ' ', $key ) ) . ': ' . ( is_array( $value ) ? wp_json_encode( $value ) : $value );
 					}
 				}
@@ -598,8 +678,8 @@ class HappyAccess_Admin {
 			
 			fputcsv( $output, array(
 				wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $log['created_at'] ) ),
-				ucwords( str_replace( '_', ' ', $log['event_type'] ) ),
-				$user ? $user->user_login : ( ! empty( $details['username'] ) ? $details['username'] : '-' ),
+				$event_label,
+				$user_display,
 				$log['ip_address'] ?: '-',
 				implode( ', ', $detail_parts ) ?: '-',
 			) );
@@ -640,36 +720,30 @@ class HappyAccess_Admin {
 			<table class="form-table">
 				<tr>
 					<th scope="row">
-						<label for="happyaccess_max_attempts">
-							<?php esc_html_e( 'Max Login Attempts', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Maximum number of failed OTP attempts before temporarily blocking the IP address. Helps prevent brute-force attacks.', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="happyaccess_max_attempts"><?php esc_html_e( 'Max Login Attempts', 'happyaccess' ); ?></label>
 					</th>
 					<td>
-						<input type="number" name="happyaccess_max_attempts" id="happyaccess_max_attempts" value="<?php echo esc_attr( $max_attempts ); ?>" min="1" max="20" />
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Maximum number of failed OTP attempts before temporarily blocking the IP address. Helps prevent brute-force attacks.', 'happyaccess' ); ?>"></span>
+						<input type="number" name="happyaccess_max_attempts" id="happyaccess_max_attempts" value="<?php echo esc_attr( $max_attempts ); ?>" min="1" max="20" class="small-text" />
 						<p class="description"><?php esc_html_e( 'Number of failed attempts before lockout.', 'happyaccess' ); ?></p>
 					</td>
 				</tr>
 				<tr>
 					<th scope="row">
-						<label for="happyaccess_lockout_duration">
-							<?php esc_html_e( 'Lockout Duration', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'How long to block an IP address after exceeding max attempts. Default: 900 seconds (15 minutes).', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="happyaccess_lockout_duration"><?php esc_html_e( 'Lockout Duration', 'happyaccess' ); ?></label>
 					</th>
 					<td>
-						<input type="number" name="happyaccess_lockout_duration" id="happyaccess_lockout_duration" value="<?php echo esc_attr( $lockout_duration ); ?>" min="60" max="86400" />
-						<p class="description"><?php esc_html_e( 'Time before allowing retry (default: 900 = 15 minutes).', 'happyaccess' ); ?></p>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'How long to block an IP address after exceeding max attempts. Default: 900 seconds (15 minutes).', 'happyaccess' ); ?>"></span>
+						<input type="number" name="happyaccess_lockout_duration" id="happyaccess_lockout_duration" value="<?php echo esc_attr( $lockout_duration ); ?>" min="60" max="86400" class="small-text" />
+						<p class="description"><?php esc_html_e( 'Time in seconds before allowing retry (default: 900 = 15 minutes).', 'happyaccess' ); ?></p>
 					</td>
 				</tr>
 				<tr>
 					<th scope="row">
-						<label for="happyaccess_token_expiry">
-							<?php esc_html_e( 'Default Token Expiry', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Default duration for new access codes. Support engineers can use the same code multiple times within this period. Individual codes can override this setting.', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="happyaccess_token_expiry"><?php esc_html_e( 'Default Token Expiry', 'happyaccess' ); ?></label>
 					</th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Default duration for new access codes. Support engineers can use the same code multiple times within this period. Individual codes can override this setting.', 'happyaccess' ); ?>"></span>
 						<select name="happyaccess_token_expiry" id="happyaccess_token_expiry">
 							<option value="3600" <?php selected( $token_expiry, 3600 ); ?>><?php esc_html_e( '1 Hour', 'happyaccess' ); ?></option>
 							<option value="14400" <?php selected( $token_expiry, 14400 ); ?>><?php esc_html_e( '4 Hours', 'happyaccess' ); ?></option>
@@ -685,22 +759,18 @@ class HappyAccess_Admin {
 				</tr>
 				<tr>
 					<th scope="row">
-						<label for="happyaccess_cleanup_days">
-							<?php esc_html_e( 'Log Retention', 'happyaccess' ); ?>
-							<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Automatically delete audit logs older than this many days. Helps maintain database performance and comply with data retention policies.', 'happyaccess' ); ?>"></span>
-						</label>
+						<label for="happyaccess_cleanup_days"><?php esc_html_e( 'Log Retention', 'happyaccess' ); ?></label>
 					</th>
 					<td>
-						<input type="number" name="happyaccess_cleanup_days" id="happyaccess_cleanup_days" value="<?php echo esc_attr( $cleanup_days ); ?>" min="1" max="365" />
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Automatically delete audit logs older than this many days. Helps maintain database performance and comply with data retention policies.', 'happyaccess' ); ?>"></span>
+						<input type="number" name="happyaccess_cleanup_days" id="happyaccess_cleanup_days" value="<?php echo esc_attr( $cleanup_days ); ?>" min="1" max="365" class="small-text" />
 						<p class="description"><?php esc_html_e( 'Days to keep audit logs (default: 30 days).', 'happyaccess' ); ?></p>
 					</td>
 				</tr>
 				<tr>
-					<th scope="row">
-						<?php esc_html_e( 'Activity Logging', 'happyaccess' ); ?>
-						<span class="dashicons dashicons-editor-help" title="<?php esc_attr_e( 'Track all HappyAccess events including logins, token creation, and revocations. Essential for security audits and compliance.', 'happyaccess' ); ?>"></span>
-					</th>
+					<th scope="row"><?php esc_html_e( 'Activity Logging', 'happyaccess' ); ?></th>
 					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Track all HappyAccess events including logins, token creation, and revocations. Essential for security audits and compliance.', 'happyaccess' ); ?>"></span>
 						<label>
 							<input type="checkbox" name="happyaccess_enable_logging" id="happyaccess_enable_logging" value="1" <?php checked( $enable_logging ); ?> />
 							<?php esc_html_e( 'Enable audit logging for all access events', 'happyaccess' ); ?>
@@ -770,13 +840,27 @@ class HappyAccess_Admin {
 		$note = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
 		$email_admin = isset( $_POST['email_admin'] ) && $_POST['email_admin'] === '1';
 		
+		// Get and validate IP restrictions.
+		$ip_restrictions = '';
+		if ( isset( $_POST['ip_restrictions'] ) && ! empty( $_POST['ip_restrictions'] ) ) {
+			$raw_ips = sanitize_text_field( wp_unslash( $_POST['ip_restrictions'] ) );
+			$ips = array_map( 'trim', explode( ',', $raw_ips ) );
+			$valid_ips = array();
+			foreach ( $ips as $ip ) {
+				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+					$valid_ips[] = $ip;
+				}
+			}
+			$ip_restrictions = ! empty( $valid_ips ) ? implode( ',', $valid_ips ) : '';
+		}
+		
 		// Generate token.
 		$metadata = array();
 		if ( ! empty( $note ) ) {
 			$metadata['note'] = $note;
 		}
 		
-		$result = HappyAccess_Token_Manager::generate_token( $duration, $role, $metadata );
+		$result = HappyAccess_Token_Manager::generate_token( $duration, $role, $metadata, $ip_restrictions );
 		
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
@@ -1004,8 +1088,57 @@ public function ajax_revoke_token() {
 	}
 }
 
-/**
- * Add Emergency Lock button to admin bar.
+	/**
+	 * Handle AJAX logout all temp sessions.
+	 *
+	 * @since 1.0.1
+	 */
+	public function ajax_logout_sessions() {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+		}
+		
+		// Check permissions.
+		if ( ! current_user_can( 'list_users' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		}
+		
+		// Get all active tokens with users.
+		$token_manager = new HappyAccess_Token_Manager();
+		$active_tokens = $token_manager->get_active_tokens();
+		
+		$logged_out_count = 0;
+		
+		foreach ( $active_tokens as $token ) {
+			if ( ! empty( $token['user_id'] ) ) {
+				$user = get_user_by( 'ID', $token['user_id'] );
+				if ( $user && get_user_meta( $token['user_id'], 'happyaccess_temp_user', true ) ) {
+					// Destroy all sessions for this user.
+					$sessions = WP_Session_Tokens::get_instance( $token['user_id'] );
+					$sessions->destroy_all();
+					$logged_out_count++;
+				}
+			}
+		}
+		
+		// Log the action.
+		HappyAccess_Logger::log( 'sessions_logged_out', array(
+			'count'       => $logged_out_count,
+			'initiated_by' => wp_get_current_user()->user_login,
+		) );
+		
+		wp_send_json_success( array(
+			'message' => sprintf(
+				/* translators: %d: number of sessions logged out */
+				__( 'Successfully logged out %d temporary user session(s). Tokens remain active for future use.', 'happyaccess' ),
+				$logged_out_count
+			),
+		) );
+	}
+
+	/**
+	 * Add Emergency Lock button to admin bar.
 	 *
 	 * @since 1.0.0
 	 * @param WP_Admin_Bar $wp_admin_bar The admin bar instance.
@@ -1013,6 +1146,11 @@ public function ajax_revoke_token() {
 	public function add_emergency_lock_button( $wp_admin_bar ) {
 		// Only show for users who can manage HappyAccess.
 		if ( ! current_user_can( 'list_users' ) ) {
+			return;
+		}
+		
+		// Don't show to temporary users - they shouldn't have this control.
+		if ( HappyAccess_Temp_User::is_temp_user( get_current_user_id() ) ) {
 			return;
 		}
 		

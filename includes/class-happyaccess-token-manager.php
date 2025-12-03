@@ -27,13 +27,13 @@ class HappyAccess_Token_Manager {
 	 * @param array  $metadata Optional metadata.
 	 * @return array|WP_Error Token data on success, WP_Error on failure.
 	 */
-	public static function generate_token( $duration, $role, $metadata = array() ) {
+	public static function generate_token( $duration, $role, $metadata = array(), $ip_restrictions = '' ) {
 		global $wpdb;
 		
 		// Validate duration.
 		$duration = absint( $duration );
-		if ( $duration < 3600 || $duration > 604800 ) { // 1 hour to 7 days.
-			return new WP_Error( 'invalid_duration', __( 'Invalid duration. Must be between 1 hour and 7 days.', 'happyaccess' ) );
+		if ( $duration < 3600 || $duration > 2592000 ) { // 1 hour to 30 days.
+			return new WP_Error( 'invalid_duration', __( 'Invalid duration. Must be between 1 hour and 30 days.', 'happyaccess' ) );
 		}
 		
 		// Validate role.
@@ -59,23 +59,28 @@ class HappyAccess_Token_Manager {
 		// Prepare metadata.
 		$metadata_json = ! empty( $metadata ) ? wp_json_encode( $metadata ) : null;
 		
+		// Prepare IP restrictions (sanitize and validate).
+		$ip_restrictions = ! empty( $ip_restrictions ) ? sanitize_text_field( $ip_restrictions ) : null;
+		
 		// Insert token into database.
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Custom table
 		$result = $wpdb->insert(
 			$table,
 			array(
-				'token_hash'    => $token_hash,
-				'otp_code'      => $otp,
-				'temp_username' => $temp_username,
-				'role'          => $role,
-				'created_by'    => get_current_user_id(),
-				'created_at'    => current_time( 'mysql' ),
-				'expires_at'    => $expires_at,
-				'metadata'      => $metadata_json,
+				'token_hash'      => $token_hash,
+				'otp_code'        => $otp,
+				'temp_username'   => $temp_username,
+				'role'            => $role,
+				'created_by'      => get_current_user_id(),
+				'created_at'      => current_time( 'mysql' ),
+				'expires_at'      => $expires_at,
+				'metadata'        => $metadata_json,
+				'ip_restrictions' => $ip_restrictions,
+				'max_uses'        => 0, // Unlimited reuse until expiry.
 			),
-			array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%d' )
 		);
 		
 		if ( false === $result ) {
@@ -84,11 +89,13 @@ class HappyAccess_Token_Manager {
 		
 		$token_id = $wpdb->insert_id;
 		
-		// Log token creation.
+		// Log token creation with masked OTP.
+		$masked_otp = substr( $otp, 0, 2 ) . '****';
 		HappyAccess_Logger::log( 'token_created', array(
-			'token_id' => $token_id,
-			'role'     => $role,
-			'duration' => $duration,
+			'token_id'   => $token_id,
+			'otp'        => $masked_otp,
+			'role'       => $role,
+			'duration'   => self::format_duration( $duration ),
 			'created_by' => get_current_user_id(),
 		) );
 		
@@ -139,12 +146,12 @@ class HappyAccess_Token_Manager {
 		}
 		
 		// Get token details first.
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$token = $wpdb->get_row(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-			$wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $token_id ),
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+			$wpdb->prepare( "SELECT * FROM `$table` WHERE id = %d", $token_id ),
 			ARRAY_A
 		);
 		
@@ -189,13 +196,13 @@ class HappyAccess_Token_Manager {
 	 */
 	public static function get_active_tokens() {
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$tokens = $wpdb->get_results(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"SELECT * FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT * FROM `$table` 
 				WHERE expires_at > %s 
 				AND revoked_at IS NULL 
 				ORDER BY created_at DESC",
@@ -215,14 +222,14 @@ class HappyAccess_Token_Manager {
 	 */
 	public static function cleanup_expired_tokens() {
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// Get expired tokens with associated users.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$expired_tokens = $wpdb->get_results(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"SELECT * FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT * FROM `$table` 
 				WHERE expires_at < %s 
 				AND user_id IS NOT NULL",
 				current_time( 'mysql' )
@@ -262,8 +269,8 @@ class HappyAccess_Token_Manager {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$wpdb->query(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"DELETE FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"DELETE FROM `$table` 
 				WHERE created_at < DATE_SUB(%s, INTERVAL %d DAY)",
 				current_time( 'mysql' ),
 				$retention_days
@@ -271,5 +278,59 @@ class HappyAccess_Token_Manager {
 		);
 		
 		return $count;
+	}
+
+	/**
+	 * Format duration in seconds to human-readable string.
+	 *
+	 * @since 1.0.1
+	 * @param int  $seconds      Duration in seconds.
+	 * @param bool $include_secs Whether to include seconds for short durations.
+	 * @return string Human-readable duration.
+	 */
+	public static function format_duration( $seconds, $include_secs = true ) {
+		$seconds = absint( $seconds );
+		
+		if ( $seconds >= 86400 ) {
+			$days = floor( $seconds / 86400 );
+			$hours = floor( ( $seconds % 86400 ) / 3600 );
+			return sprintf(
+				/* translators: 1: number of days, 2: number of hours */
+				__( '%1$d days %2$d hours', 'happyaccess' ),
+				$days,
+				$hours
+			);
+		} elseif ( $seconds >= 3600 ) {
+			$hours = floor( $seconds / 3600 );
+			$mins = floor( ( $seconds % 3600 ) / 60 );
+			return sprintf(
+				/* translators: 1: number of hours, 2: number of minutes */
+				__( '%1$d hours %2$d minutes', 'happyaccess' ),
+				$hours,
+				$mins
+			);
+		} elseif ( $seconds >= 60 ) {
+			$minutes = floor( $seconds / 60 );
+			$secs = $seconds % 60;
+			if ( $include_secs ) {
+				return sprintf(
+					/* translators: 1: number of minutes, 2: number of seconds */
+					__( '%1$d minutes %2$d seconds', 'happyaccess' ),
+					$minutes,
+					$secs
+				);
+			}
+			return sprintf(
+				/* translators: %d: number of minutes */
+				_n( '%d minute', '%d minutes', $minutes, 'happyaccess' ),
+				$minutes
+			);
+		} else {
+			return sprintf(
+				/* translators: %d: number of seconds */
+				_n( '%d second', '%d seconds', $seconds, 'happyaccess' ),
+				$seconds
+			);
+		}
 	}
 }

@@ -43,7 +43,7 @@ class HappyAccess_Rate_Limiter {
 	public function check_rate_limit( $identifier, $ip ) {
 		global $wpdb;
 		
-		$table = $wpdb->prefix . 'happyaccess_attempts';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_attempts' );
 		$max_attempts = get_option( 'happyaccess_max_attempts', self::MAX_ATTEMPTS );
 		$lockout_duration = get_option( 'happyaccess_lockout_duration', self::LOCKOUT_DURATION );
 		
@@ -51,8 +51,8 @@ class HappyAccess_Rate_Limiter {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$recent_attempts = $wpdb->get_var(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"SELECT COUNT(*) FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT COUNT(*) FROM `$table` 
 				WHERE identifier = %s 
 				AND ip_address = %s 
 				AND attempted_at > %s",
@@ -88,7 +88,7 @@ class HappyAccess_Rate_Limiter {
 	public function log_attempt( $identifier, $ip, $attempt_type = 'otp' ) {
 		global $wpdb;
 		
-		$table = $wpdb->prefix . 'happyaccess_attempts';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_attempts' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Custom table
 		$result = $wpdb->insert(
@@ -116,7 +116,7 @@ class HappyAccess_Rate_Limiter {
 	public function clear_attempts( $identifier, $ip ) {
 		global $wpdb;
 		
-		$table = $wpdb->prefix . 'happyaccess_attempts';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_attempts' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, safe table name.
 		$deleted = $wpdb->delete(
@@ -142,7 +142,7 @@ class HappyAccess_Rate_Limiter {
 	public function get_remaining_attempts( $identifier, $ip ) {
 		global $wpdb;
 		
-		$table = $wpdb->prefix . 'happyaccess_attempts';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_attempts' );
 		$max_attempts = get_option( 'happyaccess_max_attempts', self::MAX_ATTEMPTS );
 		$lockout_duration = get_option( 'happyaccess_lockout_duration', self::LOCKOUT_DURATION );
 		
@@ -150,8 +150,8 @@ class HappyAccess_Rate_Limiter {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$recent_attempts = $wpdb->get_var(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"SELECT COUNT(*) FROM $table 
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT COUNT(*) FROM `$table` 
 				WHERE identifier = %s 
 				AND ip_address = %s 
 				AND attempted_at > %s",

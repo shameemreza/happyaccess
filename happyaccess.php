@@ -3,7 +3,7 @@
  * Plugin Name:       HappyAccess
  * Plugin URI:        https://github.com/shameemreza/happyaccess
  * Description:       Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Author:            Shameem Reza
  * Author URI:        https://shameem.blog/
  * License:           GPL v2 or later
@@ -11,7 +11,7 @@
  * Text Domain:       happyaccess
  * Domain Path:       /languages
  * Requires at least: 6.0
- * Tested up to:      6.8
+ * Tested up to:      6.9
  * Requires PHP:      7.4
  * WC requires at least: 9.0
  * WC tested up to:   10.3
@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'HAPPYACCESS_VERSION', '1.0.0' );
+define( 'HAPPYACCESS_VERSION', '1.0.1' );
 define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
 define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -103,6 +103,9 @@ class HappyAccess {
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-rate-limiter.php';
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-login-handler.php';
 
+		// Initialize GDPR compliance (WordPress privacy tools integration).
+		new HappyAccess_GDPR();
+
 		// Admin classes.
 		if ( is_admin() ) {
 			require_once HAPPYACCESS_PLUGIN_DIR . 'admin/class-happyaccess-admin.php';
@@ -135,6 +138,35 @@ class HappyAccess {
 			add_action( 'admin_bar_menu', array( $this->admin, 'add_emergency_lock_button' ), 999 );
 			add_action( 'wp_ajax_happyaccess_emergency_lock', array( $this->admin, 'ajax_emergency_lock' ) );
 		}
+		
+		// Plugin action links (Settings, Support).
+		add_filter( 'plugin_action_links_' . HAPPYACCESS_PLUGIN_BASENAME, array( $this, 'add_plugin_action_links' ) );
+	}
+	
+	/**
+	 * Add plugin action links on plugins page.
+	 *
+	 * @since 1.0.1
+	 * @param array $links Existing links.
+	 * @return array Modified links.
+	 */
+	public function add_plugin_action_links( $links ) {
+		$settings_link = sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( admin_url( 'users.php?page=happyaccess&tab=settings' ) ),
+			esc_html__( 'Settings', 'happyaccess' )
+		);
+		
+		$support_link = sprintf(
+			'<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>',
+			esc_url( 'https://github.com/shameemreza/happyaccess/issues' ),
+			esc_html__( 'Get Support', 'happyaccess' )
+		);
+		
+		// Add at the beginning of the array.
+		array_unshift( $links, $settings_link, $support_link );
+		
+		return $links;
 	}
 
 	/**
@@ -144,6 +176,9 @@ class HappyAccess {
 		// WordPress automatically loads translations for plugins on WordPress.org since 4.6.
 		// No need to manually call load_plugin_textdomain().
 
+		// Check for plugin upgrades.
+		$this->maybe_upgrade();
+
 		// Schedule cleanup cron if not already scheduled.
 		if ( ! wp_next_scheduled( 'happyaccess_cleanup_expired' ) ) {
 			wp_schedule_event( time(), 'hourly', 'happyaccess_cleanup_expired' );
@@ -151,12 +186,51 @@ class HappyAccess {
 	}
 
 	/**
-	 * Initialize admin.
+	 * Check for plugin upgrades and run migrations.
+	 *
+	 * @since 1.0.0
+	 */
+	private function maybe_upgrade() {
+		global $wpdb;
+		$current_version = get_option( 'happyaccess_version', '0.0.0' );
+		
+		// Only run upgrades if version has changed.
+		if ( version_compare( $current_version, HAPPYACCESS_VERSION, '<' ) ) {
+			// Migrate token_expiry from old 24 hours default to new 7 days default.
+			$token_expiry = get_option( 'happyaccess_token_expiry' );
+			if ( 86400 === (int) $token_expiry ) {
+				update_option( 'happyaccess_token_expiry', 604800 );
+			}
+			
+			// Fix for 1.0.1: Update existing tokens to allow unlimited reuse.
+			// Old tokens had max_uses=1 which prevented reuse.
+			if ( version_compare( $current_version, '1.0.1', '<' ) ) {
+				$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Upgrade migration.
+				$wpdb->query(
+					$wpdb->prepare(
+						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
+						"UPDATE `$table` SET max_uses = %d WHERE max_uses = %d AND revoked_at IS NULL",
+						0,
+						1
+					)
+				);
+			}
+			
+			// Update version.
+			update_option( 'happyaccess_version', HAPPYACCESS_VERSION );
+		}
+	}
+
+	/**
+	 * Initialize admin settings registration.
+	 *
+	 * Note: HappyAccess_Admin instance is created in load_dependencies().
+	 * This hook is only for registering settings that require admin_init.
 	 */
 	public function admin_init() {
-		if ( class_exists( 'HappyAccess_Admin' ) ) {
-			new HappyAccess_Admin();
-		}
+		// Settings are registered via HappyAccess_Admin->handle_settings().
+		// No additional instantiation needed here.
 	}
 }
 

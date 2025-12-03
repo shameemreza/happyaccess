@@ -13,11 +13,9 @@
     $("#happyaccess-generate-form").on("submit", function (e) {
       e.preventDefault();
 
-      // Check terms consent
+      // Check GDPR consent
       if (!$("#happyaccess-gdpr-consent").is(":checked")) {
-        alert(
-          "Please confirm that third-party access is disclosed in your Terms & Conditions."
-        );
+        alert(happyaccess_ajax.strings.gdpr_required);
         return false;
       }
 
@@ -153,6 +151,42 @@
           }
         }
       );
+    });
+
+    // Handle logout all sessions
+    $("#happyaccess-logout-sessions").on("click", function (e) {
+      e.preventDefault();
+
+      if (!confirm(happyaccess_ajax.strings.confirm_logout_sessions)) {
+        return;
+      }
+
+      var $button = $(this);
+      $button.prop("disabled", true).text(happyaccess_ajax.strings.logging_out);
+
+      $.post(
+        happyaccess_ajax.ajax_url,
+        {
+          action: "happyaccess_logout_sessions",
+          nonce: happyaccess_ajax.nonce,
+        },
+        function (response) {
+          if (response.success) {
+            alert(response.data.message);
+            location.reload();
+          } else {
+            alert(response.data.message || "Failed to logout sessions");
+            $button
+              .prop("disabled", false)
+              .text(happyaccess_ajax.strings.logout_sessions);
+          }
+        }
+      ).fail(function () {
+        alert("Network error. Please try again.");
+        $button
+          .prop("disabled", false)
+          .text(happyaccess_ajax.strings.logout_sessions);
+      });
     });
   });
 })(jQuery);

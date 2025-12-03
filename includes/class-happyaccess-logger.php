@@ -34,7 +34,7 @@ class HappyAccess_Logger {
 			return false;
 		}
 		
-		$table = $wpdb->prefix . 'happyaccess_logs';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
 		
 		// Get current user if not in data.
 		if ( ! isset( $data['user_id'] ) ) {
@@ -82,7 +82,6 @@ class HappyAccess_Logger {
 	 */
 	public static function get_logs( $args = array() ) {
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_logs';
 		
 		$defaults = array(
 			'limit'      => 50,
@@ -95,36 +94,217 @@ class HappyAccess_Logger {
 		
 		$args = wp_parse_args( $args, $defaults );
 		
-		$where = array();
-		$where_values = array();
+		// Sanitize inputs.
+		$limit     = absint( $args['limit'] );
+		$offset    = absint( $args['offset'] );
+		$order_asc = ( 'ASC' === strtoupper( $args['order'] ) );
 		
-		if ( ! empty( $args['event_type'] ) ) {
-			$where[] = 'event_type = %s';
-			$where_values[] = $args['event_type'];
+		// Cache key for this query.
+		$cache_key = 'happyaccess_logs_' . md5( wp_json_encode( $args ) );
+		$logs      = wp_cache_get( $cache_key, 'happyaccess' );
+		
+		if ( false === $logs ) {
+			// Determine which filters are active.
+			$has_event_type = ! empty( $args['event_type'] );
+			$has_token_id   = ! empty( $args['token_id'] ) && absint( $args['token_id'] ) > 0;
+			$has_user_id    = ! empty( $args['user_id'] ) && absint( $args['user_id'] ) > 0;
+			
+			// Execute query based on active filters (avoiding dynamic SQL building).
+			// Note: Direct database queries are required for custom plugin tables.
+			// Results are cached using wp_cache_set() below.
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			if ( $has_event_type && $has_token_id && $has_user_id ) {
+				// All three filters.
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s AND token_id = %d AND user_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							absint( $args['token_id'] ),
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s AND token_id = %d AND user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							absint( $args['token_id'] ),
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} elseif ( $has_event_type && $has_token_id ) {
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s AND token_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							absint( $args['token_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s AND token_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							absint( $args['token_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} elseif ( $has_event_type && $has_user_id ) {
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s AND user_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s AND user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} elseif ( $has_token_id && $has_user_id ) {
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE token_id = %d AND user_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							absint( $args['token_id'] ),
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE token_id = %d AND user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							absint( $args['token_id'] ),
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} elseif ( $has_event_type ) {
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE event_type = %s ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							$args['event_type'],
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} elseif ( $has_token_id ) {
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE token_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							absint( $args['token_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE token_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							absint( $args['token_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} elseif ( $has_user_id ) {
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE user_id = %d ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs WHERE user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							absint( $args['user_id'] ),
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			} else {
+				// No filters.
+				if ( $order_asc ) {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs ORDER BY created_at ASC LIMIT %d OFFSET %d",
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				} else {
+					$logs = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}happyaccess_logs ORDER BY created_at DESC LIMIT %d OFFSET %d",
+							$limit,
+							$offset
+						),
+						ARRAY_A
+					);
+				}
+			}
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			
+			// Cache results.
+			wp_cache_set( $cache_key, $logs, 'happyaccess', HOUR_IN_SECONDS );
 		}
-		
-		if ( ! empty( $args['token_id'] ) ) {
-			$where[] = 'token_id = %d';
-			$where_values[] = $args['token_id'];
-		}
-		
-		if ( ! empty( $args['user_id'] ) ) {
-			$where[] = 'user_id = %d';
-			$where_values[] = $args['user_id'];
-		}
-		
-		$where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
-		
-		$query = "SELECT * FROM $table $where_clause ORDER BY created_at {$args['order']} LIMIT %d OFFSET %d";
-		$where_values[] = $args['limit'];
-		$where_values[] = $args['offset'];
-		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-		$logs = $wpdb->get_results(
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is dynamically built but safe.
-			$wpdb->prepare( $query, ...$where_values ),
-			ARRAY_A
-		);
 		
 		return $logs ? $logs : array();
 	}
@@ -138,13 +318,13 @@ class HappyAccess_Logger {
 	 */
 	public static function clear_old_logs( $days = 30 ) {
 		global $wpdb;
-		$table = $wpdb->prefix . 'happyaccess_logs';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe.
-				"DELETE FROM $table WHERE created_at < DATE_SUB(%s, INTERVAL %d DAY)",
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"DELETE FROM `$table` WHERE created_at < DATE_SUB(%s, INTERVAL %d DAY)",
 				current_time( 'mysql' ),
 				$days
 			)

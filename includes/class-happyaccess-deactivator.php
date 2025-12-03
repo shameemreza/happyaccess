@@ -44,12 +44,12 @@ class HappyAccess_Deactivator {
 		global $wpdb;
 		
 		// Get all active tokens with users.
-		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$tokens = $wpdb->get_results(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is safe, no user input.
-			"SELECT user_id FROM $table WHERE user_id IS NOT NULL",
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe, no user input.
+			"SELECT user_id FROM `$table` WHERE user_id IS NOT NULL",
 			ARRAY_A
 		);
 		

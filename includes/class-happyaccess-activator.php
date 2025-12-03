@@ -26,6 +26,7 @@ class HappyAccess_Activator {
 	public static function activate() {
 		self::create_tables();
 		self::create_options();
+		self::maybe_upgrade();
 		self::schedule_cron_events();
 		
 		// Set activation notice.
@@ -33,6 +34,44 @@ class HappyAccess_Activator {
 		
 		// Clear rewrite rules.
 		flush_rewrite_rules();
+	}
+
+	/**
+	 * Maybe run upgrade routines.
+	 *
+	 * @since 1.0.0
+	 */
+	private static function maybe_upgrade() {
+		global $wpdb;
+		$current_version = get_option( 'happyaccess_version', '0.0.0' );
+		
+		// Upgrade from version before 1.0.0 (or fresh install).
+		if ( version_compare( $current_version, '1.0.0', '<' ) ) {
+			// Migrate token_expiry from old 24 hours default to new 7 days default.
+			$token_expiry = get_option( 'happyaccess_token_expiry' );
+			if ( 86400 === (int) $token_expiry ) {
+				// User had old default (24 hours), update to new default (7 days).
+				update_option( 'happyaccess_token_expiry', 604800 );
+			}
+		}
+		
+		// Upgrade to 1.0.1 - Fix max_uses default to allow unlimited reuse.
+		if ( version_compare( $current_version, '1.0.1', '<' ) ) {
+			$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
+			// Update all existing tokens with max_uses=1 to max_uses=0 (unlimited).
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Upgrade routine.
+			$wpdb->query(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
+					"UPDATE `$table` SET max_uses = %d WHERE max_uses = %d AND revoked_at IS NULL",
+					0,
+					1
+				)
+			);
+		}
+		
+		// Update version.
+		update_option( 'happyaccess_version', HAPPYACCESS_VERSION );
 	}
 
 	/**
@@ -59,7 +98,7 @@ class HappyAccess_Activator {
 			expires_at DATETIME NOT NULL,
 			used_at DATETIME NULL,
 			revoked_at DATETIME NULL,
-			max_uses INT DEFAULT 1,
+			max_uses INT DEFAULT 0,
 			use_count INT DEFAULT 0,
 			ip_restrictions TEXT NULL,
 			metadata LONGTEXT NULL,
@@ -118,7 +157,7 @@ class HappyAccess_Activator {
 		$default_options = array(
 			'max_attempts'      => 5,
 			'lockout_duration'  => 900, // 15 minutes.
-			'token_expiry'      => 86400, // 24 hours.
+			'token_expiry'      => 604800, // 7 days (default for security).
 			'cleanup_days'      => 30,
 			'enable_logging'    => true,
 			'enable_email'      => false,

@@ -113,15 +113,15 @@ class HappyAccess_GDPR {
 		}
 		
 		global $wpdb;
-		$table_logs = $wpdb->prefix . 'happyaccess_logs';
-		$table_tokens = $wpdb->prefix . 'happyaccess_tokens';
+		$table_logs = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
+		$table_tokens = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
 		
 		// Get logs for this user.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$logs = $wpdb->get_results(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is controlled by plugin.
-				"SELECT * FROM $table_logs WHERE user_id = %d ORDER BY created_at DESC LIMIT 50",
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT * FROM `$table_logs` WHERE user_id = %d ORDER BY created_at DESC LIMIT 50",
 				$user->ID
 			),
 			ARRAY_A
@@ -156,8 +156,8 @@ class HappyAccess_GDPR {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$tokens = $wpdb->get_results(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is controlled by plugin.
-				"SELECT * FROM $table_tokens WHERE created_by = %d ORDER BY created_at DESC LIMIT 50",
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT * FROM `$table_tokens` WHERE created_by = %d ORDER BY created_at DESC LIMIT 50",
 				$user->ID
 			),
 			ARRAY_A
