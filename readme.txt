@@ -4,7 +4,7 @@ Tags: admin, temporary access, support, security, otp
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,6 +20,7 @@ It removes the need for merchants to manually create/delete admin users or share
 
 * **OTP-Based Authentication** - Generate secure 6-digit codes instead of sharing passwords.
 * **Reusable Access Codes** - Support engineers can log in multiple times with the same code until it expires.
+* **One-Time Use Option** - Generate codes that automatically revoke after first use for maximum security.
 * **Time-Limited Access** - Automatically expires after the set duration (1 hour to 30 days).
 * **Automatic Cleanup** - Temporary users are deleted automatically when access expires.
 * **Full Audit Log** - Track all access and actions with CSV export for compliance.
@@ -84,7 +85,19 @@ No! That's the beauty of HappyAccess. You generate a 6-digit code and share it d
 
 = Can support engineers log in multiple times with the same code? =
 
-Yes! Access codes can be reused unlimited times until they expire. This means your support engineer can log in, log out, and log in again without needing a new code.
+Yes! By default, access codes can be reused unlimited times until they expire. This means your support engineer can log in, log out, and log in again without needing a new code.
+
+However, if you need maximum security, you can enable the "One-Time Use" option when generating the code. This will automatically revoke the code after the first successful login, limiting access to a single session.
+
+= What is "One-Time Use" and when should I use it? =
+
+One-Time Use is a security feature that automatically revokes the access code immediately after the first successful login. The support engineer gets only one session - if they log out, they cannot log back in with the same code.
+
+Use this when:
+* You only need a single support session
+* You want maximum security
+* You're granting access to sensitive admin areas
+* You want the code to self-destruct after use
 
 = Can the support person see my password? =
 
@@ -125,6 +138,20 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 7. Emergency Lock - Admin bar button for instant revocation.
 
 == Changelog ==
+
+= 1.0.2 =
+* NEW: One-Time Use option - Generate codes that automatically revoke after first successful login.
+* NEW: Clear All Logs button in Audit Logs tab for manual log management.
+* NEW: "Delete Data on Uninstall" option in Settings to control data cleanup.
+* SECURITY: All active tokens are now revoked when the plugin is deactivated.
+* SECURITY: All temporary users are cleaned up on plugin deactivation (no leftovers).
+* SECURITY: Single-use tokens auto-revoke immediately after login, preventing code reuse.
+* IMPROVED: Active Tokens page now shows status as "Unused (One-Time)" or "Active (One-Time)" for single-use codes.
+* IMPROVED: Email notifications now include one-time use warning when applicable.
+* IMPROVED: Audit logs now track single-use token creation and auto-revocation.
+* IMPROVED: Get Support link moved to plugin description row (next to author/plugin site).
+* FIXED: Complete cleanup on deactivation - no leftover tokens or users remain.
+* FIXED: Plugin deactivation now properly logs the action with count of revoked tokens.
 
 = 1.0.1 =
 * NEW: Plugin action links - Quick access to Settings and Support from plugins page.

@@ -1,66 +1,82 @@
 <?php
 /**
- * Uninstall handler for HappyAccess plugin.
+ * HappyAccess Uninstall Handler
+ *
+ * This file is executed when the plugin is deleted (not deactivated).
+ * It respects the "Delete Data on Uninstall" setting.
  *
  * @package HappyAccess
- * @since   1.0.0
+ * @since   1.0.2
  */
 
-// Exit if uninstall not called from WordPress.
+// Exit if not called by WordPress uninstall.
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-// Delete all temporary users first.
-$happyaccess_users = get_users( array(
-	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Required for cleanup during uninstall.
-	'meta_key'   => 'happyaccess_temp_user',
-	// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Required for cleanup during uninstall.
-	'meta_value' => true,
-) );
+// Check if user opted to delete data on uninstall.
+$happyaccess_delete_data = get_option( 'happyaccess_delete_on_uninstall', false );
 
-foreach ( $happyaccess_users as $happyaccess_user ) {
-	wp_delete_user( $happyaccess_user->ID );
+if ( ! $happyaccess_delete_data ) {
+	// User chose to keep data - exit without deleting.
+	return;
 }
 
-// Drop custom tables.
 global $wpdb;
 
-$happyaccess_tables = array(
-	$wpdb->prefix . 'happyaccess_tokens',
-	$wpdb->prefix . 'happyaccess_logs',
-	$wpdb->prefix . 'happyaccess_attempts',
+// Delete custom database tables.
+$happyaccess_tokens_table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
+$happyaccess_logs_table   = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
+
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are escaped, uninstall cleanup.
+$wpdb->query( "DROP TABLE IF EXISTS `{$happyaccess_tokens_table}`" );
+
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are escaped, uninstall cleanup.
+$wpdb->query( "DROP TABLE IF EXISTS `{$happyaccess_logs_table}`" );
+
+// Delete all temporary users created by the plugin using direct query (more efficient).
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall cleanup, runs once.
+$happyaccess_temp_user_ids = $wpdb->get_col(
+	$wpdb->prepare(
+		"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s",
+		'happyaccess_temp_user',
+		'1'
+	)
 );
 
-foreach ( $happyaccess_tables as $happyaccess_table ) {
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Uninstall cleanup, safe table name.
-	$wpdb->query( "DROP TABLE IF EXISTS $happyaccess_table" );
+if ( $happyaccess_temp_user_ids ) {
+	foreach ( $happyaccess_temp_user_ids as $happyaccess_user_id ) {
+		wp_delete_user( (int) $happyaccess_user_id );
+	}
 }
 
-// Delete options.
-$happyaccess_options = array(
+// Delete all plugin options.
+$happyaccess_options_to_delete = array(
 	'happyaccess_version',
-	'happyaccess_db_version',
-	'happyaccess_activated',
 	'happyaccess_max_attempts',
 	'happyaccess_lockout_duration',
 	'happyaccess_token_expiry',
 	'happyaccess_cleanup_days',
 	'happyaccess_enable_logging',
-	'happyaccess_enable_email',
-	'happyaccess_gdpr_consent_text',
+	'happyaccess_delete_on_uninstall',
+	'happyaccess_db_version',
 );
 
-foreach ( $happyaccess_options as $happyaccess_option ) {
+foreach ( $happyaccess_options_to_delete as $happyaccess_option ) {
 	delete_option( $happyaccess_option );
 }
 
-// Clear scheduled cron events.
+// Clear any scheduled cron events.
 wp_clear_scheduled_hook( 'happyaccess_cleanup_expired' );
 wp_clear_scheduled_hook( 'happyaccess_cleanup_attempts' );
 
-// Clear any transients.
-// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall cleanup.
-$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_happyaccess_%'" );
-// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall cleanup.
-$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_happyaccess_%'" );
+// Clear transients.
+delete_transient( 'happyaccess_rate_limit' );
+
+// Delete all rate limit transients (they follow a pattern).
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Cleanup transients on uninstall.
+$wpdb->query(
+	"DELETE FROM `{$wpdb->options}` 
+	WHERE `option_name` LIKE '_transient_happyaccess_%' 
+	OR `option_name` LIKE '_transient_timeout_happyaccess_%'"
+);

@@ -3,7 +3,7 @@
  * Plugin Name:       HappyAccess
  * Plugin URI:        https://github.com/shameemreza/happyaccess
  * Description:       Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
- * Version:           1.0.1
+ * Version:           1.0.2
  * Author:            Shameem Reza
  * Author URI:        https://shameem.blog/
  * License:           GPL v2 or later
@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'HAPPYACCESS_VERSION', '1.0.1' );
+define( 'HAPPYACCESS_VERSION', '1.0.2' );
 define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
 define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -139,14 +139,19 @@ class HappyAccess {
 			add_action( 'wp_ajax_happyaccess_emergency_lock', array( $this->admin, 'ajax_emergency_lock' ) );
 		}
 		
-		// Plugin action links (Settings, Support).
+		// Plugin action links (Settings).
 		add_filter( 'plugin_action_links_' . HAPPYACCESS_PLUGIN_BASENAME, array( $this, 'add_plugin_action_links' ) );
+		
+		// Plugin row meta (Get Support link in description area).
+		add_filter( 'plugin_row_meta', array( $this, 'add_plugin_row_meta' ), 10, 2 );
 	}
 	
 	/**
 	 * Add plugin action links on plugins page.
 	 *
 	 * @since 1.0.1
+	 * @since 1.0.2 Removed Support link (moved to row meta).
+	 *
 	 * @param array $links Existing links.
 	 * @return array Modified links.
 	 */
@@ -157,14 +162,33 @@ class HappyAccess {
 			esc_html__( 'Settings', 'happyaccess' )
 		);
 		
+		// Add at the beginning of the array.
+		array_unshift( $links, $settings_link );
+		
+		return $links;
+	}
+	
+	/**
+	 * Add plugin row meta links (in description area).
+	 *
+	 * @since 1.0.2
+	 *
+	 * @param array  $links Plugin meta links.
+	 * @param string $file  Plugin file path.
+	 * @return array Modified links.
+	 */
+	public function add_plugin_row_meta( $links, $file ) {
+		if ( HAPPYACCESS_PLUGIN_BASENAME !== $file ) {
+			return $links;
+		}
+		
 		$support_link = sprintf(
 			'<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>',
 			esc_url( 'https://github.com/shameemreza/happyaccess/issues' ),
 			esc_html__( 'Get Support', 'happyaccess' )
 		);
 		
-		// Add at the beginning of the array.
-		array_unshift( $links, $settings_link, $support_link );
+		$links[] = $support_link;
 		
 		return $links;
 	}

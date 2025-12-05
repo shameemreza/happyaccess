@@ -66,6 +66,8 @@ class HappyAccess_Login_Handler {
 	 * Authenticate with OTP.
 	 *
 	 * @since 1.0.0
+	 * @since 1.0.2 Added auto-revoke for single-use tokens.
+	 *
 	 * @param WP_User|WP_Error|null $user     User object or error.
 	 * @param string                $username Username.
 	 * @param string                $password Password.
@@ -131,17 +133,36 @@ class HappyAccess_Login_Handler {
 		
 		// Log successful login with masked OTP.
 		$masked_otp = substr( $otp, 0, 2 ) . '****';
-		HappyAccess_Logger::log( 'login_success', array(
+		$log_data = array(
 			'token_id' => $token_data['id'],
 			'otp'      => $masked_otp,
 			'user_id'  => $temp_user->ID,
 			'username' => $temp_user->user_login,
 			'role'     => $token_data['role'],
-		) );
+		);
+		
+		// Check if this is a single-use token.
+		$is_single_use = ! empty( $token_data['_single_use_pending_revoke'] );
+		if ( $is_single_use ) {
+			$log_data['single_use'] = true;
+		}
+		
+		HappyAccess_Logger::log( 'login_success', $log_data );
 		
 		// Clear any rate limiting for this IP.
 		$rate_limiter = new HappyAccess_Rate_Limiter();
 		$rate_limiter->clear_attempts( 'otp_' . $otp, HappyAccess_OTP_Handler::get_client_ip() );
+		
+		// SECURITY: Auto-revoke single-use tokens after successful login.
+		// The user is already authenticated and their session is established.
+		// Revoking now prevents the code from being reused.
+		if ( $is_single_use ) {
+			// Store token ID in user meta for reference (the token is about to be revoked).
+			update_user_meta( $temp_user->ID, 'happyaccess_single_use_revoked', true );
+			
+			// Auto-revoke the token.
+			HappyAccess_OTP_Handler::auto_revoke_single_use_token( $token_data['id'] );
+		}
 		
 		// Return the user object to complete login.
 		return $temp_user;

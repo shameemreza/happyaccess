@@ -29,6 +29,7 @@ class HappyAccess_Admin {
 		add_action( 'wp_ajax_happyaccess_generate_token', array( $this, 'ajax_generate_token' ) );
 		add_action( 'wp_ajax_happyaccess_revoke_token', array( $this, 'ajax_revoke_token' ) );
 		add_action( 'wp_ajax_happyaccess_logout_sessions', array( $this, 'ajax_logout_sessions' ) );
+		add_action( 'wp_ajax_happyaccess_clear_logs', array( $this, 'ajax_clear_logs' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_init', array( $this, 'handle_settings' ) );
 	}
@@ -79,6 +80,9 @@ class HappyAccess_Admin {
 				'logging_out'             => __( 'Logging out...', 'happyaccess' ),
 				'logout_sessions'         => __( 'Logout All Temp Sessions', 'happyaccess' ),
 				'gdpr_required'           => __( 'Please confirm that third-party access is disclosed in your Privacy Policy or Terms of Service.', 'happyaccess' ),
+				'confirm_clear_logs'      => __( 'WARNING: This will permanently delete ALL audit logs. This action cannot be undone. Are you sure you want to continue?', 'happyaccess' ),
+				'clearing_logs'           => __( 'Clearing...', 'happyaccess' ),
+				'clear_all_logs'          => __( 'Clear All Logs', 'happyaccess' ),
 			),
 		) );
 		
@@ -198,6 +202,17 @@ class HappyAccess_Admin {
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'One-Time Use', 'happyaccess' ); ?></th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'SECURITY: When enabled, the access code will automatically revoke after the first successful login. The support engineer will not be able to log in again with the same code. Use this for maximum security when you only need a single session.', 'happyaccess' ); ?>"></span>
+						<label>
+							<input type="checkbox" name="single_use" id="happyaccess-single-use" value="1" />
+							<?php esc_html_e( 'Revoke access code after first use (single session only)', 'happyaccess' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'When enabled, the code becomes invalid immediately after the support engineer logs in. They cannot log out and log back in - they get only one session.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Email Confirmation', 'happyaccess' ); ?></th>
 					<td>
 						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Receive a copy of the access code via email for your records and secure sharing.', 'happyaccess' ); ?>"></span>
@@ -266,6 +281,10 @@ class HappyAccess_Admin {
 							<?php esc_html_e( 'Copy to Clipboard', 'happyaccess' ); ?>
 						</button>
 					</td>
+				</tr>
+				<tr id="happyaccess-single-use-row" style="display:none;">
+					<th><?php esc_html_e( 'Usage Type', 'happyaccess' ); ?></th>
+					<td id="happyaccess-single-use-display"></td>
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Expires', 'happyaccess' ); ?></th>
@@ -356,13 +375,27 @@ class HappyAccess_Admin {
 							</td>
 							<td><?php echo esc_html( $token_note ? $token_note : '-' ); ?></td>
 							<td>
-								<?php if ( $is_expired ) : ?>
-									<?php esc_html_e( 'Expired', 'happyaccess' ); ?>
-								<?php elseif ( $temp_user ) : ?>
-									<?php esc_html_e( 'Active', 'happyaccess' ); ?>
-								<?php else : ?>
-									<?php esc_html_e( 'Unused', 'happyaccess' ); ?>
-								<?php endif; ?>
+								<?php 
+								// Determine status with single-use support.
+								// Note: Revoked tokens are not shown in this list (visible in Audit Logs).
+								$is_single_use = ( 1 === (int) $token['max_uses'] );
+								
+								if ( $is_expired ) {
+									esc_html_e( 'Expired', 'happyaccess' );
+								} elseif ( $temp_user ) {
+									if ( $is_single_use ) {
+										echo '<span style="color: #00a32a;">' . esc_html__( 'Active (One-Time)', 'happyaccess' ) . '</span>';
+									} else {
+										esc_html_e( 'Active', 'happyaccess' );
+									}
+								} else {
+									if ( $is_single_use ) {
+										echo '<span>' . esc_html__( 'Unused (One-Time)', 'happyaccess' ) . '</span>';
+									} else {
+										esc_html_e( 'Unused', 'happyaccess' );
+									}
+								}
+								?>
 							</td>
 							<td>
 								<?php if ( ! $is_expired && ! $token['revoked_at'] ) : ?>
@@ -437,6 +470,11 @@ class HappyAccess_Admin {
 		), admin_url( 'users.php' ) );
 		?>
 		<a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action"><?php esc_html_e( 'Export CSV', 'happyaccess' ); ?></a>
+		<?php if ( ! empty( $logs ) ) : ?>
+			<button type="button" id="happyaccess-clear-logs" class="page-title-action" style="color:#d63638;">
+				<?php esc_html_e( 'Clear All Logs', 'happyaccess' ); ?>
+			</button>
+		<?php endif; ?>
 		<hr class="wp-header-end">
 		
 		<!-- Filters -->
@@ -788,6 +826,24 @@ class HappyAccess_Admin {
 					</td>
 				</tr>
 			</table>
+			
+			<h2 class="title"><?php esc_html_e( 'Uninstall Options', 'happyaccess' ); ?></h2>
+			<table class="form-table">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Delete Data on Uninstall', 'happyaccess' ); ?></th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'When enabled, all plugin data (tokens, logs, settings) will be permanently deleted when you uninstall (delete) the plugin. This does NOT affect deactivation.', 'happyaccess' ); ?>"></span>
+						<label>
+							<input type="checkbox" name="happyaccess_delete_on_uninstall" id="happyaccess_delete_on_uninstall" value="1" <?php checked( get_option( 'happyaccess_delete_on_uninstall', false ) ); ?> />
+							<?php esc_html_e( 'Remove all plugin data when plugin is deleted', 'happyaccess' ); ?>
+						</label>
+						<p class="description" style="color:#d63638;">
+							<strong><?php esc_html_e( 'Warning:', 'happyaccess' ); ?></strong>
+							<?php esc_html_e( 'This will permanently delete all tokens, audit logs, and settings. This cannot be undone.', 'happyaccess' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
 
 			<?php submit_button(); ?>
 		</form>
@@ -825,12 +881,18 @@ class HappyAccess_Admin {
 			'sanitize_callback' => 'rest_sanitize_boolean',
 			'default' => true,
 		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_delete_on_uninstall', array(
+			'type' => 'boolean',
+			'sanitize_callback' => 'rest_sanitize_boolean',
+			'default' => false,
+		) );
 	}
 
 	/**
 	 * Handle AJAX token generation.
 	 *
 	 * @since 1.0.0
+	 * @since 1.0.2 Added single_use parameter support.
 	 */
 	public function ajax_generate_token() {
 		// Verify nonce.
@@ -848,6 +910,7 @@ class HappyAccess_Admin {
 		$role = isset( $_POST['role'] ) ? sanitize_text_field( wp_unslash( $_POST['role'] ) ) : 'administrator';
 		$note = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
 		$email_admin = isset( $_POST['email_admin'] ) && $_POST['email_admin'] === '1';
+		$single_use = isset( $_POST['single_use'] ) && $_POST['single_use'] === '1';
 		
 		// Get and validate IP restrictions.
 		$ip_restrictions = '';
@@ -869,7 +932,7 @@ class HappyAccess_Admin {
 			$metadata['note'] = $note;
 		}
 		
-		$result = HappyAccess_Token_Manager::generate_token( $duration, $role, $metadata, $ip_restrictions );
+		$result = HappyAccess_Token_Manager::generate_token( $duration, $role, $metadata, $ip_restrictions, $single_use );
 		
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
@@ -881,29 +944,38 @@ class HappyAccess_Admin {
 		
 		// Send email if requested.
 		if ( $email_admin ) {
-			$this->send_otp_email( $result['otp'], $expires_display, $role, $note );
+			$this->send_otp_email( $result['otp'], $expires_display, $role, $note, $single_use );
 		}
 		
 		// Return success with OTP and details.
-		wp_send_json_success( array(
-			'otp'     => $result['otp'],
-			'expires' => $expires_display,
-			'role'    => $role,
-			'note'    => $note,
-			'token_id' => $result['id'],
-		) );
+		$response = array(
+			'otp'        => $result['otp'],
+			'expires'    => $expires_display,
+			'role'       => $role,
+			'note'       => $note,
+			'token_id'   => $result['id'],
+		);
+		
+		if ( $single_use ) {
+			$response['single_use'] = true;
+		}
+		
+		wp_send_json_success( $response );
 	}
 
 	/**
 	 * Send OTP email to admin.
 	 *
 	 * @since 1.0.0
-	 * @param string $otp The OTP code.
-	 * @param string $expires Formatted expiry date/time.
-	 * @param string $role User role.
-	 * @param string $note Optional note.
+	 * @since 1.0.2 Added $single_use parameter.
+	 *
+	 * @param string $otp        The OTP code.
+	 * @param string $expires    Formatted expiry date/time.
+	 * @param string $role       User role.
+	 * @param string $note       Optional note.
+	 * @param bool   $single_use Whether this is a single-use token.
 	 */
-	private function send_otp_email( $otp, $expires, $role, $note = '' ) {
+	private function send_otp_email( $otp, $expires, $role, $note = '', $single_use = false ) {
 		$to = get_option( 'admin_email' );
 		$site_name = get_bloginfo( 'name' );
 		$site_url = get_site_url();
@@ -958,6 +1030,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxyge
 <div class="details-row"><span class="label">' . esc_html__( 'Valid Until:', 'happyaccess' ) . '</span> ' . esc_html( $expires ) . '</div>
 <div class="details-row"><span class="label">' . esc_html__( 'Access Level:', 'happyaccess' ) . '</span> ' . esc_html( ucfirst( $role ) ) . '</div>';
 		
+		if ( $single_use ) {
+			$html_message .= '<div class="details-row"><span class="label" style="color: #d63232;">' . esc_html__( 'Usage:', 'happyaccess' ) . '</span> <strong style="color: #d63232;">' . esc_html__( 'ONE-TIME USE ONLY', 'happyaccess' ) . '</strong></div>';
+		}
+		
 		if ( ! empty( $note ) ) {
 			$html_message .= '<div class="details-row"><span class="label">' . esc_html__( 'Reference:', 'happyaccess' ) . '</span> ' . esc_html( $note ) . '</div>';
 		}
@@ -978,7 +1054,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxyge
 			/* translators: %s: role name */
 			esc_html__( 'This code grants %s access. Only share with trusted support personnel.', 'happyaccess' ),
 			'<strong>' . esc_html( $role ) . '</strong>'
-		) . '
+		);
+		
+		if ( $single_use ) {
+			$html_message .= '<br><br><strong style="color: #d63232;">⚡ ' . esc_html__( 'ONE-TIME USE:', 'happyaccess' ) . '</strong> ' . esc_html__( 'This code will automatically expire after the first login. The support engineer cannot log out and log back in - they will have only one session.', 'happyaccess' );
+		}
+		
+		$html_message .= '
 </div>';
 		
 		$html_message .= '<div class="security">
@@ -1142,6 +1224,54 @@ public function ajax_revoke_token() {
 				/* translators: %d: number of sessions logged out */
 				__( 'Successfully logged out %d temporary user session(s). Tokens remain active for future use.', 'happyaccess' ),
 				$logged_out_count
+			),
+		) );
+	}
+
+	/**
+	 * Handle AJAX clear logs request.
+	 *
+	 * @since 1.0.2
+	 */
+	public function ajax_clear_logs() {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+		}
+		
+		// Check permissions - only administrators can clear logs.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Only administrators can clear audit logs', 'happyaccess' ) ) );
+		}
+		
+		global $wpdb;
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
+		
+		// Get count before clearing.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$count = $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+			"SELECT COUNT(*) FROM `$table`"
+		);
+		
+		// Clear all logs.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$wpdb->query(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+			"TRUNCATE TABLE `$table`"
+		);
+		
+		// Log this action (will be the only entry after clear).
+		HappyAccess_Logger::log( 'logs_cleared', array(
+			'cleared_count' => $count,
+			'cleared_by'    => wp_get_current_user()->user_login,
+		) );
+		
+		wp_send_json_success( array(
+			'message' => sprintf(
+				/* translators: %d: number of logs cleared */
+				__( 'Successfully cleared %d audit log entries.', 'happyaccess' ),
+				$count
 			),
 		) );
 	}

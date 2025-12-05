@@ -28,6 +28,11 @@
         formData += "&email_admin=1";
       }
 
+      // Include single_use checkbox value
+      if ($("#happyaccess-single-use").is(":checked")) {
+        formData += "&single_use=1";
+      }
+
       // Disable button
       $("#happyaccess-generate-btn")
         .prop("disabled", true)
@@ -41,6 +46,16 @@
           $("#happyaccess-expires-display").text(response.data.expires);
           $("#happyaccess-role-display").text(response.data.role);
           $("#happyaccess-note-display").text(response.data.note || "-");
+
+          // Show single-use indicator if applicable
+          if (response.data.single_use) {
+            $("#happyaccess-single-use-display").html(
+              '<strong style="color: #d63232;">⚡ ONE-TIME USE</strong> - Code will auto-revoke after first login'
+            );
+            $("#happyaccess-single-use-row").show();
+          } else {
+            $("#happyaccess-single-use-row").hide();
+          }
 
           // Scroll to the OTP display
           $("html, body").animate(
@@ -186,6 +201,42 @@
         $button
           .prop("disabled", false)
           .text(happyaccess_ajax.strings.logout_sessions);
+      });
+    });
+
+    // Handle clear all logs
+    $("#happyaccess-clear-logs").on("click", function (e) {
+      e.preventDefault();
+
+      if (!confirm(happyaccess_ajax.strings.confirm_clear_logs)) {
+        return;
+      }
+
+      var $button = $(this);
+      $button.prop("disabled", true).text(happyaccess_ajax.strings.clearing_logs);
+
+      $.post(
+        happyaccess_ajax.ajax_url,
+        {
+          action: "happyaccess_clear_logs",
+          nonce: happyaccess_ajax.nonce,
+        },
+        function (response) {
+          if (response.success) {
+            alert(response.data.message);
+            location.reload();
+          } else {
+            alert(response.data.message || "Failed to clear logs");
+            $button
+              .prop("disabled", false)
+              .text(happyaccess_ajax.strings.clear_all_logs);
+          }
+        }
+      ).fail(function () {
+        alert("Network error. Please try again.");
+        $button
+          .prop("disabled", false)
+          .text(happyaccess_ajax.strings.clear_all_logs);
       });
     });
   });

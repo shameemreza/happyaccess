@@ -67,6 +67,8 @@ class HappyAccess_OTP_Handler {
 	 * Verify an OTP.
 	 *
 	 * @since 1.0.0
+	 * @since 1.0.2 Added auto-revoke for single-use tokens.
+	 *
 	 * @param string $otp The OTP to verify.
 	 * @return array|WP_Error Token data on success, WP_Error on failure.
 	 */
@@ -128,6 +130,9 @@ class HappyAccess_OTP_Handler {
 		$new_use_count = $current_use_count + 1;
 		$is_relogin = $current_use_count > 0;
 		
+		// Check if this is a single-use token (max_uses = 1).
+		$is_single_use = ( 1 === (int) $token['max_uses'] );
+		
 		// Update use count and last used time.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, safe table name.
 		$wpdb->update(
@@ -148,19 +153,89 @@ class HappyAccess_OTP_Handler {
 		$masked_otp = substr( $otp, 0, 2 ) . '****';
 		
 		// Log successful verification with login count and masked OTP.
-		HappyAccess_Logger::log( $event_type, array(
+		$log_data = array(
 			'token_id'      => $token['id'],
 			'otp'           => $masked_otp,
 			'temp_username' => $token['temp_username'],
 			'role'          => $token['role'],
 			'login_count'   => $new_use_count,
 			'ip'            => self::get_client_ip(),
-		) );
+		);
+		if ( $is_single_use ) {
+			$log_data['single_use'] = true;
+		}
+		HappyAccess_Logger::log( $event_type, $log_data );
 		
 		// Update token with new use count for return.
 		$token['use_count'] = $new_use_count;
 		
+		// Mark token for single-use auto-revoke after login completes.
+		// This flag will be used by login handler to revoke after user creation.
+		$token['_single_use_pending_revoke'] = $is_single_use;
+		
 		return $token;
+	}
+
+	/**
+	 * Auto-revoke a single-use token after successful login.
+	 *
+	 * This is called after the temporary user has been created and logged in.
+	 * For single-use tokens, we don't immediately revoke to allow the login
+	 * to complete, but we revoke after the session is established.
+	 *
+	 * @since 1.0.2
+	 * @param int $token_id Token ID to revoke.
+	 * @return bool True if revoked, false otherwise.
+	 */
+	public static function auto_revoke_single_use_token( $token_id ) {
+		global $wpdb;
+		
+		$token_id = absint( $token_id );
+		if ( ! $token_id ) {
+			return false;
+		}
+		
+		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
+		
+		// Get token to verify it's single-use and not already revoked.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$token = $wpdb->get_row(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"SELECT * FROM `$table` WHERE id = %d AND max_uses = 1 AND revoked_at IS NULL",
+				$token_id
+			),
+			ARRAY_A
+		);
+		
+		if ( ! $token ) {
+			return false;
+		}
+		
+		// Revoke the token.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$result = $wpdb->update(
+			$table,
+			array( 'revoked_at' => current_time( 'mysql' ) ),
+			array( 'id' => $token_id ),
+			array( '%s' ),
+			array( '%d' )
+		);
+		
+		if ( false === $result ) {
+			return false;
+		}
+		
+		// Log the auto-revoke.
+		$masked_otp = substr( $token['otp_code'], 0, 2 ) . '****';
+		HappyAccess_Logger::log( 'token_auto_revoked', array(
+			'token_id'      => $token_id,
+			'otp'           => $masked_otp,
+			'reason'        => 'single_use_consumed',
+			'temp_username' => $token['temp_username'],
+		) );
+		
+		return true;
 	}
 
 	/**

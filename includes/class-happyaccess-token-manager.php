@@ -22,12 +22,16 @@ class HappyAccess_Token_Manager {
 	 * Generate a new access token.
 	 *
 	 * @since 1.0.0
-	 * @param int    $duration Duration in seconds.
-	 * @param string $role     WordPress user role.
-	 * @param array  $metadata Optional metadata.
+	 * @since 1.0.2 Added $single_use parameter for one-time use tokens.
+	 *
+	 * @param int    $duration        Duration in seconds.
+	 * @param string $role            WordPress user role.
+	 * @param array  $metadata        Optional metadata.
+	 * @param string $ip_restrictions Optional comma-separated IP addresses.
+	 * @param bool   $single_use      Optional. If true, token auto-revokes after first use.
 	 * @return array|WP_Error Token data on success, WP_Error on failure.
 	 */
-	public static function generate_token( $duration, $role, $metadata = array(), $ip_restrictions = '' ) {
+	public static function generate_token( $duration, $role, $metadata = array(), $ip_restrictions = '', $single_use = false ) {
 		global $wpdb;
 		
 		// Validate duration.
@@ -57,10 +61,17 @@ class HappyAccess_Token_Manager {
 		$expires_at = gmdate( 'Y-m-d H:i:s', time() + $duration );
 		
 		// Prepare metadata.
+		// Add single_use flag to metadata for display purposes.
+		if ( $single_use ) {
+			$metadata['single_use'] = true;
+		}
 		$metadata_json = ! empty( $metadata ) ? wp_json_encode( $metadata ) : null;
 		
 		// Prepare IP restrictions (sanitize and validate).
 		$ip_restrictions = ! empty( $ip_restrictions ) ? sanitize_text_field( $ip_restrictions ) : null;
+		
+		// Determine max_uses: 1 for single-use, 0 for unlimited.
+		$max_uses = $single_use ? 1 : 0;
 		
 		// Insert token into database.
 		$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
@@ -78,7 +89,7 @@ class HappyAccess_Token_Manager {
 				'expires_at'      => $expires_at,
 				'metadata'        => $metadata_json,
 				'ip_restrictions' => $ip_restrictions,
-				'max_uses'        => 0, // Unlimited reuse until expiry.
+				'max_uses'        => $max_uses,
 			),
 			array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%d' )
 		);
@@ -91,13 +102,17 @@ class HappyAccess_Token_Manager {
 		
 		// Log token creation with masked OTP.
 		$masked_otp = substr( $otp, 0, 2 ) . '****';
-		HappyAccess_Logger::log( 'token_created', array(
+		$log_data = array(
 			'token_id'   => $token_id,
 			'otp'        => $masked_otp,
 			'role'       => $role,
 			'duration'   => self::format_duration( $duration ),
 			'created_by' => get_current_user_id(),
-		) );
+		);
+		if ( $single_use ) {
+			$log_data['single_use'] = true;
+		}
+		HappyAccess_Logger::log( 'token_created', $log_data );
 		
 		return array(
 			'id'            => $token_id,
@@ -108,6 +123,7 @@ class HappyAccess_Token_Manager {
 			'role'          => $role,
 			'expires_at'    => $expires_at,
 			'metadata'      => $metadata,
+			'single_use'    => $single_use,
 		);
 	}
 
@@ -191,7 +207,11 @@ class HappyAccess_Token_Manager {
 	/**
 	 * Get all active tokens.
 	 *
+	 * Returns only truly active tokens (not expired, not revoked).
+	 * Revoked tokens (including used single-use) are visible in Audit Logs.
+	 *
 	 * @since 1.0.0
+	 *
 	 * @return array Array of active tokens.
 	 */
 	public static function get_active_tokens() {
