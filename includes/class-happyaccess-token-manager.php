@@ -150,10 +150,13 @@ class HappyAccess_Token_Manager {
 	 * Revoke a token.
 	 *
 	 * @since 1.0.0
-	 * @param int $token_id Token ID.
+	 * @since 1.0.3 Added $keep_user parameter for single-use tokens with active sessions.
+	 *
+	 * @param int  $token_id  Token ID.
+	 * @param bool $keep_user Whether to keep the temp user (for active sessions). Default false.
 	 * @return bool True on success, false on failure.
 	 */
-	public static function revoke_token( $token_id ) {
+	public static function revoke_token( $token_id, $keep_user = false ) {
 		global $wpdb;
 		
 		$token_id = absint( $token_id );
@@ -189,8 +192,8 @@ class HappyAccess_Token_Manager {
 			return false;
 		}
 		
-		// Delete associated temporary user if exists.
-		if ( ! empty( $token['user_id'] ) ) {
+		// Delete associated temporary user if exists (unless keep_user is true for active sessions).
+		if ( ! empty( $token['user_id'] ) && ! $keep_user ) {
 			$temp_user = new HappyAccess_Temp_User();
 			$temp_user->delete_temp_user( $token['user_id'] );
 		}

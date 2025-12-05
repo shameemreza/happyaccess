@@ -4,7 +4,7 @@ Tags: admin, temporary access, support, security, otp
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -19,8 +19,10 @@ It removes the need for merchants to manually create/delete admin users or share
 = Key Features =
 
 * **OTP-Based Authentication** - Generate secure 6-digit codes instead of sharing passwords.
+* **Magic Link Authentication** - Generate secure one-click login links with short expiration (1-10 minutes).
 * **Reusable Access Codes** - Support engineers can log in multiple times with the same code until it expires.
 * **One-Time Use Option** - Generate codes that automatically revoke after first use for maximum security.
+* **reCAPTCHA v3 Protection** - Optional invisible bot protection for OTP login.
 * **Time-Limited Access** - Automatically expires after the set duration (1 hour to 30 days).
 * **Automatic Cleanup** - Temporary users are deleted automatically when access expires.
 * **Full Audit Log** - Track all access and actions with CSV export for compliance.
@@ -123,6 +125,24 @@ Yes, but you must disclose in your Privacy Policy or Terms & Conditions that you
 
 Any WordPress role including Administrator, Editor, Author, Subscriber, and custom roles like Shop Manager.
 
+= What is a Magic Link? =
+
+A Magic Link is a one-click login URL that authenticates the user without needing to enter an OTP code. It's useful when you want to provide the easiest possible login experience. Magic links are:
+* Extremely short-lived (1-10 minutes)
+* Single-use (automatically invalid after first click)
+* Tied to an existing access token
+
+To generate a magic link, go to Active Tokens and click the "Magic Link" button next to any active token.
+
+= Should I enable reCAPTCHA? =
+
+reCAPTCHA v3 is optional but recommended if:
+* You're concerned about automated attacks on your login page
+* You want additional bot protection beyond rate limiting
+* You've seen suspicious login attempts in your audit logs
+
+reCAPTCHA v3 runs invisibly in the background - it won't interrupt legitimate users. To enable it, get your site key and secret key from Google reCAPTCHA Admin and add them in Settings.
+
 = How long are logs kept? =
 
 By default, logs are kept for 30 days. You can configure this in Settings.
@@ -138,6 +158,23 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 7. Emergency Lock - Admin bar button for instant revocation.
 
 == Changelog ==
+
+= 1.0.3 =
+* NEW: Magic Link Authentication - Generate secure one-click login links that expire in 1-10 minutes.
+* NEW: OTP Share Links - Generate secure links to view OTP codes (single-view, auto-expires).
+* NEW: Email Magic Link - Send magic links directly via email to support engineers.
+* NEW: reCAPTCHA v3 Integration - Optional invisible bot protection for OTP login.
+* NEW: Magic Link option in Generate Access form - Create OTP + magic link together.
+* NEW: Beautiful OTP reveal page - Branded, secure page for viewing shared OTP codes.
+* SECURITY: Magic links are single-use and automatically invalidated after access.
+* SECURITY: Only ONE magic link OR share link active per token at a time (previous links auto-invalidated).
+* SECURITY: reCAPTCHA prevents automated brute-force attacks on OTP field.
+* SECURITY: All links use HMAC-SHA256 with time-based validation.
+* IMPROVED: Active Tokens page now includes "Magic Link" button for quick link generation.
+* IMPROVED: Database tables auto-created on plugin update (no deactivation needed).
+* IMPROVED: Audit logs track magic link, share link creation, viewing, and email sending.
+* IMPROVED: reCAPTCHA scores are logged for security analysis.
+* FIXED: Rate limiter method calls in magic link verification.
 
 = 1.0.2 =
 * NEW: One-Time Use option - Generate codes that automatically revoke after first successful login.

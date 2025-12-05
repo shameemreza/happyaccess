@@ -67,6 +67,7 @@ class HappyAccess_Login_Handler {
 	 *
 	 * @since 1.0.0
 	 * @since 1.0.2 Added auto-revoke for single-use tokens.
+	 * @since 1.0.3 Added reCAPTCHA v3 verification.
 	 *
 	 * @param WP_User|WP_Error|null $user     User object or error.
 	 * @param string                $username Username.
@@ -84,6 +85,12 @@ class HappyAccess_Login_Handler {
 		// If we already have a WP_User, skip (another authentication method succeeded).
 		if ( $user instanceof WP_User ) {
 			return $user;
+		}
+		
+		// Verify reCAPTCHA first (if enabled).
+		$recaptcha_result = HappyAccess_ReCaptcha::validate_login();
+		if ( is_wp_error( $recaptcha_result ) ) {
+			return $recaptcha_result;
 		}
 		
 		// Get and sanitize OTP.
@@ -290,6 +297,8 @@ class HappyAccess_Login_Handler {
 	 * Handle temp user logout.
 	 *
 	 * @since 1.0.1
+	 * @since 1.0.3 Added temp user deletion on logout.
+	 *
 	 * @param int $user_id User ID being logged out.
 	 */
 	public static function handle_logout( $user_id ) {
@@ -315,6 +324,13 @@ class HappyAccess_Login_Handler {
 		
 		// Clear session start time.
 		delete_user_meta( $user_id, 'happyaccess_session_start' );
+		
+		// Schedule temp user deletion after logout completes.
+		// We use shutdown hook to ensure the logout process completes first.
+		add_action( 'shutdown', function() use ( $user_id ) {
+			$temp_user_handler = new HappyAccess_Temp_User();
+			$temp_user_handler->delete_temp_user( $user_id );
+		} );
 	}
 
 	/**

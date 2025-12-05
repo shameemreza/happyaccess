@@ -119,6 +119,11 @@ class HappyAccess_Temp_User {
 			'username' => $user->user_login,
 		) );
 		
+		// Ensure wp_delete_user() is available (not loaded during init hook).
+		if ( ! function_exists( 'wp_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		
 		// Delete the user.
 		return wp_delete_user( $user_id );
 	}

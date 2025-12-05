@@ -3,7 +3,7 @@
  * Plugin Name:       HappyAccess
  * Plugin URI:        https://github.com/shameemreza/happyaccess
  * Description:       Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Author:            Shameem Reza
  * Author URI:        https://shameem.blog/
  * License:           GPL v2 or later
@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'HAPPYACCESS_VERSION', '1.0.2' );
+define( 'HAPPYACCESS_VERSION', '1.0.3' );
 define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
 define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -102,6 +102,9 @@ class HappyAccess {
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-gdpr.php';
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-rate-limiter.php';
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-login-handler.php';
+		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-magic-link.php';
+		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-recaptcha.php';
+		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-otp-share.php';
 
 		// Initialize GDPR compliance (WordPress privacy tools integration).
 		new HappyAccess_GDPR();
@@ -132,6 +135,13 @@ class HappyAccess {
 		add_action( 'login_form', array( 'HappyAccess_Login_Handler', 'add_otp_field' ) );
 		add_filter( 'authenticate', array( 'HappyAccess_Login_Handler', 'authenticate_otp' ), 10, 3 );
 		add_action( 'login_enqueue_scripts', array( 'HappyAccess_Login_Handler', 'enqueue_login_scripts' ) );
+		
+		// reCAPTCHA v3 integration (optional).
+		add_action( 'login_enqueue_scripts', array( 'HappyAccess_ReCaptcha', 'enqueue_scripts' ) );
+		
+		// Magic link and OTP share cleanup with token cleanup.
+		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_Magic_Link', 'cleanup_expired' ) );
+		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_OTP_Share', 'cleanup_expired' ) );
 		
 		// Admin bar modifications.
 		if ( is_admin() && $this->admin ) {
@@ -200,6 +210,9 @@ class HappyAccess {
 		// WordPress automatically loads translations for plugins on WordPress.org since 4.6.
 		// No need to manually call load_plugin_textdomain().
 
+		// Ensure database tables exist (for upgrades without deactivation).
+		$this->ensure_tables_exist();
+
 		// Check for plugin upgrades.
 		$this->maybe_upgrade();
 
@@ -213,6 +226,7 @@ class HappyAccess {
 	 * Check for plugin upgrades and run migrations.
 	 *
 	 * @since 1.0.0
+	 * @since 1.0.3 Added magic links table creation.
 	 */
 	private function maybe_upgrade() {
 		global $wpdb;
@@ -241,6 +255,12 @@ class HappyAccess {
 				);
 			}
 			
+			// Upgrade for 1.0.3: Create magic links table.
+			if ( version_compare( $current_version, '1.0.3', '<' ) ) {
+				HappyAccess_Magic_Link::create_table();
+			}
+			
+			
 			// Update version.
 			update_option( 'happyaccess_version', HAPPYACCESS_VERSION );
 		}
@@ -255,6 +275,32 @@ class HappyAccess {
 	public function admin_init() {
 		// Settings are registered via HappyAccess_Admin->handle_settings().
 		// No additional instantiation needed here.
+	}
+
+	/**
+	 * Ensure all database tables exist.
+	 *
+	 * This runs on every init to handle plugin updates without deactivation.
+	 *
+	 * @since 1.0.3
+	 */
+	private function ensure_tables_exist() {
+		global $wpdb;
+		
+		// Check magic links table (added in 1.0.3).
+		$magic_table = $wpdb->prefix . 'happyaccess_magic_links';
+		
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Checking table existence.
+		$table_exists = $wpdb->get_var(
+			$wpdb->prepare(
+				'SHOW TABLES LIKE %s',
+				$magic_table
+			)
+		);
+		
+		if ( ! $table_exists ) {
+			HappyAccess_Magic_Link::create_table();
+		}
 	}
 }
 

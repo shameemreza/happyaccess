@@ -30,6 +30,9 @@ class HappyAccess_Admin {
 		add_action( 'wp_ajax_happyaccess_revoke_token', array( $this, 'ajax_revoke_token' ) );
 		add_action( 'wp_ajax_happyaccess_logout_sessions', array( $this, 'ajax_logout_sessions' ) );
 		add_action( 'wp_ajax_happyaccess_clear_logs', array( $this, 'ajax_clear_logs' ) );
+		add_action( 'wp_ajax_happyaccess_generate_magic_link', array( $this, 'ajax_generate_magic_link' ) );
+		add_action( 'wp_ajax_happyaccess_generate_share_link', array( $this, 'ajax_generate_share_link' ) );
+		add_action( 'wp_ajax_happyaccess_email_magic_link', array( $this, 'ajax_email_magic_link' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_init', array( $this, 'handle_settings' ) );
 	}
@@ -61,6 +64,9 @@ class HappyAccess_Admin {
 			return;
 		}
 
+		// Enqueue Thickbox for modals.
+		add_thickbox();
+
 		wp_enqueue_script(
 			'happyaccess-admin',
 			HAPPYACCESS_PLUGIN_URL . 'assets/admin.js',
@@ -72,6 +78,10 @@ class HappyAccess_Admin {
 		wp_localize_script( 'happyaccess-admin', 'happyaccess_ajax', array(
 			'ajax_url' => admin_url( 'admin-ajax.php' ),
 			'nonce'    => wp_create_nonce( 'happyaccess_ajax' ),
+			'settings' => array(
+				'magic_link_expiry' => absint( get_option( 'happyaccess_magic_link_expiry', 300 ) ),
+				'share_link_expiry' => absint( get_option( 'happyaccess_share_link_expiry', 300 ) ),
+			),
 			'strings'  => array(
 				'copied'                  => __( 'Copied!', 'happyaccess' ),
 				'copy_failed'             => __( 'Copy failed. Please copy manually.', 'happyaccess' ),
@@ -83,6 +93,17 @@ class HappyAccess_Admin {
 				'confirm_clear_logs'      => __( 'WARNING: This will permanently delete ALL audit logs. This action cannot be undone. Are you sure you want to continue?', 'happyaccess' ),
 				'clearing_logs'           => __( 'Clearing...', 'happyaccess' ),
 				'clear_all_logs'          => __( 'Clear All Logs', 'happyaccess' ),
+				'magic_link_success'      => __( 'Magic link generated and copied to clipboard!', 'happyaccess' ),
+				'copied_to_clipboard'     => __( 'Link copied to clipboard!', 'happyaccess' ),
+				'generating'              => __( 'Generating...', 'happyaccess' ),
+				'magic_link_expires_at'   => __( 'Expires:', 'happyaccess' ),
+				'share_link_single_view'  => __( 'Single view - expires after viewing', 'happyaccess' ),
+				'share_link_expires'      => __( 'Expires:', 'happyaccess' ),
+				'email_sent'              => __( 'Email sent!', 'happyaccess' ),
+				'sending'                 => __( 'Sending...', 'happyaccess' ),
+				'email_error'             => __( 'Please enter a valid email address.', 'happyaccess' ),
+				'send_email'              => __( 'Send Email', 'happyaccess' ),
+				'cancel'                  => __( 'Cancel', 'happyaccess' ),
 			),
 		) );
 		
@@ -132,7 +153,38 @@ class HappyAccess_Admin {
 			} else {
 				$this->render_generate();
 			}
+			
+			// Email modal (hidden by default).
 			?>
+			<div id="happyaccess-email-modal" style="display:none;">
+				<div style="padding: 15px;">
+					<p style="margin-bottom: 15px;"><?php esc_html_e( 'Enter the email address to send the magic link to:', 'happyaccess' ); ?></p>
+					<p>
+						<label for="happyaccess-email-recipient" class="screen-reader-text"><?php esc_html_e( 'Email Address', 'happyaccess' ); ?></label>
+						<input type="email" id="happyaccess-email-recipient" class="regular-text" style="width: 100%;" placeholder="<?php esc_attr_e( 'email@example.com', 'happyaccess' ); ?>" />
+					</p>
+					<p class="description" style="margin-bottom: 15px;"><?php esc_html_e( 'The recipient will receive a one-click login link.', 'happyaccess' ); ?></p>
+					<p style="text-align: right;">
+						<button type="button" class="button" onclick="tb_remove();"><?php esc_html_e( 'Cancel', 'happyaccess' ); ?></button>
+						<button type="button" class="button button-primary" id="happyaccess-send-email-btn"><?php esc_html_e( 'Send Email', 'happyaccess' ); ?></button>
+					</p>
+				</div>
+			</div>
+			
+			<div id="happyaccess-link-modal" style="display:none;">
+				<div style="padding: 15px;">
+					<p style="margin-bottom: 10px;"><strong><?php esc_html_e( 'Link Generated Successfully!', 'happyaccess' ); ?></strong></p>
+					<p>
+						<input type="text" id="happyaccess-modal-link" class="large-text code" readonly style="font-size: 12px;" />
+					</p>
+					<p class="description" id="happyaccess-modal-expires"></p>
+					<p style="text-align: right; margin-top: 15px;">
+						<button type="button" class="button" onclick="tb_remove();"><?php esc_html_e( 'Close', 'happyaccess' ); ?></button>
+						<button type="button" class="button" id="happyaccess-modal-email-btn"><?php esc_html_e( 'Email Link', 'happyaccess' ); ?></button>
+						<button type="button" class="button button-primary" id="happyaccess-modal-copy-btn"><?php esc_html_e( 'Copy Link', 'happyaccess' ); ?></button>
+					</p>
+				</div>
+			</div>
 		</div>
 		<?php
 	}
@@ -213,6 +265,26 @@ class HappyAccess_Admin {
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Generate Magic Link', 'happyaccess' ); ?></th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'A magic link is a one-click login URL that works without entering the OTP code. It has a very short expiration (1-10 minutes) and is single-use.', 'happyaccess' ); ?>"></span>
+						<label>
+							<input type="checkbox" name="generate_magic_link" id="happyaccess-generate-magic-link" value="1" />
+							<?php esc_html_e( 'Also generate a magic link for one-click login', 'happyaccess' ); ?>
+						</label>
+						<div id="happyaccess-magic-link-options" style="margin-top: 10px; display: none;">
+							<label for="magic_link_expiry"><?php esc_html_e( 'Magic Link Expires In:', 'happyaccess' ); ?></label>
+							<select name="magic_link_expiry" id="magic_link_expiry">
+								<option value="60"><?php esc_html_e( '1 Minute', 'happyaccess' ); ?></option>
+								<option value="120"><?php esc_html_e( '2 Minutes', 'happyaccess' ); ?></option>
+								<option value="300" selected><?php esc_html_e( '5 Minutes', 'happyaccess' ); ?></option>
+								<option value="600"><?php esc_html_e( '10 Minutes', 'happyaccess' ); ?></option>
+							</select>
+						</div>
+						<p class="description"><?php esc_html_e( 'Magic links are one-click login URLs. They expire quickly (1-10 min) and work only once.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Email Confirmation', 'happyaccess' ); ?></th>
 					<td>
 						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Receive a copy of the access code via email for your records and secure sharing.', 'happyaccess' ); ?>"></span>
@@ -276,15 +348,43 @@ class HappyAccess_Admin {
 				<tr>
 					<th><?php esc_html_e( 'Access Code', 'happyaccess' ); ?></th>
 					<td>
-						<strong><code id="happyaccess-otp-code"></code></strong>
+						<strong><code id="happyaccess-otp-code" style="font-size: 18px; padding: 4px 8px;"></code></strong>
 						<button type="button" id="happyaccess-copy-otp" class="button">
-							<?php esc_html_e( 'Copy to Clipboard', 'happyaccess' ); ?>
+							<?php esc_html_e( 'Copy', 'happyaccess' ); ?>
 						</button>
+						<button type="button" id="happyaccess-share-otp" class="button" title="<?php esc_attr_e( 'Generate a secure link to view this OTP code', 'happyaccess' ); ?>">
+							<?php esc_html_e( 'Share Link', 'happyaccess' ); ?>
+						</button>
+					</td>
+				</tr>
+				<tr id="happyaccess-share-link-row" style="display:none;">
+					<th><?php esc_html_e( 'OTP Share Link', 'happyaccess' ); ?></th>
+					<td>
+						<input type="text" id="happyaccess-share-link-url" class="large-text" readonly style="font-family: monospace; font-size: 12px;" />
+						<button type="button" id="happyaccess-copy-share-link" class="button" style="margin-top: 5px;">
+							<?php esc_html_e( 'Copy Share Link', 'happyaccess' ); ?>
+						</button>
+						<p class="description" id="happyaccess-share-link-info"></p>
 					</td>
 				</tr>
 				<tr id="happyaccess-single-use-row" style="display:none;">
 					<th><?php esc_html_e( 'Usage Type', 'happyaccess' ); ?></th>
 					<td id="happyaccess-single-use-display"></td>
+				</tr>
+				<tr id="happyaccess-magic-link-row" style="display:none;">
+					<th><?php esc_html_e( 'Magic Link', 'happyaccess' ); ?></th>
+					<td>
+						<input type="text" id="happyaccess-magic-link-url" class="large-text" readonly style="font-family: monospace; font-size: 12px;" />
+						<div style="margin-top: 5px;">
+							<button type="button" id="happyaccess-copy-magic-link" class="button">
+								<?php esc_html_e( 'Copy', 'happyaccess' ); ?>
+							</button>
+							<button type="button" id="happyaccess-email-magic-link" class="button">
+								<?php esc_html_e( 'Email Link', 'happyaccess' ); ?>
+							</button>
+						</div>
+						<p class="description" id="happyaccess-magic-link-expires"></p>
+					</td>
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Expires', 'happyaccess' ); ?></th>
@@ -399,6 +499,11 @@ class HappyAccess_Admin {
 							</td>
 							<td>
 								<?php if ( ! $is_expired && ! $token['revoked_at'] ) : ?>
+									<button type="button" class="button button-small happyaccess-magic-link" 
+											data-token-id="<?php echo esc_attr( $token['id'] ); ?>"
+											title="<?php esc_attr_e( 'Generate one-click login link (expires in minutes)', 'happyaccess' ); ?>">
+										<?php esc_html_e( 'Magic Link', 'happyaccess' ); ?>
+									</button>
 									<button type="button" class="button button-small happyaccess-revoke-token" 
 											data-token-id="<?php echo esc_attr( $token['id'] ); ?>">
 										<?php esc_html_e( 'Revoke', 'happyaccess' ); ?>
@@ -827,6 +932,103 @@ class HappyAccess_Admin {
 				</tr>
 			</table>
 			
+			<h2 class="title"><?php esc_html_e( 'Link Sharing Settings', 'happyaccess' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Configure default expiration times for magic links and share links. These are used when generating links quickly without prompts.', 'happyaccess' ); ?></p>
+			<table class="form-table">
+				<tr>
+					<th scope="row">
+						<label for="happyaccess_magic_link_expiry"><?php esc_html_e( 'Magic Link Expiry', 'happyaccess' ); ?></label>
+					</th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Magic links provide one-click login without entering an OTP code. They are very short-lived for security.', 'happyaccess' ); ?>"></span>
+						<select name="happyaccess_magic_link_expiry" id="happyaccess_magic_link_expiry">
+							<option value="60" <?php selected( get_option( 'happyaccess_magic_link_expiry', 300 ), 60 ); ?>><?php esc_html_e( '1 Minute', 'happyaccess' ); ?></option>
+							<option value="120" <?php selected( get_option( 'happyaccess_magic_link_expiry', 300 ), 120 ); ?>><?php esc_html_e( '2 Minutes', 'happyaccess' ); ?></option>
+							<option value="300" <?php selected( get_option( 'happyaccess_magic_link_expiry', 300 ), 300 ); ?>><?php esc_html_e( '5 Minutes', 'happyaccess' ); ?></option>
+							<option value="600" <?php selected( get_option( 'happyaccess_magic_link_expiry', 300 ), 600 ); ?>><?php esc_html_e( '10 Minutes', 'happyaccess' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Default expiry for one-click login links.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="happyaccess_share_link_expiry"><?php esc_html_e( 'Share Link Expiry', 'happyaccess' ); ?></label>
+					</th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Share links allow you to send a secure link that reveals the OTP code when opened. They expire after first view.', 'happyaccess' ); ?>"></span>
+						<select name="happyaccess_share_link_expiry" id="happyaccess_share_link_expiry">
+							<option value="60" <?php selected( get_option( 'happyaccess_share_link_expiry', 300 ), 60 ); ?>><?php esc_html_e( '1 Minute', 'happyaccess' ); ?></option>
+							<option value="120" <?php selected( get_option( 'happyaccess_share_link_expiry', 300 ), 120 ); ?>><?php esc_html_e( '2 Minutes', 'happyaccess' ); ?></option>
+							<option value="300" <?php selected( get_option( 'happyaccess_share_link_expiry', 300 ), 300 ); ?>><?php esc_html_e( '5 Minutes', 'happyaccess' ); ?></option>
+							<option value="600" <?php selected( get_option( 'happyaccess_share_link_expiry', 300 ), 600 ); ?>><?php esc_html_e( '10 Minutes', 'happyaccess' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Default expiry for OTP share links (single-view).', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			
+			<h2 class="title"><?php esc_html_e( 'reCAPTCHA v3 Protection', 'happyaccess' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Optional: Add invisible bot protection to HappyAccess OTP login.', 'happyaccess' ); ?></p>
+			<table class="form-table">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Enable reCAPTCHA', 'happyaccess' ); ?></th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'reCAPTCHA v3 runs invisibly in the background. It scores visitors and blocks automated bots without interrupting real users.', 'happyaccess' ); ?>"></span>
+						<label>
+							<input type="checkbox" name="happyaccess_recaptcha_enabled" id="happyaccess_recaptcha_enabled" value="1" <?php checked( get_option( 'happyaccess_recaptcha_enabled', false ) ); ?> />
+							<?php esc_html_e( 'Enable reCAPTCHA v3 on OTP login', 'happyaccess' ); ?>
+						</label>
+						<p class="description">
+							<?php 
+							printf(
+								/* translators: %s: Google reCAPTCHA admin URL */
+								esc_html__( 'Get your keys from %s', 'happyaccess' ),
+								'<a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer">Google reCAPTCHA Admin</a>'
+							);
+							?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="happyaccess_recaptcha_site_key"><?php esc_html_e( 'Site Key', 'happyaccess' ); ?></label>
+					</th>
+					<td>
+						<input type="text" name="happyaccess_recaptcha_site_key" id="happyaccess_recaptcha_site_key" 
+							   value="<?php echo esc_attr( get_option( 'happyaccess_recaptcha_site_key', '' ) ); ?>" 
+							   class="regular-text" 
+							   placeholder="<?php esc_attr_e( '6Lc...', 'happyaccess' ); ?>" />
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="happyaccess_recaptcha_secret_key"><?php esc_html_e( 'Secret Key', 'happyaccess' ); ?></label>
+					</th>
+					<td>
+						<input type="password" name="happyaccess_recaptcha_secret_key" id="happyaccess_recaptcha_secret_key" 
+							   value="<?php echo esc_attr( get_option( 'happyaccess_recaptcha_secret_key', '' ) ); ?>" 
+							   class="regular-text" 
+							   placeholder="<?php esc_attr_e( '6Lc...', 'happyaccess' ); ?>" />
+						<p class="description"><?php esc_html_e( 'Keep this secret. Never share it publicly.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="happyaccess_recaptcha_threshold"><?php esc_html_e( 'Score Threshold', 'happyaccess' ); ?></label>
+					</th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'reCAPTCHA v3 scores users from 0.0 (likely bot) to 1.0 (likely human). Users below this threshold are blocked.', 'happyaccess' ); ?>"></span>
+						<select name="happyaccess_recaptcha_threshold" id="happyaccess_recaptcha_threshold">
+							<option value="0.3" <?php selected( get_option( 'happyaccess_recaptcha_threshold', 0.5 ), 0.3 ); ?>><?php esc_html_e( '0.3 (Lenient)', 'happyaccess' ); ?></option>
+							<option value="0.5" <?php selected( get_option( 'happyaccess_recaptcha_threshold', 0.5 ), 0.5 ); ?>><?php esc_html_e( '0.5 (Balanced - Recommended)', 'happyaccess' ); ?></option>
+							<option value="0.7" <?php selected( get_option( 'happyaccess_recaptcha_threshold', 0.5 ), 0.7 ); ?>><?php esc_html_e( '0.7 (Strict)', 'happyaccess' ); ?></option>
+							<option value="0.9" <?php selected( get_option( 'happyaccess_recaptcha_threshold', 0.5 ), 0.9 ); ?>><?php esc_html_e( '0.9 (Very Strict)', 'happyaccess' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Higher values are stricter but may block some legitimate users.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			
 			<h2 class="title"><?php esc_html_e( 'Uninstall Options', 'happyaccess' ); ?></h2>
 			<table class="form-table">
 				<tr>
@@ -886,6 +1088,49 @@ class HappyAccess_Admin {
 			'sanitize_callback' => 'rest_sanitize_boolean',
 			'default' => false,
 		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_magic_link_expiry', array(
+			'type' => 'integer',
+			'sanitize_callback' => 'absint',
+			'default' => 300,
+		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_share_link_expiry', array(
+			'type' => 'integer',
+			'sanitize_callback' => 'absint',
+			'default' => 300,
+		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_recaptcha_enabled', array(
+			'type' => 'boolean',
+			'sanitize_callback' => 'rest_sanitize_boolean',
+			'default' => false,
+		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_recaptcha_site_key', array(
+			'type' => 'string',
+			'sanitize_callback' => 'sanitize_text_field',
+			'default' => '',
+		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_recaptcha_secret_key', array(
+			'type' => 'string',
+			'sanitize_callback' => 'sanitize_text_field',
+			'default' => '',
+		) );
+		register_setting( 'happyaccess_settings', 'happyaccess_recaptcha_threshold', array(
+			'type' => 'number',
+			'sanitize_callback' => array( $this, 'sanitize_threshold' ),
+			'default' => 0.5,
+		) );
+	}
+
+	/**
+	 * Sanitize reCAPTCHA threshold value.
+	 *
+	 * @since 1.0.3
+	 *
+	 * @param mixed $value Input value.
+	 * @return float Sanitized threshold (0.0 - 1.0).
+	 */
+	public function sanitize_threshold( $value ) {
+		$value = (float) $value;
+		return max( 0.0, min( 1.0, $value ) );
 	}
 
 	/**
@@ -958,6 +1203,20 @@ class HappyAccess_Admin {
 		
 		if ( $single_use ) {
 			$response['single_use'] = true;
+		}
+		
+		// Generate magic link if requested.
+		$generate_magic_link = isset( $_POST['generate_magic_link'] ) && $_POST['generate_magic_link'] === '1';
+		if ( $generate_magic_link ) {
+			$magic_link_expiry = isset( $_POST['magic_link_expiry'] ) ? absint( $_POST['magic_link_expiry'] ) : 300;
+			$magic_result = HappyAccess_Magic_Link::generate( $result['id'], $magic_link_expiry );
+			
+			if ( ! is_wp_error( $magic_result ) ) {
+				$response['magic_link'] = array(
+					'url'     => $magic_result['url'],
+					'expires' => wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $magic_result['expires_at'] ) ),
+				);
+			}
 		}
 		
 		wp_send_json_success( $response );
@@ -1226,6 +1485,229 @@ public function ajax_revoke_token() {
 				$logged_out_count
 			),
 		) );
+	}
+
+	/**
+	 * Handle AJAX magic link generation.
+	 *
+	 * @since 1.0.3
+	 */
+	public function ajax_generate_magic_link() {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+		}
+		
+		// Check permissions.
+		if ( ! current_user_can( 'list_users' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		}
+		
+		// Get token ID and expiration.
+		$token_id   = isset( $_POST['token_id'] ) ? absint( $_POST['token_id'] ) : 0;
+		$expiration = isset( $_POST['expiration'] ) ? absint( $_POST['expiration'] ) : 300;
+		
+		if ( ! $token_id ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid token ID', 'happyaccess' ) ) );
+		}
+		
+		// Generate magic link.
+		$result = HappyAccess_Magic_Link::generate( $token_id, $expiration );
+		
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+		
+		// Format expiration for display.
+		$expires_display = wp_date( 
+			get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), 
+			strtotime( $result['expires_at'] ) 
+		);
+		
+		wp_send_json_success( array(
+			'url'     => $result['url'],
+			'expires' => $expires_display,
+			'message' => sprintf(
+				/* translators: %s: expiration time */
+				__( 'Magic link generated! Valid until %s', 'happyaccess' ),
+				$expires_display
+			),
+		) );
+	}
+
+	/**
+	 * Handle AJAX OTP share link generation.
+	 *
+	 * @since 1.0.3
+	 */
+	public function ajax_generate_share_link() {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+		}
+		
+		// Check permissions.
+		if ( ! current_user_can( 'list_users' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		}
+		
+		// Get parameters.
+		$token_id    = isset( $_POST['token_id'] ) ? absint( $_POST['token_id'] ) : 0;
+		$otp_code    = isset( $_POST['otp_code'] ) ? sanitize_text_field( wp_unslash( $_POST['otp_code'] ) ) : '';
+		$expiration  = isset( $_POST['expiration'] ) ? absint( $_POST['expiration'] ) : 300;
+		$single_view = isset( $_POST['single_view'] ) && $_POST['single_view'] === '1';
+		
+		if ( ! $token_id || empty( $otp_code ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid token ID or OTP code', 'happyaccess' ) ) );
+		}
+		
+		// Generate share link.
+		$result = HappyAccess_OTP_Share::generate( $token_id, $otp_code, $expiration, $single_view );
+		
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+		
+		// Format expiration for display.
+		$expires_display = wp_date( 
+			get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), 
+			strtotime( $result['expires_at'] ) 
+		);
+		
+		wp_send_json_success( array(
+			'url'         => $result['url'],
+			'expires'     => $expires_display,
+			'single_view' => $result['single_view'],
+			'message'     => sprintf(
+				/* translators: %s: expiration time */
+				__( 'Share link generated! Valid until %s', 'happyaccess' ),
+				$expires_display
+			),
+		) );
+	}
+
+	/**
+	 * Handle AJAX email magic link request.
+	 *
+	 * @since 1.0.3
+	 */
+	public function ajax_email_magic_link() {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+		}
+		
+		// Check permissions.
+		if ( ! current_user_can( 'list_users' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		}
+		
+		// Get parameters.
+		$magic_link_url = isset( $_POST['magic_link_url'] ) ? esc_url_raw( wp_unslash( $_POST['magic_link_url'] ) ) : '';
+		$expires        = isset( $_POST['expires'] ) ? sanitize_text_field( wp_unslash( $_POST['expires'] ) ) : '';
+		$recipient      = isset( $_POST['recipient'] ) ? sanitize_email( wp_unslash( $_POST['recipient'] ) ) : get_option( 'admin_email' );
+		
+		if ( empty( $magic_link_url ) || ! filter_var( $recipient, FILTER_VALIDATE_EMAIL ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid magic link or email address', 'happyaccess' ) ) );
+		}
+		
+		// Send the email.
+		$sent = $this->send_magic_link_email( $magic_link_url, $expires, $recipient );
+		
+		if ( $sent ) {
+			wp_send_json_success( array(
+				'message' => sprintf(
+					/* translators: %s: recipient email */
+					__( 'Magic link sent to %s', 'happyaccess' ),
+					$recipient
+				),
+			) );
+		} else {
+			wp_send_json_error( array( 'message' => __( 'Failed to send email. Please check your email settings.', 'happyaccess' ) ) );
+		}
+	}
+
+	/**
+	 * Send magic link email.
+	 *
+	 * @since 1.0.3
+	 *
+	 * @param string $magic_link_url The magic link URL.
+	 * @param string $expires        Expiration display string.
+	 * @param string $recipient      Recipient email address.
+	 * @return bool True if sent, false otherwise.
+	 */
+	private function send_magic_link_email( $magic_link_url, $expires, $recipient ) {
+		$site_name = get_bloginfo( 'name' );
+		
+		$subject = sprintf(
+			/* translators: %s: site name */
+			__( '[%s] One-Click Access Link', 'happyaccess' ),
+			$site_name
+		);
+		
+		// Build HTML message.
+		$html_message = '<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; }
+.container { max-width: 600px; margin: 0 auto; padding: 20px; }
+.header { background: #1d2327; color: white; padding: 24px; border-radius: 8px 8px 0 0; text-align: center; }
+.content { background: #f9f9f9; padding: 24px; border: 1px solid #ddd; border-top: none; }
+.btn { display: inline-block; background: #2271b1; color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 6px; font-size: 16px; font-weight: 600; margin: 16px 0; }
+.btn:hover { background: #135e96; }
+.warning { background: #fcf0f1; border-left: 4px solid #d63638; padding: 12px 16px; margin: 16px 0; }
+.footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h2 style="margin: 0;">' . esc_html__( 'One-Click Access Link', 'happyaccess' ) . '</h2>
+<p style="margin: 8px 0 0; opacity: 0.8;">' . esc_html( $site_name ) . '</p>
+</div>
+<div class="content">
+<p>' . esc_html__( 'You have been granted temporary access. Click the button below to log in instantly - no code required!', 'happyaccess' ) . '</p>
+
+<p style="text-align: center;">
+<a href="' . esc_url( $magic_link_url ) . '" class="btn">' . esc_html__( 'Click to Access Site', 'happyaccess' ) . '</a>
+</p>
+
+<p style="font-size: 13px; color: #666;">' . esc_html__( 'Or copy this link:', 'happyaccess' ) . '<br>
+<code style="background: #e0e0e0; padding: 4px 8px; border-radius: 4px; font-size: 12px; word-break: break-all;">' . esc_html( $magic_link_url ) . '</code></p>
+
+<div class="warning">
+<strong>' . esc_html__( 'Important Security Information:', 'happyaccess' ) . '</strong>
+<ul style="margin: 8px 0 0; padding-left: 20px;">
+<li>' .
+				/* translators: %s: link expiration time */
+				sprintf( esc_html__( 'This link expires: %s', 'happyaccess' ), '<strong>' . esc_html( $expires ) . '</strong>' ) . '</li>
+<li>' . esc_html__( 'This link can only be used once.', 'happyaccess' ) . '</li>
+<li>' . esc_html__( 'Do not share this link with anyone else.', 'happyaccess' ) . '</li>
+</ul>
+</div>
+
+</div>
+<div class="footer">
+<p>' . esc_html__( 'This email was sent by HappyAccess. If you did not request this access, please ignore this email.', 'happyaccess' ) . '</p>
+</div>
+</div>
+</body>
+</html>';
+		
+		$headers = array( 'Content-Type: text/html; charset=UTF-8' );
+		
+		$sent = wp_mail( $recipient, $subject, $html_message, $headers );
+		
+		if ( $sent ) {
+			HappyAccess_Logger::log( 'magic_link_emailed', array(
+				'recipient' => $recipient,
+				'expires'   => $expires,
+			) );
+		}
+		
+		return $sent;
 	}
 
 	/**

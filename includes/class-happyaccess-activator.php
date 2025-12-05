@@ -139,13 +139,32 @@ class HappyAccess_Activator {
 			KEY attempted_at (attempted_at)
 		) $charset_collate;";
 
+		// Magic links table (v1.0.3).
+		$table_magic = $wpdb->prefix . 'happyaccess_magic_links';
+		$sql_magic   = "CREATE TABLE $table_magic (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			token_id BIGINT(20) UNSIGNED NOT NULL,
+			magic_hash VARCHAR(64) NOT NULL,
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME NOT NULL,
+			created_by BIGINT(20) UNSIGNED NULL,
+			ip_address VARCHAR(45) NULL,
+			used_at DATETIME NULL,
+			used_ip VARCHAR(45) NULL,
+			PRIMARY KEY (id),
+			KEY token_id (token_id),
+			KEY expires_at (expires_at),
+			KEY magic_hash (magic_hash)
+		) $charset_collate;";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql_tokens );
 		dbDelta( $sql_logs );
 		dbDelta( $sql_attempts );
+		dbDelta( $sql_magic );
 
 		// Store database version.
-		update_option( 'happyaccess_db_version', '1.0.0' );
+		update_option( 'happyaccess_db_version', '1.0.3' );
 	}
 
 	/**
