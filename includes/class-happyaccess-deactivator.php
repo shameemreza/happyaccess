@@ -35,9 +35,6 @@ class HappyAccess_Deactivator {
 		
 		// SECURITY: Revoke all active tokens and cleanup users.
 		self::revoke_all_tokens_and_cleanup();
-		
-		// Clear rewrite rules.
-		flush_rewrite_rules();
 	}
 
 	/**
@@ -93,8 +90,8 @@ class HappyAccess_Deactivator {
 				SET revoked_at = %s 
 				WHERE expires_at > %s 
 				AND revoked_at IS NULL",
-				current_time( 'mysql' ),
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' ),
+				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
 		

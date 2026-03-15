@@ -47,7 +47,7 @@
       // Disable button
       $("#happyaccess-generate-btn")
         .prop("disabled", true)
-        .text("Generating...");
+        .text(happyaccess_ajax.strings.generating || "Generating...");
 
       $.post(happyaccess_ajax.ajax_url, formData, function (response) {
         if (response.success) {
@@ -67,7 +67,10 @@
           // Show single-use indicator if applicable
           if (response.data.single_use) {
             $("#happyaccess-single-use-display").html(
-              '<strong style="color: #d63232;">ONE-TIME USE</strong> - Code will auto-revoke after first login'
+              '<strong style="color: #d63232;">' +
+                (happyaccess_ajax.strings.one_time_use || "ONE-TIME USE") +
+                "</strong> - " +
+                (happyaccess_ajax.strings.one_time_use_desc || "Code will auto-revoke after first login")
             );
             $("#happyaccess-single-use-row").show();
           } else {
@@ -98,18 +101,18 @@
             500
           );
         } else {
-          alert(response.data.message || "An error occurred");
+          alert(response.data.message || happyaccess_ajax.strings.error_generic);
         }
 
         // Re-enable button
         $("#happyaccess-generate-btn")
           .prop("disabled", false)
-          .text("Generate Access Code");
+          .text(happyaccess_ajax.strings.generate_access_code);
       }).fail(function () {
-        alert("Network error. Please try again.");
+        alert(happyaccess_ajax.strings.network_error);
         $("#happyaccess-generate-btn")
           .prop("disabled", false)
-          .text("Generate Access Code");
+          .text(happyaccess_ajax.strings.generate_access_code);
       });
     });
 
@@ -177,7 +180,7 @@
               $(this).remove();
             });
           } else {
-            alert(response.data.message || "Revocation failed");
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
           }
         }
       );
@@ -205,14 +208,14 @@
             alert(response.data.message);
             location.reload();
           } else {
-            alert(response.data.message || "Failed to logout sessions");
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
             $button
               .prop("disabled", false)
               .text(happyaccess_ajax.strings.logout_sessions);
           }
         }
       ).fail(function () {
-        alert("Network error. Please try again.");
+        alert(happyaccess_ajax.strings.network_error);
         $button
           .prop("disabled", false)
           .text(happyaccess_ajax.strings.logout_sessions);
@@ -241,14 +244,14 @@
             alert(response.data.message);
             location.reload();
           } else {
-            alert(response.data.message || "Failed to clear logs");
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
             $button
               .prop("disabled", false)
               .text(happyaccess_ajax.strings.clear_all_logs);
           }
         }
       ).fail(function () {
-        alert("Network error. Please try again.");
+        alert(happyaccess_ajax.strings.network_error);
         $button
           .prop("disabled", false)
           .text(happyaccess_ajax.strings.clear_all_logs);
@@ -278,7 +281,7 @@
 
       var otpCode = $("#happyaccess-otp-code").text().trim();
       if (!otpCode || !currentTokenId) {
-        alert("No OTP code available");
+        alert(happyaccess_ajax.strings.error_generic);
         return;
       }
 
@@ -324,12 +327,12 @@
               navigator.clipboard.writeText(response.data.url);
             }
           } else {
-            alert(response.data.message || "Failed to generate share link");
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
           }
           $button.prop("disabled", false).text(originalText);
         }
       ).fail(function () {
-        alert("Network error. Please try again.");
+        alert(happyaccess_ajax.strings.network_error);
         $button.prop("disabled", false).text(originalText);
       });
     });
@@ -348,7 +351,7 @@
 
       var magicLinkUrl = $("#happyaccess-magic-link-url").val().trim();
       if (!magicLinkUrl) {
-        alert("No magic link available");
+        alert(happyaccess_ajax.strings.error_generic);
         return;
       }
 
@@ -357,7 +360,7 @@
 
       // Open Thickbox modal
       tb_show(
-        "Send Magic Link",
+        happyaccess_ajax.strings.send_email || "Send Magic Link",
         "#TB_inline?width=400&height=200&inlineId=happyaccess-email-modal"
       );
     });
@@ -414,11 +417,11 @@
               $("body").removeClass("modal-open");
             }
           } else {
-            alert(response.data.message || "Failed to send email");
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
           }
         }
       ).fail(function () {
-        alert("Network error. Please try again.");
+        alert(happyaccess_ajax.strings.network_error);
         $button.prop("disabled", false).text(originalText);
       });
     });
@@ -462,7 +465,7 @@
             );
 
             tb_show(
-              "Magic Link",
+              happyaccess_ajax.strings.magic_link_title || "Magic Link",
               "#TB_inline?width=500&height=200&inlineId=happyaccess-link-modal"
             );
 
@@ -471,13 +474,13 @@
               navigator.clipboard.writeText(response.data.url);
             }
           } else {
-            alert(response.data.message || "Failed to generate magic link");
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
           }
 
           $button.prop("disabled", false).text(originalText);
         }
       ).fail(function () {
-        alert("Network error. Please try again.");
+        alert(happyaccess_ajax.strings.network_error);
         $button.prop("disabled", false).text(originalText);
       });
     });
@@ -528,7 +531,7 @@
 
       setTimeout(function () {
         tb_show(
-          "Send Magic Link",
+          happyaccess_ajax.strings.send_email || "Send Magic Link",
           "#TB_inline?width=400&height=200&inlineId=happyaccess-email-modal"
         );
       }, 100);

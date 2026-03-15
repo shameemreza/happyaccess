@@ -4,7 +4,7 @@ Tags: admin, temporary access, support, security, otp
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -18,22 +18,23 @@ It removes the need for merchants to manually create/delete admin users or share
 
 = Key Features =
 
-* **OTP-Based Authentication** - Generate secure 6-digit codes instead of sharing passwords.
-* **Magic Link Authentication** - Generate secure one-click login links with short expiration (1-10 minutes).
-* **Reusable Access Codes** - Support engineers can log in multiple times with the same code until it expires.
-* **One-Time Use Option** - Generate codes that automatically revoke after first use for maximum security.
-* **reCAPTCHA v3 Protection** - Optional invisible bot protection for OTP login.
-* **Time-Limited Access** - Automatically expires after the set duration (1 hour to 30 days).
-* **Automatic Cleanup** - Temporary users are deleted automatically when access expires.
-* **Full Audit Log** - Track all access and actions with CSV export for compliance.
-* **IP Allowlist** - Optionally restrict access codes to specific IP addresses.
-* **Email Notifications** - Send access codes to admin email for secure sharing.
-* **Emergency Lock** - One-click button to instantly revoke all active tokens.
-* **Session Management** - Logout all temp sessions without revoking tokens.
-* **GDPR Compliant** - Built-in consent workflow and data protection features.
-* **Native WordPress UI** - Clean interface matching WordPress and WooCommerce admin styles.
-* **Advanced Security** - Rate limiting, IP tracking, and failed attempt lockouts.
-* **Active Token Management** - View all active codes, see usage status, and revoke anytime.
+* **OTP-Based Authentication:** Generate secure 6-digit codes instead of sharing passwords.
+* **Magic Link Authentication:** Generate secure one-click login links with short expiration (1-10 minutes).
+* **OTP Share Links:** Generate secure single-view links to share OTP codes safely with auto-expiry.
+* **Reusable Access Codes:** Support engineers can log in multiple times with the same code until it expires.
+* **One-Time Use Option:** Generate codes that automatically revoke after first use for maximum security.
+* **reCAPTCHA v3 Protection:** Optional invisible bot protection for OTP login.
+* **Time-Limited Access:** Automatically expires after the set duration (1 hour to 30 days).
+* **Automatic Cleanup:** Temporary users are deleted automatically when access expires.
+* **Full Audit Log:** Track all access and actions with CSV export for compliance.
+* **IP Allowlist:** Optionally restrict access codes to specific IP addresses.
+* **Email Notifications:** Send access codes to admin email for secure sharing.
+* **Emergency Lock:** One-click button to instantly revoke all active tokens.
+* **Session Management:** Logout all temp sessions without revoking tokens.
+* **GDPR Compliant:** Built-in consent workflow and data protection features.
+* **Native WordPress UI:** Clean interface matching WordPress and WooCommerce admin styles.
+* **Advanced Security:** Rate limiting, IP tracking, and failed attempt lockouts.
+* **Active Token Management:** View all active codes, see usage status, and revoke anytime.
 
 = How It Works =
 
@@ -57,9 +58,23 @@ It removes the need for merchants to manually create/delete admin users or share
 
 * All access must be disclosed in your Terms & Conditions.
 * Complete audit trail of all actions.
-* Data stored locally, not sent to third parties.
+* Data stored locally on your WordPress site.
 * Automatic data cleanup after 30 days.
 * Rate limiting prevents brute force attacks.
+
+= Third-Party Services =
+
+This plugin optionally connects to the following third-party service:
+
+**Google reCAPTCHA v3** (optional)
+
+When enabled in Settings, HappyAccess loads Google reCAPTCHA v3 on the WordPress login page to protect the OTP field from automated attacks. This sends the user's IP address, browser information, and interaction data to Google for bot detection.
+
+* Service URL: [https://www.google.com/recaptcha/](https://www.google.com/recaptcha/)
+* Terms of Service: [https://policies.google.com/terms](https://policies.google.com/terms)
+* Privacy Policy: [https://policies.google.com/privacy](https://policies.google.com/privacy)
+
+reCAPTCHA is **disabled by default** and must be explicitly enabled by an administrator. When disabled, no data is sent to Google.
 
 == Installation ==
 
@@ -159,6 +174,47 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 
 == Changelog ==
 
+= 1.0.4 =
+* SECURITY: Added nonce verification to CSV export to prevent CSRF attacks.
+* SECURITY: Hardened IP detection to prefer REMOTE_ADDR over spoofable proxy headers.
+* SECURITY: Added `happyaccess_client_ip` filter for sites behind load balancers.
+* SECURITY: Elevated capability requirement from `list_users` to `manage_options`.
+* SECURITY: Removed raw token hash from generate response.
+* SECURITY: Replaced inline JavaScript with `wp_add_inline_script()` for Emergency Lock.
+* SECURITY: Escaped all AJAX response messages with `esc_html__()` and `esc_html()`.
+* SECURITY: Rate limiter now keyed on IP only — prevents brute-force via per-OTP bypass.
+* SECURITY: Atomic UPDATE for token use_count prevents race condition on single-use tokens.
+* SECURITY: Fixed time()/current_time() timezone mismatch in magic link and share link hashes.
+* SECURITY: reCAPTCHA now fails closed when misconfigured or on network errors (no fake score 1.0).
+* SECURITY: Added rate limiting to OTP share link verification.
+* SECURITY: Atomic single-view marking on share links prevents double-view race condition.
+* IMPROVED: Centralized IP detection into single method (no more duplicate code).
+* IMPROVED: Added recursion depth limits to username and OTP generation.
+* IMPROVED: Refactored logger `get_logs()` with proper date range filters.
+* IMPROVED: Removed stale 1-hour cache on admin log display for real-time data.
+* IMPROVED: Database version check replaces `SHOW TABLES` on every request.
+* IMPROVED: OTP shares table creation uses version flag to avoid redundant checks.
+* IMPROVED: Added `index.php` to all subdirectories to prevent directory listing.
+* IMPROVED: Sanitized `settings-updated` GET parameter properly.
+* IMPROVED: Added Third-Party Services disclosure for reCAPTCHA in readme.
+* IMPROVED: OTP shares table now created during plugin activation (not lazy).
+* IMPROVED: GDPR eraser now anonymizes `created_by` in tokens table.
+* IMPROVED: Added missing `happyaccess_enable_email` and `happyaccess_gdpr_consent_text` to uninstall cleanup.
+* IMPROVED: AJAX error responses use `wp_send_json_error()` consistently (no more `wp_die()`).
+* FIXED: Hooked missing `happyaccess_cleanup_attempts` cron event with init fallback.
+* FIXED: Added `happyaccess_attempts` table to uninstall cleanup.
+* FIXED: Removed unnecessary `flush_rewrite_rules()` from activation/deactivation.
+* FIXED: Removed unused `happyaccess_activated` option.
+* SECURITY: All `$_POST`/`$_GET` superglobals now sanitized with `wp_unslash()` + `sanitize_text_field()`.
+* SECURITY: Role parameter validated against registered `wp_roles()` whitelist.
+* SECURITY: All `sprintf()` in AJAX responses wrapped with `esc_html()`.
+* SECURITY: Replaced all `current_time('mysql')` with `gmdate('Y-m-d H:i:s')` for UTC-consistent timestamps across 8 files.
+* IMPROVED: All JavaScript strings localized via `wp_localize_script()` for translation readiness.
+* IMPROVED: All conditions follow WordPress Yoda coding standards.
+* IMPROVED: Added `@return void` PHPDoc to void methods in main plugin file.
+* IMPROVED: Audit log table rows now highlight on hover (WooCommerce-style).
+* COMPATIBILITY: Tested with WordPress 7.0-beta5.
+
 = 1.0.3 =
 * NEW: Magic Link Authentication - Generate secure one-click login links that expire in 1-10 minutes.
 * NEW: OTP Share Links - Generate secure links to view OTP codes (single-view, auto-expires).
@@ -236,7 +292,7 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 
 == Privacy Policy ==
 
-HappyAccess stores access logs locally on your WordPress site. No data is sent to external services. 
+HappyAccess stores access logs locally on your WordPress site. No data is sent to external services unless you enable optional integrations (see Third-Party Services above).
 
 The plugin collects:
 * IP addresses of users accessing with temporary codes.
@@ -245,5 +301,7 @@ The plugin collects:
 * Actions performed (audit log).
 
 This data is automatically deleted after 30 days unless configured otherwise.
+
+When Google reCAPTCHA v3 is enabled, the user's IP address, browser fingerprint, and interaction data are sent to Google for bot detection. See Google's [Privacy Policy](https://policies.google.com/privacy) for details.
 
 You must disclose in your Terms & Conditions that you may grant admin access to third parties for support purposes.

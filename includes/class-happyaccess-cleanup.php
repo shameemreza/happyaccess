@@ -48,7 +48,7 @@ class HappyAccess_Cleanup {
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
 				"DELETE FROM `$table` WHERE attempted_at < DATE_SUB(%s, INTERVAL 24 HOUR)",
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
 		

@@ -31,9 +31,6 @@ class HappyAccess_Activator {
 		
 		// Set activation notice.
 		set_transient( 'happyaccess_activation_notice', true, 5 );
-		
-		// Clear rewrite rules.
-		flush_rewrite_rules();
 	}
 
 	/**
@@ -157,14 +154,36 @@ class HappyAccess_Activator {
 			KEY magic_hash (magic_hash)
 		) $charset_collate;";
 
+		// OTP shares table (v1.0.4).
+		$table_shares = $wpdb->prefix . 'happyaccess_otp_shares';
+		$sql_shares   = "CREATE TABLE $table_shares (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			token_id BIGINT(20) UNSIGNED NOT NULL,
+			otp_code VARCHAR(10) NOT NULL,
+			share_hash VARCHAR(64) NOT NULL,
+			expires_at DATETIME NOT NULL,
+			single_view TINYINT(1) DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			created_by BIGINT(20) UNSIGNED NULL,
+			ip_address VARCHAR(45) NULL,
+			viewed_at DATETIME NULL,
+			viewed_ip VARCHAR(45) NULL,
+			PRIMARY KEY (id),
+			KEY token_id (token_id),
+			KEY expires_at (expires_at),
+			KEY share_hash (share_hash)
+		) $charset_collate;";
+
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql_tokens );
 		dbDelta( $sql_logs );
 		dbDelta( $sql_attempts );
 		dbDelta( $sql_magic );
+		dbDelta( $sql_shares );
 
 		// Store database version.
-		update_option( 'happyaccess_db_version', '1.0.3' );
+		update_option( 'happyaccess_db_version', '1.0.4' );
+		update_option( 'happyaccess_otp_shares_db', '1' );
 	}
 
 	/**
@@ -186,9 +205,6 @@ class HappyAccess_Activator {
 		foreach ( $default_options as $key => $value ) {
 			add_option( 'happyaccess_' . $key, $value );
 		}
-
-		// Store activation time.
-		add_option( 'happyaccess_activated', time() );
 	}
 
 	/**

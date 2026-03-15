@@ -231,15 +231,15 @@ class HappyAccess_GDPR {
 		
 		global $wpdb;
 		$items_removed = 0;
-		
-		// We don't actually delete the data, just anonymize it.
-		// This preserves the audit trail while protecting privacy.
-		
-		$table_logs = $wpdb->prefix . 'happyaccess_logs';
-		
+
+		// Anonymize data rather than delete, preserving the audit trail.
+
+		$table_logs   = $wpdb->prefix . 'happyaccess_logs';
+		$table_tokens = $wpdb->prefix . 'happyaccess_tokens';
+
 		// Anonymize logs.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table
-		$updated = $wpdb->update(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$updated_logs = $wpdb->update(
 			$table_logs,
 			array(
 				'user_id'    => 0,
@@ -250,11 +250,25 @@ class HappyAccess_GDPR {
 			array( '%d', '%s', '%s' ),
 			array( '%d' )
 		);
-		
-		if ( $updated ) {
-			$items_removed += $updated;
+
+		if ( $updated_logs ) {
+			$items_removed += $updated_logs;
 		}
-		
+
+		// Anonymize created_by in tokens table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$updated_tokens = $wpdb->update(
+			$table_tokens,
+			array( 'created_by' => 0 ),
+			array( 'created_by' => $user->ID ),
+			array( '%d' ),
+			array( '%d' )
+		);
+
+		if ( $updated_tokens ) {
+			$items_removed += $updated_tokens;
+		}
+
 		return array(
 			'items_removed'  => $items_removed,
 			'items_retained' => 0,

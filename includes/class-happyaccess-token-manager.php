@@ -53,9 +53,15 @@ class HappyAccess_Token_Manager {
 		
 		// Generate OTP.
 		$otp = HappyAccess_OTP_Handler::generate_otp();
+		if ( is_wp_error( $otp ) ) {
+			return $otp;
+		}
 		
 		// Generate unique username.
 		$temp_username = self::generate_temp_username();
+		if ( is_wp_error( $temp_username ) ) {
+			return $temp_username;
+		}
 		
 		// Calculate expiry.
 		$expires_at = gmdate( 'Y-m-d H:i:s', time() + $duration );
@@ -85,7 +91,7 @@ class HappyAccess_Token_Manager {
 				'temp_username'   => $temp_username,
 				'role'            => $role,
 				'created_by'      => get_current_user_id(),
-				'created_at'      => current_time( 'mysql' ),
+				'created_at'      => gmdate( 'Y-m-d H:i:s' ),
 				'expires_at'      => $expires_at,
 				'metadata'        => $metadata_json,
 				'ip_restrictions' => $ip_restrictions,
@@ -116,8 +122,6 @@ class HappyAccess_Token_Manager {
 		
 		return array(
 			'id'            => $token_id,
-			'token'         => $token,
-			'hash'          => $token_hash,
 			'otp'           => $otp,
 			'temp_username' => $temp_username,
 			'role'          => $role,
@@ -131,18 +135,24 @@ class HappyAccess_Token_Manager {
 	 * Generate a unique temporary username.
 	 *
 	 * @since 1.0.0
-	 * @return string The generated username.
+	 * @since 1.0.4 Added depth limit to prevent infinite recursion.
+	 *
+	 * @param int $depth Current recursion depth.
+	 * @return string|WP_Error The generated username, or WP_Error if exhausted.
 	 */
-	private static function generate_temp_username() {
-		$prefix = 'happyaccess_';
-		$suffix = wp_generate_password( 8, false, false );
-		$username = strtolower( $prefix . $suffix );
-		
-		// Ensure uniqueness.
-		if ( username_exists( $username ) ) {
-			return self::generate_temp_username(); // Recursive call.
+	private static function generate_temp_username( $depth = 0 ) {
+		if ( $depth >= 10 ) {
+			return new WP_Error( 'username_generation_failed', __( 'Failed to generate a unique username. Please try again.', 'happyaccess' ) );
 		}
-		
+
+		$prefix   = 'happyaccess_';
+		$suffix   = wp_generate_password( 8, false, false );
+		$username = strtolower( $prefix . $suffix );
+
+		if ( username_exists( $username ) ) {
+			return self::generate_temp_username( $depth + 1 );
+		}
+
 		return $username;
 	}
 
@@ -182,7 +192,7 @@ class HappyAccess_Token_Manager {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, safe table name.
 		$result = $wpdb->update(
 			$table,
-			array( 'revoked_at' => current_time( 'mysql' ) ),
+			array( 'revoked_at' => gmdate( 'Y-m-d H:i:s' ) ),
 			array( 'id' => $token_id ),
 			array( '%s' ),
 			array( '%d' )
@@ -229,7 +239,7 @@ class HappyAccess_Token_Manager {
 				WHERE expires_at > %s 
 				AND revoked_at IS NULL 
 				ORDER BY created_at DESC",
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			),
 			ARRAY_A
 		);
@@ -255,7 +265,7 @@ class HappyAccess_Token_Manager {
 				"SELECT * FROM `$table` 
 				WHERE expires_at < %s 
 				AND user_id IS NOT NULL",
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			),
 			ARRAY_A
 		);
@@ -295,7 +305,7 @@ class HappyAccess_Token_Manager {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
 				"DELETE FROM `$table` 
 				WHERE created_at < DATE_SUB(%s, INTERVAL %d DAY)",
-				current_time( 'mysql' ),
+				gmdate( 'Y-m-d H:i:s' ),
 				$retention_days
 			)
 		);

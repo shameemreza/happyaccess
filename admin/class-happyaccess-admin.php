@@ -47,7 +47,7 @@ class HappyAccess_Admin {
 			'users.php',
 			__( 'HappyAccess', 'happyaccess' ),
 			__( 'HappyAccess', 'happyaccess' ),
-			'list_users',
+			'manage_options',
 			'happyaccess',
 			array( $this, 'render_page' )
 		);
@@ -96,7 +96,9 @@ class HappyAccess_Admin {
 				'magic_link_success'      => __( 'Magic link generated and copied to clipboard!', 'happyaccess' ),
 				'copied_to_clipboard'     => __( 'Link copied to clipboard!', 'happyaccess' ),
 				'generating'              => __( 'Generating...', 'happyaccess' ),
+				'generate_access_code'    => __( 'Generate Access Code', 'happyaccess' ),
 				'magic_link_expires_at'   => __( 'Expires:', 'happyaccess' ),
+				'magic_link_title'        => __( 'Magic Link', 'happyaccess' ),
 				'share_link_single_view'  => __( 'Single view - expires after viewing', 'happyaccess' ),
 				'share_link_expires'      => __( 'Expires:', 'happyaccess' ),
 				'email_sent'              => __( 'Email sent!', 'happyaccess' ),
@@ -104,6 +106,10 @@ class HappyAccess_Admin {
 				'email_error'             => __( 'Please enter a valid email address.', 'happyaccess' ),
 				'send_email'              => __( 'Send Email', 'happyaccess' ),
 				'cancel'                  => __( 'Cancel', 'happyaccess' ),
+				'network_error'           => __( 'Network error. Please try again.', 'happyaccess' ),
+				'error_generic'           => __( 'An error occurred. Please try again.', 'happyaccess' ),
+				'one_time_use'            => __( 'ONE-TIME USE', 'happyaccess' ),
+				'one_time_use_desc'       => __( 'Code will auto-revoke after first login', 'happyaccess' ),
 			),
 		) );
 		
@@ -111,6 +117,9 @@ class HappyAccess_Admin {
 		$custom_css = '
 			.form-table th {
 				font-weight: 600;
+			}
+			.wp-list-table.widefat tbody tr:hover td {
+				background-color: #f0f6fc;
 			}
 		';
 		wp_add_inline_style( 'wp-admin', $custom_css );
@@ -308,12 +317,8 @@ class HappyAccess_Admin {
 						<label>
 							<input type="checkbox" name="gdpr_consent" id="happyaccess-gdpr-consent" value="1" required />
 							<?php esc_html_e( 'I confirm that granting temporary admin access to third parties (e.g., support engineers) is disclosed in my Privacy Policy or Terms of Service.', 'happyaccess' ); ?>
+							<a href="https://woocommerce.com/posts/the-gdpr-and-you-the-woocommerce-store-owner/" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Learn more about GDPR responsibilities for store owners →', 'happyaccess' ); ?></a>
 						</label>
-						<p class="description">
-							<a href="https://woocommerce.com/posts/the-gdpr-and-you-the-woocommerce-store-owner/" target="_blank" rel="noopener noreferrer">
-								<?php esc_html_e( 'Learn more about GDPR responsibilities for store owners →', 'happyaccess' ); ?>
-							</a>
-						</p>
 					</td>
 				</tr>
 			</table>
@@ -524,9 +529,11 @@ class HappyAccess_Admin {
 	 * @since 1.0.0
 	 */
 	private function render_audit_logs() {
-		// Check if export is requested.
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Export action.
-		if ( isset( $_GET['export'] ) && 'csv' === $_GET['export'] ) {
+		// Check if export is requested (with nonce verification).
+		if ( isset( $_GET['export'] ) && 'csv' === sanitize_text_field( wp_unslash( $_GET['export'] ) ) ) {
+			if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'happyaccess_export_csv' ) ) {
+				wp_die( esc_html__( 'Security check failed.', 'happyaccess' ) );
+			}
 			$this->export_logs_csv();
 			return;
 		}
@@ -565,14 +572,17 @@ class HappyAccess_Admin {
 		?>
 		<h2 class="wp-heading-inline"><?php esc_html_e( 'Audit Logs', 'happyaccess' ); ?></h2>
 		<?php
-		$export_url = add_query_arg( array(
-			'page' => 'happyaccess',
-			'tab' => 'logs',
-			'export' => 'csv',
-			'event_type' => $event_type,
-			'date_from' => $date_from,
-			'date_to' => $date_to,
-		), admin_url( 'users.php' ) );
+		$export_url = wp_nonce_url(
+			add_query_arg( array(
+				'page'       => 'happyaccess',
+				'tab'        => 'logs',
+				'export'     => 'csv',
+				'event_type' => $event_type,
+				'date_from'  => $date_from,
+				'date_to'    => $date_to,
+			), admin_url( 'users.php' ) ),
+			'happyaccess_export_csv'
+		);
 		?>
 		<a href="<?php echo esc_url( $export_url ); ?>" class="page-title-action"><?php esc_html_e( 'Export CSV', 'happyaccess' ); ?></a>
 		<?php if ( ! empty( $logs ) ) : ?>
@@ -664,7 +674,7 @@ class HappyAccess_Admin {
 									$event_label = __( 'Temp User Logout', 'happyaccess' );
 								}
 								
-								if ( strpos( $event_type, 'failed' ) !== false ) {
+								if ( false !== strpos( $event_type, 'failed' ) ) {
 									echo '<strong>' . esc_html( $event_label ) . '</strong>';
 								} else {
 									echo esc_html( $event_label );
@@ -737,7 +747,7 @@ class HappyAccess_Admin {
 	 */
 	private function export_logs_csv() {
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Insufficient permissions', 'happyaccess' ) );
 		}
 		
@@ -850,7 +860,7 @@ class HappyAccess_Admin {
 	private function render_settings() {
 		// Show success notice if settings were just saved.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only check for settings update.
-		if ( isset( $_GET['settings-updated'] ) && $_GET['settings-updated'] === 'true' ) {
+		if ( isset( $_GET['settings-updated'] ) && 'true' === sanitize_text_field( wp_unslash( $_GET['settings-updated'] ) ) ) {
 			?>
 			<div class="notice notice-success is-dismissible">
 				<p><?php esc_html_e( 'Settings saved successfully.', 'happyaccess' ); ?></p>
@@ -1142,25 +1152,29 @@ class HappyAccess_Admin {
 	public function ajax_generate_token() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-			wp_die( esc_html__( 'Security check failed', 'happyaccess' ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ), 403 );
 		}
 
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
-			wp_die( esc_html__( 'Insufficient permissions', 'happyaccess' ) );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ), 403 );
 		}
 
 		// Get and validate input.
-		$duration = isset( $_POST['duration'] ) ? absint( $_POST['duration'] ) : 86400;
-		$role = isset( $_POST['role'] ) ? sanitize_text_field( wp_unslash( $_POST['role'] ) ) : 'administrator';
-		$note = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
-		$email_admin = isset( $_POST['email_admin'] ) && $_POST['email_admin'] === '1';
-		$single_use = isset( $_POST['single_use'] ) && $_POST['single_use'] === '1';
+		$duration    = isset( $_POST['duration'] ) ? absint( wp_unslash( $_POST['duration'] ) ) : 86400;
+		$role        = isset( $_POST['role'] ) ? sanitize_text_field( wp_unslash( $_POST['role'] ) ) : 'administrator';
+		if ( ! array_key_exists( $role, wp_roles()->roles ) ) {
+			$role = 'administrator';
+		}
+		$note        = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
+		$email_admin = isset( $_POST['email_admin'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['email_admin'] ) );
+		$single_use  = isset( $_POST['single_use'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['single_use'] ) );
 		
 		// Get and validate IP restrictions.
 		$ip_restrictions = '';
-		if ( isset( $_POST['ip_restrictions'] ) && ! empty( $_POST['ip_restrictions'] ) ) {
-			$raw_ips = sanitize_text_field( wp_unslash( $_POST['ip_restrictions'] ) );
+		$raw_ip_input    = isset( $_POST['ip_restrictions'] ) ? sanitize_text_field( wp_unslash( $_POST['ip_restrictions'] ) ) : '';
+		if ( ! empty( $raw_ip_input ) ) {
+			$raw_ips = $raw_ip_input;
 			$ips = array_map( 'trim', explode( ',', $raw_ips ) );
 			$valid_ips = array();
 			foreach ( $ips as $ip ) {
@@ -1180,7 +1194,7 @@ class HappyAccess_Admin {
 		$result = HappyAccess_Token_Manager::generate_token( $duration, $role, $metadata, $ip_restrictions, $single_use );
 		
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			wp_send_json_error( array( 'message' => esc_html( $result->get_error_message() ) ) );
 		}
 		
 		// Format expiry time.
@@ -1206,9 +1220,9 @@ class HappyAccess_Admin {
 		}
 		
 		// Generate magic link if requested.
-		$generate_magic_link = isset( $_POST['generate_magic_link'] ) && $_POST['generate_magic_link'] === '1';
+		$generate_magic_link = isset( $_POST['generate_magic_link'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['generate_magic_link'] ) );
 		if ( $generate_magic_link ) {
-			$magic_link_expiry = isset( $_POST['magic_link_expiry'] ) ? absint( $_POST['magic_link_expiry'] ) : 300;
+			$magic_link_expiry = isset( $_POST['magic_link_expiry'] ) ? absint( wp_unslash( $_POST['magic_link_expiry'] ) ) : 300;
 			$magic_result = HappyAccess_Magic_Link::generate( $result['id'], $magic_link_expiry );
 			
 			if ( ! is_wp_error( $magic_result ) ) {
@@ -1410,33 +1424,33 @@ If you did not generate this code, revoke it immediately.', 'happyaccess' ),
  *
  * @since 1.0.0
  */
-public function ajax_revoke_token() {
-	// Verify nonce.
-	if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-		wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+	public function ajax_revoke_token() {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
+		}
+
+		// Check permissions.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ) );
+		}
+
+		// Get token ID.
+		$token_id = isset( $_POST['token_id'] ) ? absint( wp_unslash( $_POST['token_id'] ) ) : 0;
+
+		if ( ! $token_id ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Invalid token ID', 'happyaccess' ) ) );
+		}
+
+		// Revoke the token.
+		$revoked = HappyAccess_Token_Manager::revoke_token( $token_id );
+
+		if ( $revoked ) {
+			wp_send_json_success( array( 'message' => esc_html__( 'Token revoked successfully', 'happyaccess' ) ) );
+		} else {
+			wp_send_json_error( array( 'message' => esc_html__( 'Failed to revoke token', 'happyaccess' ) ) );
+		}
 	}
-	
-	// Check permissions.
-	if ( ! current_user_can( 'list_users' ) ) {
-		wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
-	}
-	
-	// Get token ID.
-	$token_id = isset( $_POST['token_id'] ) ? absint( $_POST['token_id'] ) : 0;
-	
-	if ( ! $token_id ) {
-		wp_send_json_error( array( 'message' => __( 'Invalid token ID', 'happyaccess' ) ) );
-	}
-	
-	// Revoke the token.
-	$revoked = HappyAccess_Token_Manager::revoke_token( $token_id );
-	
-	if ( $revoked ) {
-		wp_send_json_success( array( 'message' => __( 'Token revoked successfully', 'happyaccess' ) ) );
-	} else {
-		wp_send_json_error( array( 'message' => __( 'Failed to revoke token', 'happyaccess' ) ) );
-	}
-}
 
 	/**
 	 * Handle AJAX logout all temp sessions.
@@ -1446,12 +1460,12 @@ public function ajax_revoke_token() {
 	public function ajax_logout_sessions() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
 		}
 		
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ) );
 		}
 		
 		// Get all active tokens with users.
@@ -1479,11 +1493,11 @@ public function ajax_revoke_token() {
 		) );
 		
 		wp_send_json_success( array(
-			'message' => sprintf(
+			'message' => esc_html( sprintf(
 				/* translators: %d: number of sessions logged out */
 				__( 'Successfully logged out %d temporary user session(s). Tokens remain active for future use.', 'happyaccess' ),
 				$logged_out_count
-			),
+			) ),
 		) );
 	}
 
@@ -1495,27 +1509,27 @@ public function ajax_revoke_token() {
 	public function ajax_generate_magic_link() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
 		}
 		
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ) );
 		}
 		
 		// Get token ID and expiration.
-		$token_id   = isset( $_POST['token_id'] ) ? absint( $_POST['token_id'] ) : 0;
-		$expiration = isset( $_POST['expiration'] ) ? absint( $_POST['expiration'] ) : 300;
+		$token_id   = isset( $_POST['token_id'] ) ? absint( wp_unslash( $_POST['token_id'] ) ) : 0;
+		$expiration = isset( $_POST['expiration'] ) ? absint( wp_unslash( $_POST['expiration'] ) ) : 300;
 		
 		if ( ! $token_id ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid token ID', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Invalid token ID', 'happyaccess' ) ) );
 		}
 		
 		// Generate magic link.
 		$result = HappyAccess_Magic_Link::generate( $token_id, $expiration );
 		
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			wp_send_json_error( array( 'message' => esc_html( $result->get_error_message() ) ) );
 		}
 		
 		// Format expiration for display.
@@ -1543,29 +1557,29 @@ public function ajax_revoke_token() {
 	public function ajax_generate_share_link() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
 		}
 		
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ) );
 		}
 		
 		// Get parameters.
-		$token_id    = isset( $_POST['token_id'] ) ? absint( $_POST['token_id'] ) : 0;
+		$token_id    = isset( $_POST['token_id'] ) ? absint( wp_unslash( $_POST['token_id'] ) ) : 0;
 		$otp_code    = isset( $_POST['otp_code'] ) ? sanitize_text_field( wp_unslash( $_POST['otp_code'] ) ) : '';
-		$expiration  = isset( $_POST['expiration'] ) ? absint( $_POST['expiration'] ) : 300;
-		$single_view = isset( $_POST['single_view'] ) && $_POST['single_view'] === '1';
+		$expiration  = isset( $_POST['expiration'] ) ? absint( wp_unslash( $_POST['expiration'] ) ) : 300;
+		$single_view = isset( $_POST['single_view'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['single_view'] ) );
 		
 		if ( ! $token_id || empty( $otp_code ) ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid token ID or OTP code', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Invalid token ID or OTP code', 'happyaccess' ) ) );
 		}
 		
 		// Generate share link.
 		$result = HappyAccess_OTP_Share::generate( $token_id, $otp_code, $expiration, $single_view );
 		
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			wp_send_json_error( array( 'message' => esc_html( $result->get_error_message() ) ) );
 		}
 		
 		// Format expiration for display.
@@ -1594,12 +1608,12 @@ public function ajax_revoke_token() {
 	public function ajax_email_magic_link() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
 		}
 		
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ) );
 		}
 		
 		// Get parameters.
@@ -1608,7 +1622,7 @@ public function ajax_revoke_token() {
 		$recipient      = isset( $_POST['recipient'] ) ? sanitize_email( wp_unslash( $_POST['recipient'] ) ) : get_option( 'admin_email' );
 		
 		if ( empty( $magic_link_url ) || ! filter_var( $recipient, FILTER_VALIDATE_EMAIL ) ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid magic link or email address', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Invalid magic link or email address', 'happyaccess' ) ) );
 		}
 		
 		// Send the email.
@@ -1623,7 +1637,7 @@ public function ajax_revoke_token() {
 				),
 			) );
 		} else {
-			wp_send_json_error( array( 'message' => __( 'Failed to send email. Please check your email settings.', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Failed to send email. Please check your email settings.', 'happyaccess' ) ) );
 		}
 	}
 
@@ -1718,12 +1732,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 	public function ajax_clear_logs() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
 		}
 		
 		// Check permissions - only administrators can clear logs.
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Only administrators can clear audit logs', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Only administrators can clear audit logs', 'happyaccess' ) ) );
 		}
 		
 		global $wpdb;
@@ -1750,11 +1764,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 		) );
 		
 		wp_send_json_success( array(
-			'message' => sprintf(
+			'message' => esc_html( sprintf(
 				/* translators: %d: number of logs cleared */
 				__( 'Successfully cleared %d audit log entries.', 'happyaccess' ),
 				$count
-			),
+			) ),
 		) );
 	}
 
@@ -1766,7 +1780,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 	 */
 	public function add_emergency_lock_button( $wp_admin_bar ) {
 		// Only show for users who can manage HappyAccess.
-		if ( ! current_user_can( 'list_users' ) ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 		
@@ -1794,33 +1808,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 			),
 		) );
 		
-		// Add inline script for the emergency lock.
-		?>
-		<script type="text/javascript">
-		function happyaccessEmergencyLock() {
-			var message = <?php echo wp_json_encode( __( "EMERGENCY LOCK: This will immediately:\n\n• Revoke ALL active access tokens\n• Delete ALL temporary users\n• Block all temporary access\n\nAre you sure you want to proceed?", 'happyaccess' ) ); ?>;
-			if ( ! confirm( message ) ) {
-				return;
-			}
-			
-			jQuery.post(
-				ajaxurl,
-				{
-					action: 'happyaccess_emergency_lock',
-					nonce: '<?php echo esc_js( wp_create_nonce( 'happyaccess_emergency_lock' ) ); ?>'
-				},
-				function( response ) {
-					if ( response.success ) {
-						alert( '<?php echo esc_js( __( 'Emergency Lock activated! All temporary access has been revoked.', 'happyaccess' ) ); ?>' );
-						location.reload();
-					} else {
-						alert( '<?php echo esc_js( __( 'Error activating Emergency Lock. Please try again.', 'happyaccess' ) ); ?>' );
+		// Enqueue emergency lock script properly.
+		$emergency_script = sprintf(
+			'function happyaccessEmergencyLock() {
+				var message = %s;
+				if ( ! confirm( message ) ) { return; }
+				jQuery.post(
+					ajaxurl,
+					{ action: "happyaccess_emergency_lock", nonce: %s },
+					function( response ) {
+						if ( response.success ) {
+							alert( %s );
+							location.reload();
+						} else {
+							alert( %s );
+						}
 					}
-				}
-			);
-		}
-		</script>
-		<?php
+				);
+			}',
+			wp_json_encode( __( "EMERGENCY LOCK: This will immediately:\n\n• Revoke ALL active access tokens\n• Delete ALL temporary users\n• Block all temporary access\n\nAre you sure you want to proceed?", 'happyaccess' ) ),
+			wp_json_encode( wp_create_nonce( 'happyaccess_emergency_lock' ) ),
+			wp_json_encode( __( 'Emergency Lock activated! All temporary access has been revoked.', 'happyaccess' ) ),
+			wp_json_encode( __( 'Error activating Emergency Lock. Please try again.', 'happyaccess' ) )
+		);
+		
+		wp_register_script( 'happyaccess-emergency-lock', false, array( 'jquery' ), HAPPYACCESS_VERSION, true );
+		wp_enqueue_script( 'happyaccess-emergency-lock' );
+		wp_add_inline_script( 'happyaccess-emergency-lock', $emergency_script );
 	}
 	
 	/**
@@ -1831,12 +1845,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 	public function ajax_emergency_lock() {
 		// Verify nonce.
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_emergency_lock' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed', 'happyaccess' ) ) );
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ) );
 		}
 		
 		// Check permissions.
-		if ( ! current_user_can( 'list_users' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions', 'happyaccess' ) ) );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ) );
 		}
 		
 		// Get all active tokens.

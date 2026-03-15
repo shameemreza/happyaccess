@@ -69,10 +69,12 @@ class HappyAccess_OTP_Share {
 
 		// Generate a cryptographically secure share token (shorter but still secure).
 		$share_token = bin2hex( random_bytes( 12 ) ); // 24 character hex string - 96 bits of entropy.
-		$share_hash  = hash_hmac( 'sha256', $share_token . '|' . time(), wp_salt( 'secure_auth' ) );
+		$now_utc     = time();
+		$share_hash  = hash_hmac( 'sha256', $share_token . '|' . $now_utc, wp_salt( 'secure_auth' ) );
 
-		// Calculate expiration.
-		$expires_at = gmdate( 'Y-m-d H:i:s', time() + $expiration_seconds );
+		// Calculate expiration — store in UTC for consistent comparison.
+		$expires_at = gmdate( 'Y-m-d H:i:s', $now_utc + $expiration_seconds );
+		$created_at = gmdate( 'Y-m-d H:i:s', $now_utc );
 
 		// Store the share link in database.
 		$share_table = esc_sql( $wpdb->prefix . 'happyaccess_otp_shares' );
@@ -86,7 +88,7 @@ class HappyAccess_OTP_Share {
 				'share_hash'  => $share_hash,
 				'expires_at'  => $expires_at,
 				'single_view' => $single_view ? 1 : 0,
-				'created_at'  => current_time( 'mysql' ),
+				'created_at'  => $created_at,
 				'created_by'  => get_current_user_id(),
 				'ip_address'  => self::get_client_ip(),
 			),
@@ -141,7 +143,7 @@ class HappyAccess_OTP_Share {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Required for share link token.
 		$decoded     = base64_decode( $share_param, true );
 
-		if ( false === $decoded || strpos( $decoded, ':' ) === false ) {
+		if ( false === $decoded || false === strpos( $decoded, ':' ) ) {
 			self::render_error_page( __( 'Invalid share link.', 'happyaccess' ) );
 			return;
 		}
@@ -193,6 +195,15 @@ class HappyAccess_OTP_Share {
 	private static function verify( $share_token, $share_id ) {
 		global $wpdb;
 
+		// Rate limiting check.
+		$rate_limiter = new HappyAccess_Rate_Limiter();
+		$ip           = self::get_client_ip();
+
+		$rate_check = $rate_limiter->check_rate_limit( 'otp_share', $ip );
+		if ( is_wp_error( $rate_check ) ) {
+			return new WP_Error( 'rate_limited', __( 'Too many attempts. Please try again later.', 'happyaccess' ) );
+		}
+
 		// Ensure table exists.
 		self::maybe_create_table();
 
@@ -209,6 +220,7 @@ class HappyAccess_OTP_Share {
 		);
 
 		if ( ! $share ) {
+			$rate_limiter->log_attempt( 'otp_share', $ip, 'share_not_found' );
 			return new WP_Error( 'not_found', __( 'Share link not found or has been removed.', 'happyaccess' ) );
 		}
 
@@ -217,32 +229,39 @@ class HappyAccess_OTP_Share {
 			return new WP_Error( 'already_viewed', __( 'This link has already been viewed. For security, share links can only be viewed once.', 'happyaccess' ) );
 		}
 
-		// Check if expired.
-		if ( strtotime( $share['expires_at'] ) < time() ) {
+		// Check if expired (timestamps stored in UTC).
+		if ( strtotime( $share['expires_at'] . ' UTC' ) < time() ) {
 			return new WP_Error( 'expired', __( 'This share link has expired. Please request a new one.', 'happyaccess' ) );
 		}
 
-		// Verify token hash.
-		$expected_hash = hash_hmac( 'sha256', $share_token . '|' . strtotime( $share['created_at'] ), wp_salt( 'secure_auth' ) );
+		// Verify token hash (created_at was stored in UTC via gmdate).
+		$expected_hash = hash_hmac( 'sha256', $share_token . '|' . strtotime( $share['created_at'] . ' UTC' ), wp_salt( 'secure_auth' ) );
 
 		if ( ! hash_equals( $share['share_hash'], $expected_hash ) ) {
+			$rate_limiter->log_attempt( 'otp_share', $ip, 'share_invalid' );
 			return new WP_Error( 'invalid_token', __( 'Invalid share link token.', 'happyaccess' ) );
 		}
 
-		// Mark as viewed if single-view.
+		// Mark as viewed if single-view (atomic to prevent race condition).
 		if ( $share['single_view'] ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-			$wpdb->update(
-				$share_table,
-				array(
-					'viewed_at' => current_time( 'mysql' ),
-					'viewed_ip' => self::get_client_ip(),
-				),
-				array( 'id' => $share_id ),
-				array( '%s', '%s' ),
-				array( '%d' )
+			$marked = $wpdb->query(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+					"UPDATE `$share_table` SET viewed_at = %s, viewed_ip = %s WHERE id = %d AND viewed_at IS NULL",
+					gmdate( 'Y-m-d H:i:s' ),
+					$ip,
+					$share_id
+				)
 			);
+
+			if ( 0 === (int) $marked ) {
+				return new WP_Error( 'already_viewed', __( 'This link has already been viewed. For security, share links can only be viewed once.', 'happyaccess' ) );
+			}
 		}
+
+		// Clear rate limiting on success.
+		$rate_limiter->clear_attempts( 'otp_share', $ip );
 
 		return array(
 			'otp_code'    => $share['otp_code'],
@@ -272,7 +291,7 @@ class HappyAccess_OTP_Share {
 				"UPDATE `$table` 
 				SET viewed_at = %s, viewed_ip = %s 
 				WHERE token_id = %d AND viewed_at IS NULL",
-				current_time( 'mysql' ),
+				gmdate( 'Y-m-d H:i:s' ),
 				'invalidated_by_new_share',
 				$token_id
 			)
@@ -618,25 +637,29 @@ class HappyAccess_OTP_Share {
 	/**
 	 * Create the OTP shares table if it doesn't exist.
 	 *
+	 * Uses a static flag to avoid repeated SHOW TABLES queries within
+	 * the same request, and checks the DB version option across requests.
+	 *
 	 * @since 1.0.3
+	 * @since 1.0.4 Added static flag and version check for performance.
 	 */
 	public static function maybe_create_table() {
-		global $wpdb;
+		static $checked = false;
 
-		$table_name = $wpdb->prefix . 'happyaccess_otp_shares';
+		if ( $checked ) {
+			return;
+		}
+		$checked = true;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Checking table existence.
-		$table_exists = $wpdb->get_var(
-			$wpdb->prepare(
-				'SHOW TABLES LIKE %s',
-				$table_name
-			)
-		);
-
-		if ( $table_exists ) {
+		// Skip if already created in a previous request.
+		$db_version = get_option( 'happyaccess_otp_shares_db', '0' );
+		if ( '1' === $db_version ) {
 			return;
 		}
 
+		global $wpdb;
+
+		$table_name      = $wpdb->prefix . 'happyaccess_otp_shares';
 		$charset_collate = $wpdb->get_charset_collate();
 
 		$sql = "CREATE TABLE $table_name (
@@ -659,6 +682,8 @@ class HappyAccess_OTP_Share {
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+
+		update_option( 'happyaccess_otp_shares_db', '1' );
 	}
 
 	/**
@@ -682,7 +707,7 @@ class HappyAccess_OTP_Share {
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
 				"DELETE FROM `$table` WHERE expires_at < DATE_SUB(%s, INTERVAL 1 HOUR)",
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
 
@@ -693,22 +718,12 @@ class HappyAccess_OTP_Share {
 	 * Get client IP address.
 	 *
 	 * @since 1.0.3
+	 * @since 1.0.4 Delegates to centralized HappyAccess_OTP_Handler::get_client_ip().
 	 *
 	 * @return string Client IP address.
 	 */
 	private static function get_client_ip() {
-		$ip = '';
-
-		if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CLIENT_IP'] ) );
-		} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
-			$ip = explode( ',', $ip )[0];
-		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
-		}
-
-		return filter_var( trim( $ip ), FILTER_VALIDATE_IP ) ? trim( $ip ) : '0.0.0.0';
+		return HappyAccess_OTP_Handler::get_client_ip();
 	}
 }
 

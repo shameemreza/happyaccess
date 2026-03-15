@@ -185,7 +185,7 @@ class HappyAccess_Login_Handler {
 	public static function login_message( $message ) {
 		// Check if we're coming from a HappyAccess link.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Just checking for display message, not processing data.
-		if ( isset( $_GET['happyaccess'] ) && $_GET['happyaccess'] === '1' ) {
+		if ( isset( $_GET['happyaccess'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['happyaccess'] ) ) ) {
 			$message .= '<div class="message" style="border-left-color: #00a32a;">';
 			$message .= '<strong>' . esc_html__( 'Temporary Access Login', 'happyaccess' ) . '</strong><br />';
 			$message .= esc_html__( 'Enter your 6-digit access code below. No username or password needed.', 'happyaccess' );

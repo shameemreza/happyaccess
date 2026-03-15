@@ -79,7 +79,7 @@ class HappyAccess_Magic_Link {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
 				"SELECT * FROM `$tokens_table` WHERE id = %d AND expires_at > %s AND revoked_at IS NULL",
 				$token_id,
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			),
 			ARRAY_A
 		);
@@ -94,10 +94,12 @@ class HappyAccess_Magic_Link {
 
 		// Generate a cryptographically secure magic token (shorter but still secure).
 		$magic_token = bin2hex( random_bytes( 16 ) ); // 32 character hex string - 128 bits of entropy.
-		$magic_hash  = hash_hmac( 'sha256', $magic_token . '|' . time(), wp_salt( 'secure_auth' ) );
+		$now_utc     = time();
+		$magic_hash  = hash_hmac( 'sha256', $magic_token . '|' . $now_utc, wp_salt( 'secure_auth' ) );
 
-		// Calculate expiration.
-		$expires_at = gmdate( 'Y-m-d H:i:s', time() + $expiration_seconds );
+		// Calculate expiration — store in UTC for consistent comparison.
+		$expires_at = gmdate( 'Y-m-d H:i:s', $now_utc + $expiration_seconds );
+		$created_at = gmdate( 'Y-m-d H:i:s', $now_utc );
 
 		// Store the magic link in database.
 		$magic_table = esc_sql( $wpdb->prefix . 'happyaccess_magic_links' );
@@ -109,7 +111,7 @@ class HappyAccess_Magic_Link {
 				'token_id'     => $token_id,
 				'magic_hash'   => $magic_hash,
 				'expires_at'   => $expires_at,
-				'created_at'   => current_time( 'mysql' ),
+				'created_at'   => $created_at,
 				'created_by'   => get_current_user_id(),
 				'ip_address'   => self::get_client_ip(),
 			),
@@ -163,7 +165,7 @@ class HappyAccess_Magic_Link {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Required for magic link token encoding.
 		$decoded     = base64_decode( $magic_param, true );
 
-		if ( false === $decoded || strpos( $decoded, ':' ) === false ) {
+		if ( false === $decoded || false === strpos( $decoded, ':' ) ) {
 			self::redirect_with_error( 'invalid_magic_link' );
 			return;
 		}
@@ -288,13 +290,13 @@ class HappyAccess_Magic_Link {
 			return new WP_Error( 'already_used', __( 'This magic link has already been used.', 'happyaccess' ) );
 		}
 
-		// Check if expired.
-		if ( strtotime( $magic_link['expires_at'] ) < time() ) {
+		// Check if expired (timestamps stored in UTC).
+		if ( strtotime( $magic_link['expires_at'] . ' UTC' ) < time() ) {
 			return new WP_Error( 'expired', __( 'This magic link has expired.', 'happyaccess' ) );
 		}
 
-		// Verify token hash.
-		$expected_hash = hash_hmac( 'sha256', $magic_token . '|' . strtotime( $magic_link['created_at'] ), wp_salt( 'secure_auth' ) );
+		// Verify token hash (created_at was stored in UTC via gmdate).
+		$expected_hash = hash_hmac( 'sha256', $magic_token . '|' . strtotime( $magic_link['created_at'] . ' UTC' ), wp_salt( 'secure_auth' ) );
 
 		if ( ! hash_equals( $magic_link['magic_hash'], $expected_hash ) ) {
 			$rate_limiter->log_attempt( 'magic_link', $ip, 'magic_link_invalid' );
@@ -310,7 +312,7 @@ class HappyAccess_Magic_Link {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
 				"SELECT * FROM `$tokens_table` WHERE id = %d AND expires_at > %s AND revoked_at IS NULL",
 				$magic_link['token_id'],
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			),
 			ARRAY_A
 		);
@@ -332,7 +334,7 @@ class HappyAccess_Magic_Link {
 		$wpdb->update(
 			$magic_table,
 			array(
-				'used_at'    => current_time( 'mysql' ),
+				'used_at'    => gmdate( 'Y-m-d H:i:s' ),
 				'used_ip'    => $ip,
 			),
 			array( 'id' => $magic_id ),
@@ -404,23 +406,12 @@ class HappyAccess_Magic_Link {
 	 * Get client IP address.
 	 *
 	 * @since 1.0.3
+	 * @since 1.0.4 Delegates to centralized HappyAccess_OTP_Handler::get_client_ip().
 	 *
 	 * @return string Client IP address.
 	 */
 	private static function get_client_ip() {
-		$ip = '';
-
-		if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CLIENT_IP'] ) );
-		} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
-			// Take the first IP if multiple.
-			$ip = explode( ',', $ip )[0];
-		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
-		}
-
-		return filter_var( trim( $ip ), FILTER_VALIDATE_IP ) ? trim( $ip ) : '0.0.0.0';
+		return HappyAccess_OTP_Handler::get_client_ip();
 	}
 
 	/**
@@ -478,7 +469,7 @@ class HappyAccess_Magic_Link {
 				"UPDATE `$table` 
 				SET used_at = %s, used_ip = %s 
 				WHERE token_id = %d AND used_at IS NULL",
-				current_time( 'mysql' ),
+				gmdate( 'Y-m-d H:i:s' ),
 				'invalidated_by_new_link',
 				$token_id
 			)
@@ -513,7 +504,7 @@ class HappyAccess_Magic_Link {
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
 				"DELETE FROM `$table` WHERE expires_at < DATE_SUB(%s, INTERVAL 1 HOUR)",
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
 

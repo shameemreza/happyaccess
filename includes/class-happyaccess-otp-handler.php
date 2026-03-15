@@ -22,17 +22,23 @@ class HappyAccess_OTP_Handler {
 	 * Generate a 6-digit OTP.
 	 *
 	 * @since 1.0.0
-	 * @return string The generated OTP.
+	 * @since 1.0.4 Added depth limit to prevent infinite recursion.
+	 *
+	 * @param int $depth Current recursion depth.
+	 * @return string|WP_Error The generated OTP, or WP_Error if exhausted.
 	 */
-	public static function generate_otp() {
+	public static function generate_otp( $depth = 0 ) {
+		if ( $depth >= 10 ) {
+			return new WP_Error( 'otp_generation_failed', __( 'Failed to generate a unique OTP code. Please try again.', 'happyaccess' ) );
+		}
+
 		// Generate cryptographically secure random 6-digit code.
 		$otp = str_pad( (string) random_int( 100000, 999999 ), 6, '0', STR_PAD_LEFT );
-		
-		// Ensure it's not already in use (very unlikely but safe).
+
 		if ( self::otp_exists( $otp ) ) {
-			return self::generate_otp(); // Recursive call to generate new one.
+			return self::generate_otp( $depth + 1 );
 		}
-		
+
 		return $otp;
 	}
 
@@ -56,7 +62,7 @@ class HappyAccess_OTP_Handler {
 				AND expires_at > %s 
 				AND revoked_at IS NULL",
 				$otp,
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
 		
@@ -83,9 +89,9 @@ class HappyAccess_OTP_Handler {
 			return new WP_Error( 'invalid_otp_format', __( 'Access code must be exactly 6 digits. Please check your code and try again.', 'happyaccess' ) );
 		}
 		
-		// Check rate limiting.
+		// Check rate limiting (keyed on IP only to prevent per-OTP brute-force bypass).
 		$rate_limiter = new HappyAccess_Rate_Limiter();
-		$rate_check = $rate_limiter->check_rate_limit( 'otp_' . $otp, self::get_client_ip() );
+		$rate_check = $rate_limiter->check_rate_limit( 'otp_verify', self::get_client_ip() );
 		
 		if ( is_wp_error( $rate_check ) ) {
 			return $rate_check;
@@ -104,14 +110,14 @@ class HappyAccess_OTP_Handler {
 				AND revoked_at IS NULL 
 				AND (max_uses = 0 OR use_count < max_uses)",
 				$otp,
-				current_time( 'mysql' )
+				gmdate( 'Y-m-d H:i:s' )
 			),
 			ARRAY_A
 		);
 		
 		if ( ! $token ) {
-			// Log failed attempt.
-			$rate_limiter->log_attempt( 'otp_' . $otp, self::get_client_ip() );
+			// Log failed attempt (keyed on IP only, matching rate limit check).
+			$rate_limiter->log_attempt( 'otp_verify', self::get_client_ip() );
 			return new WP_Error( 'invalid_otp', __( 'The access code is invalid or has expired. Please verify the code or request a new one.', 'happyaccess' ) );
 		}
 		
@@ -127,24 +133,29 @@ class HappyAccess_OTP_Handler {
 		
 		// Get current use count before incrementing.
 		$current_use_count = (int) $token['use_count'];
-		$new_use_count = $current_use_count + 1;
 		$is_relogin = $current_use_count > 0;
-		
+
 		// Check if this is a single-use token (max_uses = 1).
 		$is_single_use = ( 1 === (int) $token['max_uses'] );
-		
-		// Update use count and last used time.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, safe table name.
-		$wpdb->update(
-			$table,
-			array(
-				'use_count' => $new_use_count,
-				'used_at'   => current_time( 'mysql' ),
-			),
-			array( 'id' => $token['id'] ),
-			array( '%d', '%s' ),
-			array( '%d' )
+
+		// Atomic UPDATE: increment use_count only if still within max_uses.
+		// This prevents race conditions where two simultaneous requests could
+		// both pass the SELECT check before either increments use_count.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$rows_affected = $wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped and safe.
+				"UPDATE `$table` SET use_count = use_count + 1, used_at = %s WHERE id = %d AND revoked_at IS NULL AND (max_uses = 0 OR use_count < max_uses)",
+				gmdate( 'Y-m-d H:i:s' ),
+				$token['id']
+			)
 		);
+
+		if ( 0 === $rows_affected ) {
+			return new WP_Error( 'invalid_otp', __( 'The access code is invalid or has expired. Please verify the code or request a new one.', 'happyaccess' ) );
+		}
+
+		$new_use_count = $current_use_count + 1;
 		
 		// Determine event type based on login count.
 		$event_type = $is_relogin ? 'otp_verified_relogin' : 'otp_verified';
@@ -216,7 +227,7 @@ class HappyAccess_OTP_Handler {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 		$result = $wpdb->update(
 			$table,
-			array( 'revoked_at' => current_time( 'mysql' ) ),
+			array( 'revoked_at' => gmdate( 'Y-m-d H:i:s' ) ),
 			array( 'id' => $token_id ),
 			array( '%s' ),
 			array( '%d' )
@@ -241,36 +252,44 @@ class HappyAccess_OTP_Handler {
 	/**
 	 * Get client IP address.
 	 *
+	 * Uses REMOTE_ADDR as the primary source since proxy headers (HTTP_X_FORWARDED_FOR,
+	 * HTTP_CLIENT_IP) are trivially spoofable. Sites behind trusted proxies should use
+	 * a server-level configuration to set REMOTE_ADDR correctly.
+	 *
 	 * @since 1.0.0
+	 * @since 1.0.4 Hardened to prefer REMOTE_ADDR over spoofable proxy headers.
+	 *
 	 * @return string The client IP address.
 	 */
 	public static function get_client_ip() {
 		$ip = '';
-		
-		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
-		if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
-			$ip = $_SERVER['HTTP_CLIENT_IP'];
-		} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			$ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
-		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			$ip = $_SERVER['REMOTE_ADDR'];
+
+		// Prefer REMOTE_ADDR as it cannot be spoofed at the HTTP level.
+		if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
 		}
-		// phpcs:enable
-		
-		// Sanitize and validate the IP.
-		$ip = sanitize_text_field( $ip );
-		
-		// Handle multiple IPs (from proxy).
-		if ( strpos( $ip, ',' ) !== false ) {
+
+		// Handle multiple IPs (from proxy chains).
+		if ( false !== strpos( $ip, ',' ) ) {
 			$ips = explode( ',', $ip );
-			$ip = trim( $ips[0] );
+			$ip  = trim( $ips[0] );
 		}
-		
+
 		// Validate IP format.
 		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
 			$ip = '0.0.0.0';
 		}
-		
-		return $ip;
+
+		/**
+		 * Filters the detected client IP address.
+		 *
+		 * Sites behind load balancers or reverse proxies can use this filter
+		 * to return the correct client IP from trusted headers.
+		 *
+		 * @since 1.0.4
+		 *
+		 * @param string $ip The detected client IP address.
+		 */
+		return apply_filters( 'happyaccess_client_ip', $ip );
 	}
 }

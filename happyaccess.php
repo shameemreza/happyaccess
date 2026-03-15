@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name:       HappyAccess
- * Plugin URI:        https://github.com/shameemreza/happyaccess
+ * Plugin URI:        https://wordpress.org/plugins/happyaccess
  * Description:       Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
- * Version:           1.0.3
+ * Version:           1.0.4
  * Author:            Shameem Reza
- * Author URI:        https://shameem.blog/
+ * Author URI:        https://shameem.dev/
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       happyaccess
@@ -13,8 +13,6 @@
  * Requires at least: 6.0
  * Tested up to:      6.9
  * Requires PHP:      7.4
- * WC requires at least: 9.0
- * WC tested up to:   10.3
  */
 
 // Exit if accessed directly.
@@ -23,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'HAPPYACCESS_VERSION', '1.0.3' );
+define( 'HAPPYACCESS_VERSION', '1.0.4' );
 define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
 define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -89,6 +87,8 @@ class HappyAccess {
 
 	/**
 	 * Load plugin dependencies.
+	 *
+	 * @return void
 	 */
 	private function load_dependencies() {
 		// Core classes.
@@ -118,6 +118,8 @@ class HappyAccess {
 
 	/**
 	 * Initialize plugin hooks.
+	 *
+	 * @return void
 	 */
 	private function init_hooks() {
 		// Activation/deactivation hooks.
@@ -130,6 +132,7 @@ class HappyAccess {
 
 		// Cron events.
 		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_Cleanup', 'cleanup_expired_tokens' ) );
+		add_action( 'happyaccess_cleanup_attempts', array( 'HappyAccess_Cleanup', 'cleanup_old_attempts' ) );
 
 		// Login form modifications.
 		add_action( 'login_form', array( 'HappyAccess_Login_Handler', 'add_otp_field' ) );
@@ -205,6 +208,8 @@ class HappyAccess {
 
 	/**
 	 * Initialize plugin.
+	 *
+	 * @return void
 	 */
 	public function init() {
 		// WordPress automatically loads translations for plugins on WordPress.org since 4.6.
@@ -216,9 +221,12 @@ class HappyAccess {
 		// Check for plugin upgrades.
 		$this->maybe_upgrade();
 
-		// Schedule cleanup cron if not already scheduled.
+		// Schedule cleanup crons if not already scheduled.
 		if ( ! wp_next_scheduled( 'happyaccess_cleanup_expired' ) ) {
 			wp_schedule_event( time(), 'hourly', 'happyaccess_cleanup_expired' );
+		}
+		if ( ! wp_next_scheduled( 'happyaccess_cleanup_attempts' ) ) {
+			wp_schedule_event( time(), 'daily', 'happyaccess_cleanup_attempts' );
 		}
 	}
 
@@ -227,6 +235,8 @@ class HappyAccess {
 	 *
 	 * @since 1.0.0
 	 * @since 1.0.3 Added magic links table creation.
+	 *
+	 * @return void
 	 */
 	private function maybe_upgrade() {
 		global $wpdb;
@@ -271,6 +281,8 @@ class HappyAccess {
 	 *
 	 * Note: HappyAccess_Admin instance is created in load_dependencies().
 	 * This hook is only for registering settings that require admin_init.
+	 *
+	 * @return void
 	 */
 	public function admin_init() {
 		// Settings are registered via HappyAccess_Admin->handle_settings().
@@ -280,27 +292,27 @@ class HappyAccess {
 	/**
 	 * Ensure all database tables exist.
 	 *
-	 * This runs on every init to handle plugin updates without deactivation.
+	 * Uses the stored DB version to avoid running SHOW TABLES on every request.
+	 * Only checks for missing tables when the DB version is outdated.
 	 *
 	 * @since 1.0.3
+	 * @since 1.0.4 Uses version check instead of SHOW TABLES on every init.
+	 *
+	 * @return void
 	 */
 	private function ensure_tables_exist() {
-		global $wpdb;
-		
-		// Check magic links table (added in 1.0.3).
-		$magic_table = $wpdb->prefix . 'happyaccess_magic_links';
-		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Checking table existence.
-		$table_exists = $wpdb->get_var(
-			$wpdb->prepare(
-				'SHOW TABLES LIKE %s',
-				$magic_table
-			)
-		);
-		
-		if ( ! $table_exists ) {
+		$db_version = get_option( 'happyaccess_db_version', '0.0.0' );
+
+		if ( version_compare( $db_version, '1.0.4', '>=' ) ) {
+			return;
+		}
+
+		if ( version_compare( $db_version, '1.0.3', '<' ) ) {
 			HappyAccess_Magic_Link::create_table();
 		}
+
+		HappyAccess_OTP_Share::maybe_create_table();
+		update_option( 'happyaccess_db_version', '1.0.4' );
 	}
 }
 

@@ -97,7 +97,7 @@ class HappyAccess_Rate_Limiter {
 				'identifier'    => $identifier,
 				'attempt_type'  => $attempt_type,
 				'ip_address'    => $ip,
-				'attempted_at'  => current_time( 'mysql' ),
+				'attempted_at'  => gmdate( 'Y-m-d H:i:s' ),
 			),
 			array( '%s', '%s', '%s', '%s' )
 		);

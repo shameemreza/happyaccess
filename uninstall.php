@@ -25,16 +25,20 @@ if ( ! $happyaccess_delete_data ) {
 global $wpdb;
 
 // Delete custom database tables.
-$happyaccess_tokens_table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
-$happyaccess_logs_table   = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
-$happyaccess_magic_table  = esc_sql( $wpdb->prefix . 'happyaccess_magic_links' );
-$happyaccess_shares_table = esc_sql( $wpdb->prefix . 'happyaccess_otp_shares' );
+$happyaccess_tokens_table   = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
+$happyaccess_logs_table     = esc_sql( $wpdb->prefix . 'happyaccess_logs' );
+$happyaccess_attempts_table = esc_sql( $wpdb->prefix . 'happyaccess_attempts' );
+$happyaccess_magic_table    = esc_sql( $wpdb->prefix . 'happyaccess_magic_links' );
+$happyaccess_shares_table   = esc_sql( $wpdb->prefix . 'happyaccess_otp_shares' );
 
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are escaped, uninstall cleanup.
 $wpdb->query( "DROP TABLE IF EXISTS `{$happyaccess_tokens_table}`" );
 
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are escaped, uninstall cleanup.
 $wpdb->query( "DROP TABLE IF EXISTS `{$happyaccess_logs_table}`" );
+
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are escaped, uninstall cleanup.
+$wpdb->query( "DROP TABLE IF EXISTS `{$happyaccess_attempts_table}`" );
 
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names are escaped, uninstall cleanup.
 $wpdb->query( "DROP TABLE IF EXISTS `{$happyaccess_magic_table}`" );
@@ -66,6 +70,8 @@ $happyaccess_options_to_delete = array(
 	'happyaccess_token_expiry',
 	'happyaccess_cleanup_days',
 	'happyaccess_enable_logging',
+	'happyaccess_enable_email',
+	'happyaccess_gdpr_consent_text',
 	'happyaccess_delete_on_uninstall',
 	'happyaccess_db_version',
 	'happyaccess_recaptcha_enabled',
@@ -74,6 +80,7 @@ $happyaccess_options_to_delete = array(
 	'happyaccess_recaptcha_threshold',
 	'happyaccess_magic_link_expiry',
 	'happyaccess_share_link_expiry',
+	'happyaccess_otp_shares_db',
 );
 
 foreach ( $happyaccess_options_to_delete as $happyaccess_option ) {

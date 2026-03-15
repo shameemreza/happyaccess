@@ -159,15 +159,11 @@ class HappyAccess_ReCaptcha {
 
 		$secret_key = self::get_secret_key();
 		if ( empty( $secret_key ) ) {
-			// reCAPTCHA not properly configured - allow access but log warning.
+			// Fail closed: if the admin enabled reCAPTCHA without a secret key, block access.
 			HappyAccess_Logger::log( 'recaptcha_misconfigured', array(
 				'error' => 'Secret key not configured',
 			) );
-			return array(
-				'success' => true,
-				'score'   => 1.0,
-				'action'  => 'happyaccess_login',
-			);
+			return new WP_Error( 'recaptcha_misconfigured', __( 'reCAPTCHA is not properly configured. Please contact the site administrator.', 'happyaccess' ) );
 		}
 
 		// Make verification request to Google.
@@ -181,16 +177,11 @@ class HappyAccess_ReCaptcha {
 		) );
 
 		if ( is_wp_error( $response ) ) {
+			// Fail closed on network errors — do not grant a perfect score.
 			HappyAccess_Logger::log( 'recaptcha_error', array(
 				'error' => $response->get_error_message(),
 			) );
-			// On network error, fail open (allow access) to not block legitimate users.
-			return array(
-				'success' => true,
-				'score'   => 1.0,
-				'action'  => 'happyaccess_login',
-				'error'   => 'network_error',
-			);
+			return new WP_Error( 'recaptcha_unavailable', __( 'Unable to verify reCAPTCHA. Please try again in a moment.', 'happyaccess' ) );
 		}
 
 		$body = wp_remote_retrieve_body( $response );
@@ -285,22 +276,12 @@ class HappyAccess_ReCaptcha {
 	 * Get client IP address.
 	 *
 	 * @since 1.0.3
+	 * @since 1.0.4 Delegates to centralized HappyAccess_OTP_Handler::get_client_ip().
 	 *
 	 * @return string Client IP address.
 	 */
 	private static function get_client_ip() {
-		$ip = '';
-
-		if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CLIENT_IP'] ) );
-		} elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
-			$ip = explode( ',', $ip )[0];
-		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
-		}
-
-		return filter_var( trim( $ip ), FILTER_VALIDATE_IP ) ? trim( $ip ) : '0.0.0.0';
+		return HappyAccess_OTP_Handler::get_client_ip();
 	}
 }
 
