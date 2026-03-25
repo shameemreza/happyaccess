@@ -18,29 +18,43 @@ It removes the need for merchants to manually create/delete admin users or share
 
 = Key Features =
 
+**Access & Authentication**
+
 * **OTP-Based Authentication:** Generate secure 6-digit codes instead of sharing passwords.
-* **Magic Link Authentication:** Generate secure one-click login links with short expiration (1-10 minutes).
+* **Magic Link Authentication:** One-click login links with short expiration (1-10 minutes), single-use.
 * **OTP Share Links:** Generate secure single-view links to share OTP codes safely with auto-expiry.
 * **Reusable Access Codes:** Support engineers can log in multiple times with the same code until it expires.
 * **One-Time Use Option:** Generate codes that automatically revoke after first use for maximum security.
-* **reCAPTCHA v3 Protection:** Optional invisible bot protection for OTP login.
+* **Role Selection:** Assign any WordPress role (Administrator, Editor, Shop Manager, or custom roles).
 * **Time-Limited Access:** Automatically expires after the set duration (1 hour to 30 days).
-* **Automatic Cleanup:** Temporary users are deleted automatically when access expires.
-* **Full Audit Log:** Track all access and actions with CSV export for compliance.
-* **IP Allowlist:** Optionally restrict access codes to specific IP addresses.
-* **Email Notifications:** Send access codes to admin email for secure sharing.
-* **Emergency Lock:** One-click button to instantly revoke all active tokens.
-* **Session Management:** Logout all temp sessions without revoking tokens.
-* **GDPR Compliant:** Built-in consent workflow and data protection features.
-* **Native WordPress UI:** Clean interface matching WordPress and WooCommerce admin styles.
-* **Advanced Security:** Rate limiting, IP tracking, and failed attempt lockouts.
-* **Active Token Management:** View all active codes, see usage status, and revoke anytime.
-* **Admin Menu & Submenu Restrictions:** Block temp users from specific admin pages including WooCommerce, EDD, and BuddyPress sub-pages.
-* **Direct URL Blocking:** Restricted pages are inaccessible even by typing the URL directly.
+
+**Access Restrictions**
+
+* **Admin Menu & Submenu Restrictions:** Block temp users from specific admin pages with a visual picker. Supports top-level menus and individual sub-pages (WooCommerce tabs, EDD sections, BuddyPress, or any plugin).
+* **Direct URL Blocking:** Restricted pages are inaccessible even when accessed by typing the URL directly.
 * **Hide Admin Bar:** Option to hide the WordPress admin bar for temporary users.
-* **Main Admin Protection:** Temp users cannot see, edit, or delete the site owner. HappyAccess is hidden from the plugins list.
-* **Activate/Deactivate Toggle:** Suspend a temp user's access without deleting them, and reactivate later.
-* **Per-Plugin Sub-Restrictions:** Granular control over submenu items - block specific WooCommerce tabs, EDD sections, or any plugin sub-page.
+* **Main Admin Protection:** Temp users cannot see, edit, or delete the site owner. Dangerous bulk actions are blocked.
+* **Plugin Self-Protection:** HappyAccess is hidden from the plugins list for temp users.
+* **Activate/Deactivate Toggle:** Suspend a temp user's access without deleting them, and reactivate later with one click.
+
+**Security**
+
+* **reCAPTCHA v3 Protection:** Optional invisible bot protection for OTP login.
+* **IP Allowlist:** Optionally restrict access codes to specific IP addresses.
+* **Rate Limiting:** Failed attempt lockouts and IP tracking prevent brute force attacks.
+* **Emergency Lock:** One-click admin bar button to instantly revoke all active tokens.
+* **Session Management:** Logout all temp sessions without revoking tokens.
+
+**Monitoring & Compliance**
+
+* **Full Audit Log:** Track all access, logins, restrictions, and actions with filterable event log and CSV export.
+* **Live Countdown Timer:** Real-time expiry countdown in the admin bar with auto-logout.
+* **Login Count Tracking:** See first login vs re-logins in the audit log.
+* **Active Token Management:** View all active codes, see usage status, generate magic links, and revoke anytime.
+* **Email Notifications:** Send access codes and magic links to admin or support email.
+* **Automatic Cleanup:** Temporary users and old logs are deleted automatically when access expires.
+* **GDPR Compliant:** Built-in consent workflow, privacy policy integration, and data export/erasure support.
+* **Native WordPress UI:** Clean interface matching WordPress and WooCommerce admin styles.
 
 = How It Works =
 
@@ -193,14 +207,14 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 == Changelog ==
 
 = 1.0.5 =
-* NEW: Admin Menu Restrictions - Block temp users from specific admin pages with a visual picker.
-* NEW: Per-Plugin Submenu Restrictions - Granular control over sub-pages (WooCommerce tabs, EDD sections, any plugin).
-* NEW: Direct URL Access Blocking - Restricted pages are blocked even when accessed by direct URL.
-* NEW: Hide Admin Bar - Option to hide the WordPress admin bar for temporary users.
-* NEW: Main Admin Protection - Temp users cannot see, edit, or delete the token creator.
-* NEW: Plugin Self-Protection - HappyAccess is hidden from the plugins list for temp users.
-* NEW: User Bulk Action Protection - Temp users cannot bulk-delete or bulk-modify real admin accounts.
-* NEW: Activate/Deactivate Toggle - Suspend and reactivate temp user access without deleting.
+* NEW: Admin Menu Restrictions: Block temp users from specific admin pages with a visual picker.
+* NEW: Per-Plugin Submenu Restrictions: Granular control over sub-pages (WooCommerce tabs, EDD sections, any plugin).
+* NEW: Direct URL Access Blocking: Restricted pages are blocked even when accessed by direct URL.
+* NEW: Hide Admin Bar: Option to hide the WordPress admin bar for temporary users.
+* NEW: Main Admin Protection: Temp users cannot see, edit, or delete the token creator.
+* NEW: Plugin Self-Protection: HappyAccess is hidden from the plugins list for temp users.
+* NEW: User Bulk Action Protection: Temp users cannot bulk-delete or bulk-modify real admin accounts.
+* NEW: Activate/Deactivate Toggle: Suspend and reactivate temp user access without deleting.
 * NEW: Deactivation blocks all login paths (OTP, magic link) and destroys active sessions.
 * SECURITY: Magic link login now blocked for deactivated temp users.
 * SECURITY: OTP login now blocked for deactivated temp users.
