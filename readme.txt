@@ -4,7 +4,7 @@ Tags: admin, temporary access, support, security, otp
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -35,6 +35,12 @@ It removes the need for merchants to manually create/delete admin users or share
 * **Native WordPress UI:** Clean interface matching WordPress and WooCommerce admin styles.
 * **Advanced Security:** Rate limiting, IP tracking, and failed attempt lockouts.
 * **Active Token Management:** View all active codes, see usage status, and revoke anytime.
+* **Admin Menu & Submenu Restrictions:** Block temp users from specific admin pages including WooCommerce, EDD, and BuddyPress sub-pages.
+* **Direct URL Blocking:** Restricted pages are inaccessible even by typing the URL directly.
+* **Hide Admin Bar:** Option to hide the WordPress admin bar for temporary users.
+* **Main Admin Protection:** Temp users cannot see, edit, or delete the site owner. HappyAccess is hidden from the plugins list.
+* **Activate/Deactivate Toggle:** Suspend a temp user's access without deleting them, and reactivate later.
+* **Per-Plugin Sub-Restrictions:** Granular control over submenu items - block specific WooCommerce tabs, EDD sections, or any plugin sub-page.
 
 = How It Works =
 
@@ -158,6 +164,18 @@ reCAPTCHA v3 is optional but recommended if:
 
 reCAPTCHA v3 runs invisibly in the background - it won't interrupt legitimate users. To enable it, get your site key and secret key from Google reCAPTCHA Admin and add them in Settings.
 
+= Can I restrict which admin pages a temp user can access? =
+
+Yes! When generating an access code, enable "Menu Restrictions" to see a full list of admin menus and submenus. You can block entire top-level menus (e.g., hide all of WooCommerce) or specific sub-pages (e.g., block WooCommerce Orders but allow Products). Blocked pages are hidden from navigation AND inaccessible by direct URL.
+
+= Can temp users modify my plugins or delete my admin account? =
+
+No. HappyAccess automatically protects the site owner: temp users cannot see your account in the users list, cannot edit your profile, and cannot delete you. The HappyAccess plugin itself is hidden from the plugins list so temp users cannot deactivate it.
+
+= Can I temporarily suspend a temp user without deleting them? =
+
+Yes! Use the Deactivate button in Active Tokens to instantly suspend access. The temp user will be logged out and unable to log in. You can reactivate them later with one click - no need to generate a new code.
+
 = How long are logs kept? =
 
 By default, logs are kept for 30 days. You can configure this in Settings.
@@ -173,6 +191,27 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 7. Emergency Lock - Admin bar button for instant revocation.
 
 == Changelog ==
+
+= 1.0.5 =
+* NEW: Admin Menu Restrictions - Block temp users from specific admin pages with a visual picker.
+* NEW: Per-Plugin Submenu Restrictions - Granular control over sub-pages (WooCommerce tabs, EDD sections, any plugin).
+* NEW: Direct URL Access Blocking - Restricted pages are blocked even when accessed by direct URL.
+* NEW: Hide Admin Bar - Option to hide the WordPress admin bar for temporary users.
+* NEW: Main Admin Protection - Temp users cannot see, edit, or delete the token creator.
+* NEW: Plugin Self-Protection - HappyAccess is hidden from the plugins list for temp users.
+* NEW: User Bulk Action Protection - Temp users cannot bulk-delete or bulk-modify real admin accounts.
+* NEW: Activate/Deactivate Toggle - Suspend and reactivate temp user access without deleting.
+* NEW: Deactivation blocks all login paths (OTP, magic link) and destroys active sessions.
+* SECURITY: Magic link login now blocked for deactivated temp users.
+* SECURITY: OTP login now blocked for deactivated temp users.
+* SECURITY: Access guard enforces restrictions server-side with `current_screen` hook.
+* SECURITY: Complex submenu slugs with query strings (e.g., `edit.php?post_type=product`) are properly blocked.
+* SECURITY: All access denial attempts are logged with full URL for audit trail.
+* IMPROVED: Menu picker shows nested parent/child structure with auto-check-all behavior.
+* IMPROVED: Audit log auto-cleanup now also prunes old log entries (was only pruning tokens).
+* IMPROVED: IP allowlist parsing now trims whitespace consistently across OTP and magic link paths.
+* IMPROVED: All JS strings are fully localized for translation readiness.
+* FIXED: Missing `access_deactivated` error message in magic link redirect handler.
 
 = 1.0.4 =
 * SECURITY: Added nonce verification to CSV export to prevent CSRF attacks.

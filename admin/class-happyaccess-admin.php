@@ -117,6 +117,7 @@ class HappyAccess_Admin {
 				'confirm_reactivate'      => __( 'Reactivate this user? They will be able to log in again.', 'happyaccess' ),
 				'deactivating'            => __( 'Deactivating...', 'happyaccess' ),
 				'reactivating'            => __( 'Reactivating...', 'happyaccess' ),
+				'no_menu_items'           => __( 'No menu items available.', 'happyaccess' ),
 			),
 		) );
 		

@@ -657,7 +657,7 @@
             );
           } else {
             $("#happyaccess-menu-items-list").html(
-              "<p><em>No menu items available.</em></p>"
+              "<p><em>" + (happyaccess_ajax.strings.no_menu_items || "No menu items available.") + "</em></p>"
             );
           }
         }

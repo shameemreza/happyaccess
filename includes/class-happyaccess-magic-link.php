@@ -401,6 +401,7 @@ class HappyAccess_Magic_Link {
 			'ip_restricted'         => __( 'Access denied. Your IP address is not allowed.', 'happyaccess' ),
 			'rate_limited'          => __( 'Too many attempts. Please try again later.', 'happyaccess' ),
 			'user_creation_failed'  => __( 'Failed to create temporary user. Please try again.', 'happyaccess' ),
+			'access_deactivated'    => __( 'Your temporary access has been suspended by the site administrator.', 'happyaccess' ),
 		);
 
 		$message = isset( $error_messages[ $error_code ] ) ? $error_messages[ $error_code ] : $error_messages['invalid_magic_link'];
