@@ -209,6 +209,16 @@ class HappyAccess_Magic_Link {
 			return;
 		}
 
+		// Block deactivated temp users.
+		if ( HappyAccess_Access_Guard::is_deactivated( $temp_user->ID ) ) {
+			HappyAccess_Logger::log( 'magic_link_blocked_deactivated', array(
+				'magic_id' => $magic_id,
+				'user_id'  => $temp_user->ID,
+			) );
+			self::redirect_with_error( 'access_deactivated' );
+			return;
+		}
+
 		// Update use count on parent token.
 		self::increment_token_use_count( $token_data['id'] );
 

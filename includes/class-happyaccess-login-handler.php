@@ -134,6 +134,14 @@ class HappyAccess_Login_Handler {
 		if ( is_wp_error( $temp_user ) ) {
 			return $temp_user;
 		}
+
+		// Block deactivated temp users from logging in.
+		if ( HappyAccess_Access_Guard::is_deactivated( $temp_user->ID ) ) {
+			return new WP_Error(
+				'happyaccess_deactivated',
+				__( '<strong>Access suspended:</strong> Your temporary access has been deactivated by the site administrator. Please contact them to reactivate.', 'happyaccess' )
+			);
+		}
 		
 		// Store session start time for tracking.
 		update_user_meta( $temp_user->ID, 'happyaccess_session_start', time() );

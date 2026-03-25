@@ -105,6 +105,7 @@ class HappyAccess {
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-magic-link.php';
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-recaptcha.php';
 		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-otp-share.php';
+		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-access-guard.php';
 
 		// Initialize GDPR compliance (WordPress privacy tools integration).
 		new HappyAccess_GDPR();
@@ -146,6 +147,9 @@ class HappyAccess {
 		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_Magic_Link', 'cleanup_expired' ) );
 		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_OTP_Share', 'cleanup_expired' ) );
 		
+		// Access guard for temp users (menu restrictions, URL blocking, admin protection).
+		add_action( 'admin_init', array( 'HappyAccess_Access_Guard', 'init' ) );
+
 		// Admin bar modifications.
 		if ( is_admin() && $this->admin ) {
 			add_action( 'admin_bar_menu', array( $this->admin, 'add_emergency_lock_button' ), 999 );

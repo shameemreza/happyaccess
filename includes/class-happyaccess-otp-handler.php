@@ -123,8 +123,8 @@ class HappyAccess_OTP_Handler {
 		
 		// Check IP restrictions if set.
 		if ( ! empty( $token['ip_restrictions'] ) ) {
-			$allowed_ips = explode( ',', $token['ip_restrictions'] );
-			$client_ip = self::get_client_ip();
+			$allowed_ips = array_map( 'trim', explode( ',', $token['ip_restrictions'] ) );
+			$client_ip   = self::get_client_ip();
 			
 			if ( ! in_array( $client_ip, $allowed_ips, true ) ) {
 				return new WP_Error( 'ip_restricted', __( 'Access denied: This access code is restricted to specific IP addresses. Please connect from an authorized network or contact the site administrator.', 'happyaccess' ) );

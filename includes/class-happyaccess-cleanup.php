@@ -31,6 +31,11 @@ class HappyAccess_Cleanup {
 				'tokens_cleaned' => $cleaned,
 			) );
 		}
+
+		$retention_days = absint( get_option( 'happyaccess_cleanup_days', 30 ) );
+		if ( $retention_days > 0 ) {
+			HappyAccess_Logger::clear_old_logs( $retention_days );
+		}
 	}
 
 	/**

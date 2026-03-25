@@ -44,6 +44,19 @@
         formData += "&magic_link_expiry=" + $("#magic_link_expiry").val();
       }
 
+      // Include hide admin bar
+      if ($("#happyaccess-hide-admin-bar").is(":checked")) {
+        formData += "&hide_admin_bar=1";
+      }
+
+      // Include menu restrictions
+      if ($("#happyaccess-enable-menu-restrictions").is(":checked")) {
+        $('input[name="restricted_menus[]"]:checked').each(function () {
+          formData +=
+            "&restricted_menus[]=" + encodeURIComponent($(this).val());
+        });
+      }
+
       // Disable button
       $("#happyaccess-generate-btn")
         .prop("disabled", true)
@@ -57,8 +70,8 @@
           // Show the OTP display section
           $("#happyaccess-otp-display").show();
           $("#happyaccess-otp-code").text(response.data.otp);
-          $("#happyaccess-expires-display").text(response.data.expires);
-          $("#happyaccess-role-display").text(response.data.role);
+          $("#happyaccess-expires-display").text(response.data.expires || "");
+          $("#happyaccess-role-display").text(response.data.role || "");
           $("#happyaccess-note-display").text(response.data.note || "-");
 
           // Hide share link row (new generation)
@@ -508,6 +521,148 @@
             $button.text(originalText);
           }, 2000);
         });
+      }
+    });
+
+    // Deactivate temp user
+    $(document).on("click", ".happyaccess-deactivate-user", function (e) {
+      e.preventDefault();
+      if (!confirm(happyaccess_ajax.strings.confirm_deactivate)) return;
+
+      var $button = $(this);
+      var userId = $button.data("user-id");
+      var originalText = $button.text();
+      $button
+        .prop("disabled", true)
+        .text(happyaccess_ajax.strings.deactivating || "Deactivating...");
+
+      $.post(
+        happyaccess_ajax.ajax_url,
+        {
+          action: "happyaccess_deactivate_user",
+          user_id: userId,
+          nonce: happyaccess_ajax.nonce,
+        },
+        function (response) {
+          if (response.success) {
+            location.reload();
+          } else {
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
+            $button.prop("disabled", false).text(originalText);
+          }
+        }
+      ).fail(function () {
+        alert(happyaccess_ajax.strings.network_error);
+        $button.prop("disabled", false).text(originalText);
+      });
+    });
+
+    // Reactivate temp user
+    $(document).on("click", ".happyaccess-reactivate-user", function (e) {
+      e.preventDefault();
+      if (!confirm(happyaccess_ajax.strings.confirm_reactivate)) return;
+
+      var $button = $(this);
+      var userId = $button.data("user-id");
+      var originalText = $button.text();
+      $button
+        .prop("disabled", true)
+        .text(happyaccess_ajax.strings.reactivating || "Reactivating...");
+
+      $.post(
+        happyaccess_ajax.ajax_url,
+        {
+          action: "happyaccess_reactivate_user",
+          user_id: userId,
+          nonce: happyaccess_ajax.nonce,
+        },
+        function (response) {
+          if (response.success) {
+            location.reload();
+          } else {
+            alert(response.data.message || happyaccess_ajax.strings.error_generic);
+            $button.prop("disabled", false).text(originalText);
+          }
+        }
+      ).fail(function () {
+        alert(happyaccess_ajax.strings.network_error);
+        $button.prop("disabled", false).text(originalText);
+      });
+    });
+
+    // Toggle menu restrictions picker
+    $("#happyaccess-enable-menu-restrictions").on("change", function () {
+      var $picker = $("#happyaccess-menu-restrictions-picker");
+      if ($(this).is(":checked")) {
+        $picker.slideDown();
+        // Build menu items from pre-loaded data (only once)
+        if (
+          $("#happyaccess-menu-items-list").children(".happyaccess-menu-group")
+            .length === 0
+        ) {
+          var items = happyaccess_ajax.menu_items || [];
+          if (items.length) {
+            var html = "";
+            $.each(items, function (i, item) {
+              var esc = function (s) {
+                return $("<div>").text(s).html();
+              };
+              var hasChildren =
+                item.children && item.children.length > 0;
+
+              html += '<div class="happyaccess-menu-group" style="margin-bottom: 6px;">';
+              html +=
+                '<label style="display:block; margin: 4px 0; cursor: pointer; font-weight: 600;">' +
+                '<input type="checkbox" class="happyaccess-parent-menu" name="restricted_menus[]" value="' +
+                esc(item.slug) +
+                '"> ' +
+                esc(item.title) +
+                ' <code style="font-size: 11px; color: #888; font-weight: normal;">' +
+                esc(item.slug) +
+                "</code></label>";
+
+              if (hasChildren) {
+                html +=
+                  '<div class="happyaccess-submenu-list" style="margin-left: 24px; border-left: 2px solid #ddd; padding-left: 10px;">';
+                $.each(item.children, function (j, child) {
+                  html +=
+                    '<label style="display:block; margin: 2px 0; cursor: pointer;">' +
+                    '<input type="checkbox" class="happyaccess-sub-menu" name="restricted_menus[]" value="' +
+                    esc(child.slug) +
+                    '" data-parent="' +
+                    esc(item.slug) +
+                    '"> ' +
+                    esc(child.title) +
+                    ' <code style="font-size: 10px; color: #999;">' +
+                    esc(child.raw) +
+                    "</code></label>";
+                });
+                html += "</div>";
+              }
+              html += "</div>";
+            });
+            $("#happyaccess-menu-items-list").html(html);
+
+            // When a parent menu is checked, auto-check all its submenus
+            $("#happyaccess-menu-items-list").on(
+              "change",
+              ".happyaccess-parent-menu",
+              function () {
+                var isChecked = $(this).is(":checked");
+                $(this)
+                  .closest(".happyaccess-menu-group")
+                  .find(".happyaccess-sub-menu")
+                  .prop("checked", isChecked);
+              }
+            );
+          } else {
+            $("#happyaccess-menu-items-list").html(
+              "<p><em>No menu items available.</em></p>"
+            );
+          }
+        }
+      } else {
+        $picker.slideUp();
       }
     });
 

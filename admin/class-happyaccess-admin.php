@@ -33,6 +33,8 @@ class HappyAccess_Admin {
 		add_action( 'wp_ajax_happyaccess_generate_magic_link', array( $this, 'ajax_generate_magic_link' ) );
 		add_action( 'wp_ajax_happyaccess_generate_share_link', array( $this, 'ajax_generate_share_link' ) );
 		add_action( 'wp_ajax_happyaccess_email_magic_link', array( $this, 'ajax_email_magic_link' ) );
+		add_action( 'wp_ajax_happyaccess_deactivate_user', array( $this, 'ajax_deactivate_user' ) );
+		add_action( 'wp_ajax_happyaccess_reactivate_user', array( $this, 'ajax_reactivate_user' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_init', array( $this, 'handle_settings' ) );
 	}
@@ -76,9 +78,10 @@ class HappyAccess_Admin {
 		);
 
 		wp_localize_script( 'happyaccess-admin', 'happyaccess_ajax', array(
-			'ajax_url' => admin_url( 'admin-ajax.php' ),
-			'nonce'    => wp_create_nonce( 'happyaccess_ajax' ),
-			'settings' => array(
+			'ajax_url'   => admin_url( 'admin-ajax.php' ),
+			'nonce'      => wp_create_nonce( 'happyaccess_ajax' ),
+			'menu_items' => HappyAccess_Access_Guard::get_admin_menu_items(),
+			'settings'   => array(
 				'magic_link_expiry' => absint( get_option( 'happyaccess_magic_link_expiry', 300 ) ),
 				'share_link_expiry' => absint( get_option( 'happyaccess_share_link_expiry', 300 ) ),
 			),
@@ -110,6 +113,10 @@ class HappyAccess_Admin {
 				'error_generic'           => __( 'An error occurred. Please try again.', 'happyaccess' ),
 				'one_time_use'            => __( 'ONE-TIME USE', 'happyaccess' ),
 				'one_time_use_desc'       => __( 'Code will auto-revoke after first login', 'happyaccess' ),
+				'confirm_deactivate'      => __( 'Deactivate this user? They will be logged out and unable to log in until reactivated.', 'happyaccess' ),
+				'confirm_reactivate'      => __( 'Reactivate this user? They will be able to log in again.', 'happyaccess' ),
+				'deactivating'            => __( 'Deactivating...', 'happyaccess' ),
+				'reactivating'            => __( 'Reactivating...', 'happyaccess' ),
 			),
 		) );
 		
@@ -271,6 +278,35 @@ class HappyAccess_Admin {
 							<?php esc_html_e( 'Revoke access code after first use (single session only)', 'happyaccess' ); ?>
 						</label>
 						<p class="description"><?php esc_html_e( 'When enabled, the code becomes invalid immediately after the support engineer logs in. They cannot log out and log back in - they get only one session.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label><?php esc_html_e( 'Menu Restrictions', 'happyaccess' ); ?></label>
+					</th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Select admin menu pages and specific sub-pages (e.g. WooCommerce tabs, plugin settings) to HIDE from the temporary user. Restricted pages will be invisible and inaccessible, even by direct URL.', 'happyaccess' ); ?>"></span>
+						<label>
+							<input type="checkbox" name="enable_menu_restrictions" id="happyaccess-enable-menu-restrictions" value="1" />
+							<?php esc_html_e( 'Restrict access to specific admin pages', 'happyaccess' ); ?>
+						</label>
+						<div id="happyaccess-menu-restrictions-picker" style="margin-top: 10px; display: none; max-height: 350px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">
+							<p class="description" style="margin: 0 0 8px;"><?php esc_html_e( 'Check the pages you want to HIDE from this temporary user. Expand any top-level menu to restrict individual sub-pages (WooCommerce tabs, EDD sections, etc.):', 'happyaccess' ); ?></p>
+							<div id="happyaccess-menu-items-list">
+								<p class="description"><em><?php esc_html_e( 'Loading menu items...', 'happyaccess' ); ?></em></p>
+							</div>
+						</div>
+						<p class="description"><?php esc_html_e( 'Block entire menus or just individual sub-pages (like WooCommerce Orders, EDD Reports, etc.). All blocked items are hidden from navigation and inaccessible by direct URL.', 'happyaccess' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Hide Admin Bar', 'happyaccess' ); ?></th>
+					<td>
+						<span class="dashicons dashicons-editor-help" style="color:#666; cursor:help; margin-right:5px;" title="<?php esc_attr_e( 'Hide the WordPress admin bar for the temporary user. The HappyAccess timer will still work via the admin page.', 'happyaccess' ); ?>"></span>
+						<label>
+							<input type="checkbox" name="hide_admin_bar" id="happyaccess-hide-admin-bar" value="1" />
+							<?php esc_html_e( 'Hide the admin bar for this temporary user', 'happyaccess' ); ?>
+						</label>
 					</td>
 				</tr>
 				<tr>
@@ -481,12 +517,14 @@ class HappyAccess_Admin {
 							<td><?php echo esc_html( $token_note ? $token_note : '-' ); ?></td>
 							<td>
 								<?php 
-								// Determine status with single-use support.
-								// Note: Revoked tokens are not shown in this list (visible in Audit Logs).
-								$is_single_use = ( 1 === (int) $token['max_uses'] );
+								$is_single_use   = ( 1 === (int) $token['max_uses'] );
+								$temp_user_id_s  = ! empty( $token['user_id'] ) ? absint( $token['user_id'] ) : 0;
+								$is_deactivated_s = $temp_user_id_s && HappyAccess_Access_Guard::is_deactivated( $temp_user_id_s );
 								
 								if ( $is_expired ) {
 									esc_html_e( 'Expired', 'happyaccess' );
+								} elseif ( $is_deactivated_s ) {
+									echo '<span style="color: #dba617;">' . esc_html__( 'Deactivated', 'happyaccess' ) . '</span>';
 								} elseif ( $temp_user ) {
 									if ( $is_single_use ) {
 										echo '<span style="color: #00a32a;">' . esc_html__( 'Active (One-Time)', 'happyaccess' ) . '</span>';
@@ -503,12 +541,30 @@ class HappyAccess_Admin {
 								?>
 							</td>
 							<td>
-								<?php if ( ! $is_expired && ! $token['revoked_at'] ) : ?>
+								<?php if ( ! $is_expired && ! $token['revoked_at'] ) :
+									$temp_user_id = ! empty( $token['user_id'] ) ? absint( $token['user_id'] ) : 0;
+									$is_deactivated = $temp_user_id && HappyAccess_Access_Guard::is_deactivated( $temp_user_id );
+									?>
 									<button type="button" class="button button-small happyaccess-magic-link" 
 											data-token-id="<?php echo esc_attr( $token['id'] ); ?>"
 											title="<?php esc_attr_e( 'Generate one-click login link (expires in minutes)', 'happyaccess' ); ?>">
 										<?php esc_html_e( 'Magic Link', 'happyaccess' ); ?>
 									</button>
+									<?php if ( $temp_user_id && $temp_user ) : ?>
+										<?php if ( $is_deactivated ) : ?>
+											<button type="button" class="button button-small happyaccess-reactivate-user"
+													data-user-id="<?php echo esc_attr( $temp_user_id ); ?>"
+													style="color: #00a32a;">
+												<?php esc_html_e( 'Reactivate', 'happyaccess' ); ?>
+											</button>
+										<?php else : ?>
+											<button type="button" class="button button-small happyaccess-deactivate-user"
+													data-user-id="<?php echo esc_attr( $temp_user_id ); ?>"
+													style="color: #dba617;">
+												<?php esc_html_e( 'Deactivate', 'happyaccess' ); ?>
+											</button>
+										<?php endif; ?>
+									<?php endif; ?>
 									<button type="button" class="button button-small happyaccess-revoke-token" 
 											data-token-id="<?php echo esc_attr( $token['id'] ); ?>">
 										<?php esc_html_e( 'Revoke', 'happyaccess' ); ?>
@@ -1185,10 +1241,28 @@ class HappyAccess_Admin {
 			$ip_restrictions = ! empty( $valid_ips ) ? implode( ',', $valid_ips ) : '';
 		}
 		
+		// Collect menu restrictions.
+		$restricted_menus = array();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized per-element below.
+		$raw_menus = isset( $_POST['restricted_menus'] ) ? wp_unslash( $_POST['restricted_menus'] ) : array();
+		if ( is_array( $raw_menus ) ) {
+			foreach ( $raw_menus as $menu_slug ) {
+				$restricted_menus[] = sanitize_text_field( $menu_slug );
+			}
+		}
+
+		$hide_admin_bar = isset( $_POST['hide_admin_bar'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['hide_admin_bar'] ) );
+
 		// Generate token.
 		$metadata = array();
 		if ( ! empty( $note ) ) {
 			$metadata['note'] = $note;
+		}
+		if ( ! empty( $restricted_menus ) ) {
+			$metadata['restricted_menus'] = $restricted_menus;
+		}
+		if ( $hide_admin_bar ) {
+			$metadata['hide_admin_bar'] = true;
 		}
 		
 		$result = HappyAccess_Token_Manager::generate_token( $duration, $role, $metadata, $ip_restrictions, $single_use );
@@ -1773,6 +1847,62 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 	}
 
 	/**
+	 * Handle AJAX deactivate temp user.
+	 *
+	 * @since 1.1.0
+	 */
+	public function ajax_deactivate_user() {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ), 403 );
+		}
+
+		$user_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
+		if ( ! $user_id ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Invalid user ID', 'happyaccess' ) ) );
+		}
+
+		$result = HappyAccess_Access_Guard::deactivate_user( $user_id );
+
+		if ( $result ) {
+			wp_send_json_success( array( 'message' => esc_html__( 'User deactivated. They can no longer log in until reactivated.', 'happyaccess' ) ) );
+		} else {
+			wp_send_json_error( array( 'message' => esc_html__( 'Failed to deactivate user.', 'happyaccess' ) ) );
+		}
+	}
+
+	/**
+	 * Handle AJAX reactivate temp user.
+	 *
+	 * @since 1.1.0
+	 */
+	public function ajax_reactivate_user() {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'happyaccess_ajax' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Security check failed', 'happyaccess' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Insufficient permissions', 'happyaccess' ) ), 403 );
+		}
+
+		$user_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
+		if ( ! $user_id ) {
+			wp_send_json_error( array( 'message' => esc_html__( 'Invalid user ID', 'happyaccess' ) ) );
+		}
+
+		$result = HappyAccess_Access_Guard::reactivate_user( $user_id );
+
+		if ( $result ) {
+			wp_send_json_success( array( 'message' => esc_html__( 'User reactivated. They can now log in again.', 'happyaccess' ) ) );
+		} else {
+			wp_send_json_error( array( 'message' => esc_html__( 'Failed to reactivate user.', 'happyaccess' ) ) );
+		}
+	}
+
+	/**
 	 * Add Emergency Lock button to admin bar.
 	 *
 	 * @since 1.0.0
@@ -1899,6 +2029,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 	 * @since 1.0.0
 	 */
 	public function admin_notices() {
+		// Show restricted access notice for temp users.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only display check.
+		if ( isset( $_GET['happyaccess_restricted'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['happyaccess_restricted'] ) ) ) {
+			?>
+			<div class="notice notice-error is-dismissible">
+				<p><strong><?php esc_html_e( 'Access denied:', 'happyaccess' ); ?></strong> <?php esc_html_e( 'You do not have permission to access that page. Your temporary access has restricted menu permissions.', 'happyaccess' ); ?></p>
+			</div>
+			<?php
+		}
+
 		// Show activation notice.
 		if ( get_transient( 'happyaccess_activation_notice' ) ) {
 			?>
