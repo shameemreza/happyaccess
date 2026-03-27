@@ -294,9 +294,19 @@ class HappyAccess_Login_Handler {
 					),
 				) );
 				
-				// Add inline script for live countdown.
-				add_action( 'admin_footer', array( __CLASS__, 'countdown_script' ) );
-				add_action( 'wp_footer', array( __CLASS__, 'countdown_script' ) );
+				// Enqueue countdown script with localized strings.
+				wp_enqueue_script(
+					'happyaccess-countdown',
+					plugin_dir_url( dirname( __FILE__ ) ) . 'assets/countdown.js',
+					array(),
+					HAPPYACCESS_VERSION,
+					true
+				);
+				wp_localize_script( 'happyaccess-countdown', 'happyaccessCountdown', array(
+					'expired'   => __( 'Access expired, logging out...', 'happyaccess' ),
+					'expiresIn' => __( 'Access expires in', 'happyaccess' ),
+					'session'   => __( 'Current session', 'happyaccess' ),
+				) );
 			}
 		}
 	}
@@ -384,65 +394,15 @@ class HappyAccess_Login_Handler {
 	}
 
 	/**
-	 * Output countdown timer script.
+	 * Countdown timer is now loaded from assets/countdown.js via wp_enqueue_script()
+	 * in admin_bar_menu(). This method is kept for backward compatibility but is no
+	 * longer hooked — see admin_bar_menu().
 	 *
 	 * @since 1.0.1
+	 * @since 1.0.5 Moved to external JS file with wp_enqueue_script().
 	 */
 	public static function countdown_script() {
-		static $output = false;
-		if ( $output ) {
-			return;
-		}
-		$output = true;
-		?>
-		<script type="text/javascript">
-		(function() {
-			var timer = document.getElementById('happyaccess-timer');
-			if (!timer) return;
-			
-			var expires = parseInt(timer.getAttribute('data-expires'), 10) * 1000;
-			var sessionStart = parseInt(timer.getAttribute('data-session-start'), 10) * 1000;
-			var logoutUrl = timer.getAttribute('data-logout');
-			
-			function formatTime(ms) {
-				var seconds = Math.floor(ms / 1000);
-				if (seconds < 0) seconds = 0;
-				var days = Math.floor(seconds / 86400);
-				var hours = Math.floor((seconds % 86400) / 3600);
-				var mins = Math.floor((seconds % 3600) / 60);
-				var secs = seconds % 60;
-				
-				if (days > 0) {
-					return days + 'd ' + hours + 'h ' + mins + 'm';
-				} else if (hours > 0) {
-					return hours + 'h ' + mins + 'm ' + secs + 's';
-				} else {
-					return mins + 'm ' + secs + 's';
-				}
-			}
-			
-			function updateTimer() {
-				var now = Date.now();
-				var remaining = expires - now;
-				var active = now - sessionStart;
-				
-				if (remaining <= 0) {
-					timer.innerHTML = '⏱️ <?php echo esc_js( __( 'Access expired, logging out...', 'happyaccess' ) ); ?>';
-					// Auto logout after a brief delay.
-					setTimeout(function() {
-						window.location.href = logoutUrl;
-					}, 1500);
-					return;
-				}
-				
-				timer.innerHTML = '⏱️ <?php echo esc_js( __( 'Access expires in', 'happyaccess' ) ); ?> <strong>' + formatTime(remaining) + '</strong> · <?php echo esc_js( __( 'Current session', 'happyaccess' ) ); ?> <strong>' + formatTime(active) + '</strong>';
-			}
-			
-			updateTimer();
-			setInterval(updateTimer, 1000);
-		})();
-		</script>
-		<?php
+		// No-op: countdown is now enqueued as an external script in admin_bar_menu().
 	}
 }
 

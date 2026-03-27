@@ -316,6 +316,13 @@ class HappyAccess_OTP_Share {
 		// Prevent caching.
 		nocache_headers();
 		
+		// Enqueue styles and scripts via WP API.
+		wp_enqueue_style( 'happyaccess-otp-share', HAPPYACCESS_PLUGIN_URL . 'assets/otp-share.css', array(), HAPPYACCESS_VERSION );
+		wp_enqueue_script( 'happyaccess-otp-share-copy', HAPPYACCESS_PLUGIN_URL . 'assets/otp-share-copy.js', array(), HAPPYACCESS_VERSION, true );
+		wp_localize_script( 'happyaccess-otp-share-copy', 'happyaccessOtpShare', array(
+			'copied' => __( 'Copied!', 'happyaccess' ),
+		) );
+		
 		?>
 		<!DOCTYPE html>
 		<html <?php language_attributes(); ?>>
@@ -327,144 +334,9 @@ class HappyAccess_OTP_Share {
 				/* translators: %s: site name */
 				echo esc_html( sprintf( __( 'Access Code - %s', 'happyaccess' ), $site_name ) );
 			?></title>
-			<style>
-				/* WordPress Admin Native Colors */
-				:root {
-					--wp-admin-bg: #f0f0f1;
-					--wp-admin-dark: #1d2327;
-					--wp-admin-blue: #2271b1;
-					--wp-admin-blue-hover: #135e96;
-					--wp-admin-green: #00a32a;
-					--wp-admin-red: #d63638;
-					--wp-admin-border: #c3c4c7;
-					--wp-admin-text: #3c434a;
-					--wp-admin-text-light: #646970;
-				}
-				* { box-sizing: border-box; margin: 0; padding: 0; }
-				body {
-					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-					background: var(--wp-admin-bg);
-					min-height: 100vh;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					padding: 20px;
-				}
-				.container {
-					background: #fff;
-					border: 1px solid var(--wp-admin-border);
-					border-radius: 4px;
-					box-shadow: 0 1px 1px rgba(0,0,0,.04);
-					max-width: 480px;
-					width: 100%;
-					overflow: hidden;
-				}
-				.header {
-					background: var(--wp-admin-dark);
-					color: #fff;
-					padding: 20px 24px;
-					text-align: center;
-				}
-				.header h1 {
-					font-size: 18px;
-					font-weight: 600;
-					margin-bottom: 4px;
-				}
-				.header .site-name {
-					font-size: 13px;
-					opacity: 0.85;
-				}
-				.content {
-					padding: 24px;
-					text-align: center;
-				}
-				.otp-label {
-					font-size: 11px;
-					color: var(--wp-admin-text-light);
-					margin-bottom: 12px;
-					text-transform: uppercase;
-					letter-spacing: 0.5px;
-					font-weight: 500;
-				}
-				.otp-code {
-					font-size: 42px;
-					font-weight: 600;
-					font-family: Consolas, Monaco, monospace;
-					letter-spacing: 8px;
-					color: var(--wp-admin-dark);
-					background: var(--wp-admin-bg);
-					padding: 20px 28px;
-					border: 1px solid var(--wp-admin-border);
-					border-radius: 4px;
-					margin-bottom: 20px;
-					display: inline-block;
-				}
-				.button {
-					display: inline-block;
-					background: var(--wp-admin-blue);
-					color: #fff;
-					border: 1px solid var(--wp-admin-blue);
-					padding: 0 14px;
-					height: 32px;
-					line-height: 30px;
-					border-radius: 3px;
-					font-size: 13px;
-					font-weight: 400;
-					cursor: pointer;
-					text-decoration: none;
-					white-space: nowrap;
-				}
-				.button:hover, .button:focus {
-					background: var(--wp-admin-blue-hover);
-					border-color: var(--wp-admin-blue-hover);
-					color: #fff;
-				}
-				.button.copied {
-					background: var(--wp-admin-green);
-					border-color: var(--wp-admin-green);
-				}
-				.info {
-					margin-top: 20px;
-					padding-top: 20px;
-					border-top: 1px solid var(--wp-admin-border);
-					text-align: left;
-				}
-				.info p {
-					font-size: 13px;
-					color: var(--wp-admin-text-light);
-					margin-bottom: 6px;
-					line-height: 1.5;
-				}
-				.notice-warning {
-					background: #fcf9e8;
-					border-left: 4px solid #dba617;
-					padding: 12px;
-					margin-top: 16px;
-					text-align: left;
-				}
-				.notice-warning p {
-					color: var(--wp-admin-text);
-					font-size: 13px;
-					margin: 0;
-				}
-				.footer {
-					background: var(--wp-admin-bg);
-					border-top: 1px solid var(--wp-admin-border);
-					padding: 12px 24px;
-					text-align: center;
-				}
-				.footer a {
-					color: var(--wp-admin-blue);
-					text-decoration: none;
-					font-size: 13px;
-				}
-				.footer a:hover {
-					color: var(--wp-admin-blue-hover);
-					text-decoration: underline;
-				}
-			</style>
+			<?php wp_print_styles( 'happyaccess-otp-share' ); ?>
 		</head>
-		<body>
+		<body class="happyaccess-otp-page">
 			<div class="container">
 				<div class="header">
 					<h1><?php esc_html_e( 'Temporary Access Code', 'happyaccess' ); ?></h1>
@@ -493,35 +365,7 @@ class HappyAccess_OTP_Share {
 					<a href="<?php echo esc_url( wp_login_url() ); ?>"><?php esc_html_e( 'Go to Login Page', 'happyaccess' ); ?> &rarr;</a>
 				</div>
 			</div>
-			
-			<script>
-			function copyCode() {
-				var code = document.getElementById('otp-code').innerText.trim();
-				var btn = document.getElementById('copy-btn');
-				var originalText = btn.innerText;
-				
-				function showCopied() {
-					btn.classList.add('copied');
-					btn.innerText = '<?php echo esc_js( __( 'Copied!', 'happyaccess' ) ); ?>';
-					setTimeout(function() {
-						btn.classList.remove('copied');
-						btn.innerText = originalText;
-					}, 2000);
-				}
-				
-				if (navigator.clipboard && window.isSecureContext) {
-					navigator.clipboard.writeText(code).then(showCopied);
-				} else {
-					var temp = document.createElement('textarea');
-					temp.value = code;
-					document.body.appendChild(temp);
-					temp.select();
-					document.execCommand('copy');
-					document.body.removeChild(temp);
-					showCopied();
-				}
-			}
-			</script>
+			<?php wp_print_scripts( 'happyaccess-otp-share-copy' ); ?>
 		</body>
 		</html>
 		<?php
@@ -540,6 +384,10 @@ class HappyAccess_OTP_Share {
 		
 		nocache_headers();
 		
+		// Enqueue styles via WP API.
+		wp_enqueue_style( 'dashicons' );
+		wp_enqueue_style( 'happyaccess-otp-share', HAPPYACCESS_PLUGIN_URL . 'assets/otp-share.css', array( 'dashicons' ), HAPPYACCESS_VERSION );
+		
 		?>
 		<!DOCTYPE html>
 		<html <?php language_attributes(); ?>>
@@ -551,77 +399,9 @@ class HappyAccess_OTP_Share {
 				/* translators: %s: site name */
 				echo esc_html( sprintf( __( 'Link Error - %s', 'happyaccess' ), $site_name ) );
 			?></title>
-			<style>
-				:root {
-					--wp-admin-bg: #f0f0f1;
-					--wp-admin-dark: #1d2327;
-					--wp-admin-blue: #2271b1;
-					--wp-admin-blue-hover: #135e96;
-					--wp-admin-border: #c3c4c7;
-					--wp-admin-text: #3c434a;
-					--wp-admin-text-light: #646970;
-				}
-				* { box-sizing: border-box; margin: 0; padding: 0; }
-				body {
-					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-					background: var(--wp-admin-bg);
-					min-height: 100vh;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					padding: 20px;
-				}
-				.container {
-					background: #fff;
-					border: 1px solid var(--wp-admin-border);
-					border-radius: 4px;
-					box-shadow: 0 1px 1px rgba(0,0,0,.04);
-					max-width: 420px;
-					width: 100%;
-					padding: 32px 24px;
-					text-align: center;
-				}
-				.dashicons {
-					font-size: 48px;
-					width: 48px;
-					height: 48px;
-					color: #dba617;
-					margin-bottom: 16px;
-				}
-				h1 {
-					font-size: 20px;
-					font-weight: 600;
-					color: var(--wp-admin-dark);
-					margin-bottom: 12px;
-				}
-				p {
-					color: var(--wp-admin-text-light);
-					line-height: 1.5;
-					margin-bottom: 20px;
-					font-size: 14px;
-				}
-				.button {
-					display: inline-block;
-					background: var(--wp-admin-blue);
-					color: #fff;
-					border: 1px solid var(--wp-admin-blue);
-					padding: 0 14px;
-					height: 32px;
-					line-height: 30px;
-					border-radius: 3px;
-					font-size: 13px;
-					text-decoration: none;
-				}
-				.button:hover {
-					background: var(--wp-admin-blue-hover);
-					border-color: var(--wp-admin-blue-hover);
-					color: #fff;
-				}
-			</style>
-			<?php // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- Standalone error page outside normal WP template loading. ?>
-			<link rel="stylesheet" href="<?php echo esc_url( includes_url( 'css/dashicons.min.css' ) ); ?>" />
+			<?php wp_print_styles( array( 'dashicons', 'happyaccess-otp-share' ) ); ?>
 		</head>
-		<body>
+		<body class="happyaccess-error-page">
 			<div class="container">
 				<span class="dashicons dashicons-warning"></span>
 				<h1><?php esc_html_e( 'Link Unavailable', 'happyaccess' ); ?></h1>

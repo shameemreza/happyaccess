@@ -1335,33 +1335,18 @@ class HappyAccess_Admin {
 			$site_name
 		);
 		
-		// Build HTML message.
+		// Build HTML message with inline styles (email-client compatible).
 		$html_message = '<!DOCTYPE html>
 <html>
 <head>
-<style>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; line-height: 1.6; color: #333; }
-.container { max-width: 600px; margin: 0 auto; padding: 20px; }
-.header { background: #007cba; color: white; padding: 20px; border-radius: 5px 5px 0 0; }
-.content { background: #f7f7f7; padding: 20px; border: 1px solid #ddd; border-top: none; }
-.code-box { background: white; border: 2px dashed #007cba; padding: 20px; margin: 20px 0; text-align: center; border-radius: 5px; }
-.code { font-size: 32px; font-weight: bold; color: #007cba; letter-spacing: 8px; font-family: monospace; }
-.details { background: white; padding: 15px; margin: 20px 0; border-left: 4px solid #007cba; }
-.details-row { margin: 10px 0; }
-.label { font-weight: bold; color: #666; }
-.steps { background: white; padding: 20px; margin: 20px 0; border-radius: 5px; }
-.step { margin: 10px 0; padding-left: 20px; }
-.warning { background: #fef8e7; border-left: 4px solid #f0ad4e; padding: 15px; margin: 20px 0; }
-.security { background: #fff; border: 1px solid #ddd; padding: 15px; margin: 20px 0; border-radius: 5px; }
-.footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
-</style>
+<meta charset="UTF-8">
 </head>
-<body>
-<div class="container">
-<div class="header">
+<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Oxygen-Sans, Ubuntu, Cantarell, \'Helvetica Neue\', sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="background: #007cba; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
 <h2 style="margin: 0; font-size: 24px;">' . esc_html__( '🔐 Temporary Support Access Created', 'happyaccess' ) . '</h2>
 </div>
-<div class="content">';
+<div style="background: #f7f7f7; padding: 20px; border: 1px solid #ddd; border-top: none;">';
 		
 		$html_message .= '<p>' . sprintf(
 			/* translators: %s: site name */
@@ -1369,34 +1354,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxyge
 			'<strong>' . esc_html( $site_name ) . '</strong>'
 		) . '</p>';
 		
-		$html_message .= '<div class="code-box">
+		$html_message .= '<div style="background: white; border: 2px dashed #007cba; padding: 20px; margin: 20px 0; text-align: center; border-radius: 5px;">
 <div style="color: #666; font-size: 14px; margin-bottom: 10px;">' . esc_html__( 'ACCESS CODE', 'happyaccess' ) . '</div>
-<div class="code">' . esc_html( $otp ) . '</div>
+<div style="font-size: 32px; font-weight: bold; color: #007cba; letter-spacing: 8px; font-family: monospace;">' . esc_html( $otp ) . '</div>
 </div>';
 		
-		$html_message .= '<div class="details">
-<div class="details-row"><span class="label">' . esc_html__( 'Valid Until:', 'happyaccess' ) . '</span> ' . esc_html( $expires ) . '</div>
-<div class="details-row"><span class="label">' . esc_html__( 'Access Level:', 'happyaccess' ) . '</span> ' . esc_html( ucfirst( $role ) ) . '</div>';
+		$html_message .= '<div style="background: white; padding: 15px; margin: 20px 0; border-left: 4px solid #007cba;">
+<div style="margin: 10px 0;"><span style="font-weight: bold; color: #666;">' . esc_html__( 'Valid Until:', 'happyaccess' ) . '</span> ' . esc_html( $expires ) . '</div>
+<div style="margin: 10px 0;"><span style="font-weight: bold; color: #666;">' . esc_html__( 'Access Level:', 'happyaccess' ) . '</span> ' . esc_html( ucfirst( $role ) ) . '</div>';
 		
 		if ( $single_use ) {
-			$html_message .= '<div class="details-row"><span class="label" style="color: #d63232;">' . esc_html__( 'Usage:', 'happyaccess' ) . '</span> <strong style="color: #d63232;">' . esc_html__( 'ONE-TIME USE ONLY', 'happyaccess' ) . '</strong></div>';
+			$html_message .= '<div style="margin: 10px 0;"><span style="font-weight: bold; color: #d63232;">' . esc_html__( 'Usage:', 'happyaccess' ) . '</span> <strong style="color: #d63232;">' . esc_html__( 'ONE-TIME USE ONLY', 'happyaccess' ) . '</strong></div>';
 		}
 		
 		if ( ! empty( $note ) ) {
-			$html_message .= '<div class="details-row"><span class="label">' . esc_html__( 'Reference:', 'happyaccess' ) . '</span> ' . esc_html( $note ) . '</div>';
+			$html_message .= '<div style="margin: 10px 0;"><span style="font-weight: bold; color: #666;">' . esc_html__( 'Reference:', 'happyaccess' ) . '</span> ' . esc_html( $note ) . '</div>';
 		}
 		
 		$html_message .= '</div>';
 		
-		$html_message .= '<div class="steps">
+		$html_message .= '<div style="background: white; padding: 20px; margin: 20px 0; border-radius: 5px;">
 <h3 style="margin-top: 0; color: #007cba;">' . esc_html__( '📋 How to Share This Code', 'happyaccess' ) . '</h3>
-<div class="step">1. Share the <strong>6-digit code above</strong> with your authorized support staff.</div>
-<div class="step">2. Direct them to: <a href="' . esc_url( $login_url ) . '" style="color: #007cba;">' . esc_html( $login_url ) . '</a></div>
-<div class="step">3. They enter the code in the <strong>"Temporary Support Access"</strong> field.</div>
-<div class="step">4. No username or password required - just the code!</div>
+<div style="margin: 10px 0; padding-left: 20px;">1. Share the <strong>6-digit code above</strong> with your authorized support staff.</div>
+<div style="margin: 10px 0; padding-left: 20px;">2. Direct them to: <a href="' . esc_url( $login_url ) . '" style="color: #007cba;">' . esc_html( $login_url ) . '</a></div>
+<div style="margin: 10px 0; padding-left: 20px;">3. They enter the code in the <strong>&quot;Temporary Support Access&quot;</strong> field.</div>
+<div style="margin: 10px 0; padding-left: 20px;">4. No username or password required - just the code!</div>
 </div>';
 		
-		$html_message .= '<div class="warning">
+		$html_message .= '<div style="background: #fef8e7; border-left: 4px solid #f0ad4e; padding: 15px; margin: 20px 0;">
 <strong>⚠️ ' . esc_html__( 'Security Reminder', 'happyaccess' ) . '</strong><br>
 ' . sprintf(
 			/* translators: %s: role name */
@@ -1411,7 +1396,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxyge
 		$html_message .= '
 </div>';
 		
-		$html_message .= '<div class="security">
+		$html_message .= '<div style="background: #fff; border: 1px solid #ddd; padding: 15px; margin: 20px 0; border-radius: 5px;">
 <strong>' . esc_html__( '🛡️ Your Security Controls!', 'happyaccess' ) . '</strong>
 <ul style="margin: 10px 0; padding-left: 20px;">
 <li>' . esc_html__( 'Access expires automatically at the time shown above.', 'happyaccess' ) . '</li>
@@ -1426,7 +1411,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxyge
 </div>';
 		
 		$html_message .= '</div>
-<div class="footer">
+<div style="text-align: center; color: #666; font-size: 12px; margin-top: 20px;">
 <p>' . sprintf(
 			/* translators: %s: site name */
 			esc_html__( 'This email was sent from your WordPress site %s using HappyAccess.', 'happyaccess' ),
@@ -1735,38 +1720,29 @@ If you did not generate this code, revoke it immediately.', 'happyaccess' ),
 			$site_name
 		);
 		
-		// Build HTML message.
+		// Build HTML message with inline styles (email-client compatible).
 		$html_message = '<!DOCTYPE html>
 <html>
 <head>
-<style>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; }
-.container { max-width: 600px; margin: 0 auto; padding: 20px; }
-.header { background: #1d2327; color: white; padding: 24px; border-radius: 8px 8px 0 0; text-align: center; }
-.content { background: #f9f9f9; padding: 24px; border: 1px solid #ddd; border-top: none; }
-.btn { display: inline-block; background: #2271b1; color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 6px; font-size: 16px; font-weight: 600; margin: 16px 0; }
-.btn:hover { background: #135e96; }
-.warning { background: #fcf0f1; border-left: 4px solid #d63638; padding: 12px 16px; margin: 16px 0; }
-.footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
-</style>
+<meta charset="UTF-8">
 </head>
-<body>
-<div class="container">
-<div class="header">
+<body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+<div style="background: #1d2327; color: white; padding: 24px; border-radius: 8px 8px 0 0; text-align: center;">
 <h2 style="margin: 0;">' . esc_html__( 'One-Click Access Link', 'happyaccess' ) . '</h2>
 <p style="margin: 8px 0 0; opacity: 0.8;">' . esc_html( $site_name ) . '</p>
 </div>
-<div class="content">
+<div style="background: #f9f9f9; padding: 24px; border: 1px solid #ddd; border-top: none;">
 <p>' . esc_html__( 'You have been granted temporary access. Click the button below to log in instantly - no code required!', 'happyaccess' ) . '</p>
 
 <p style="text-align: center;">
-<a href="' . esc_url( $magic_link_url ) . '" class="btn">' . esc_html__( 'Click to Access Site', 'happyaccess' ) . '</a>
+<a href="' . esc_url( $magic_link_url ) . '" style="display: inline-block; background: #2271b1; color: white !important; text-decoration: none; padding: 16px 32px; border-radius: 6px; font-size: 16px; font-weight: 600; margin: 16px 0;">' . esc_html__( 'Click to Access Site', 'happyaccess' ) . '</a>
 </p>
 
 <p style="font-size: 13px; color: #666;">' . esc_html__( 'Or copy this link:', 'happyaccess' ) . '<br>
 <code style="background: #e0e0e0; padding: 4px 8px; border-radius: 4px; font-size: 12px; word-break: break-all;">' . esc_html( $magic_link_url ) . '</code></p>
 
-<div class="warning">
+<div style="background: #fcf0f1; border-left: 4px solid #d63638; padding: 12px 16px; margin: 16px 0;">
 <strong>' . esc_html__( 'Important Security Information:', 'happyaccess' ) . '</strong>
 <ul style="margin: 8px 0 0; padding-left: 20px;">
 <li>' .
@@ -1778,7 +1754,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 </div>
-<div class="footer">
+<div style="text-align: center; color: #666; font-size: 12px; margin-top: 20px;">
 <p>' . esc_html__( 'This email was sent by HappyAccess. If you did not request this access, please ignore this email.', 'happyaccess' ) . '</p>
 </div>
 </div>
