@@ -4,7 +4,7 @@ Tags: admin, temporary access, support, security, otp
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -205,6 +205,14 @@ By default, logs are kept for 30 days. You can configure this in Settings.
 7. Emergency Lock - Admin bar button for instant revocation.
 
 == Changelog ==
+
+= 1.0.6 =
+* FIXED: OTP login failing on hosts with `mod_security` (Bluehost, HostGator, Newfold) that strip non-standard POST parameters from `wp-login.php`.
+* IMPROVED: Login JS now sets fallback sentinel values in standard username/password fields so the OTP reaches the server even when custom POST parameters are blocked.
+* IMPROVED: Server-side fallback detects sentinel username and extracts OTP from password field when primary POST parameter is unavailable.
+* IMPROVED: Core WordPress auth handlers are removed during fallback to prevent confusing "invalid username" errors.
+* IMPROVED: Login form sets `novalidate` when OTP is entered to prevent browser HTML5 validation from blocking submission with empty username/password.
+* IMPROVED: Fallback usage is logged as `otp_fallback_used` event for diagnosing hosting compatibility issues.
 
 = 1.0.5 =
 * NEW: Admin Menu Restrictions: Block temp users from specific admin pages with a visual picker.

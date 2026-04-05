@@ -3,7 +3,7 @@
  * Plugin Name:       HappyAccess
  * Plugin URI:        https://wordpress.org/plugins/happyaccess
  * Description:       Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
- * Version:           1.0.5
+ * Version:           1.0.6
  * Author:            Shameem Reza
  * Author URI:        https://shameem.dev/
  * License:           GPL v2 or later
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'HAPPYACCESS_VERSION', '1.0.5' );
+define( 'HAPPYACCESS_VERSION', '1.0.6' );
 define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
 define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

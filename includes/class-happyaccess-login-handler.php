@@ -68,6 +68,7 @@ class HappyAccess_Login_Handler {
 	 * @since 1.0.0
 	 * @since 1.0.2 Added auto-revoke for single-use tokens.
 	 * @since 1.0.3 Added reCAPTCHA v3 verification.
+	 * @since 1.0.6 Added fallback for mod_security hosts that strip custom POST params.
 	 *
 	 * @param WP_User|WP_Error|null $user     User object or error.
 	 * @param string                $username Username.
@@ -75,13 +76,29 @@ class HappyAccess_Login_Handler {
 	 * @return WP_User|WP_Error User object on success, error on failure.
 	 */
 	public static function authenticate_otp( $user, $username, $password ) {
-		// Check if OTP is provided.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WordPress login form doesn't use nonces.
-		if ( empty( $_POST['happyaccess_otp'] ) ) {
-			// No OTP provided, continue with normal authentication.
+		$otp_from_post = isset( $_POST['happyaccess_otp'] ) ?
+			sanitize_text_field( wp_unslash( $_POST['happyaccess_otp'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+		// Fallback: server-level WAFs (e.g. mod_security on Newfold/Bluehost
+		// hosting) strip non-standard POST parameters from wp-login.php. The
+		// login JS embeds a sentinel username and the OTP value in the
+		// password field so the code still reaches the server.
+		$is_fallback = false;
+		if ( empty( $otp_from_post ) && 'happyaccess_otp' === $username ) {
+			$otp_from_post = $password;
+			$is_fallback   = true;
+
+			// Prevent core auth handlers from trying to authenticate the
+			// sentinel username and overriding our OTP error messages.
+			remove_filter( 'authenticate', 'wp_authenticate_username_password', 20 );
+			remove_filter( 'authenticate', 'wp_authenticate_email_password', 20 );
+		}
+
+		if ( empty( $otp_from_post ) ) {
 			return $user;
 		}
-		
+
 		// If we already have a WP_User, skip (another authentication method succeeded).
 		if ( $user instanceof WP_User ) {
 			return $user;
@@ -93,13 +110,17 @@ class HappyAccess_Login_Handler {
 			return $recaptcha_result;
 		}
 		
-		// Get and sanitize OTP.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- WordPress login form doesn't use nonces.
-		$otp = isset( $_POST['happyaccess_otp'] ) ? 
-			sanitize_text_field( wp_unslash( $_POST['happyaccess_otp'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		// Sanitize OTP from whichever source provided it.
+		$otp = sanitize_text_field( $otp_from_post );
 		
 		// Remove non-numeric characters.
 		$otp = preg_replace( '/[^0-9]/', '', $otp );
+
+		if ( $is_fallback ) {
+			HappyAccess_Logger::log( 'otp_fallback_used', array(
+				'ip' => HappyAccess_OTP_Handler::get_client_ip(),
+			) );
+		}
 		
 		// Check OTP length.
 		if ( strlen( $otp ) !== 6 ) {
