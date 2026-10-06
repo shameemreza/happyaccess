@@ -291,7 +291,7 @@ final class Cli {
 		$id  = isset( $args[0] ) ? absint( $args[0] ) : 0;
 
 		if ( ( $id > 0 ) === $all ) {
-			\WP_CLI::error( __( 'Give a grant id or use --all, not both.', 'happyaccess' ) );
+			\WP_CLI::error( __( 'Give either a grant id or --all.', 'happyaccess' ) );
 			return;
 		}
 
