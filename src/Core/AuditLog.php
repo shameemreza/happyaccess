@@ -98,6 +98,9 @@ final class AuditLog {
 	/**
 	 * Reads entries, newest first.
 	 *
+	 * Pass `features` as a list of feature keys. An empty list means no filter;
+	 * a non-empty list with no valid key matches nothing.
+	 *
 	 * @param array $filters feature, features, event, user_id, token_id, search, since, until, page, per_page.
 	 * @return array items, total, page, per_page.
 	 */
@@ -127,10 +130,15 @@ final class AuditLog {
 			$where[]  = 'feature = %s';
 			$params[] = sanitize_key( $f['feature'] );
 		}
-		$features = array_values( array_filter( array_map( 'sanitize_key', (array) $f['features'] ) ) );
-		if ( $features ) {
-			$where[] = 'feature IN ( ' . implode( ', ', array_fill( 0, count( $features ), '%s' ) ) . ' )';
-			$params  = array_merge( $params, $features );
+		$requested = (array) $f['features'];
+		if ( $requested ) {
+			$features = array_values( array_filter( array_map( 'sanitize_key', $requested ) ) );
+			if ( $features ) {
+				$where[] = 'feature IN ( ' . implode( ', ', array_fill( 0, count( $features ), '%s' ) ) . ' )';
+				$params  = array_merge( $params, $features );
+			} else {
+				$where[] = '1 = 0';
+			}
 		}
 		if ( '' !== $f['event'] ) {
 			$where[]  = 'event_type = %s';

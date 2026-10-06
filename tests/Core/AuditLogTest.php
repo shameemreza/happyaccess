@@ -152,5 +152,6 @@ class AuditLogTest extends WP_UnitTestCase {
 		$this->assertSame( 2, AuditLog::query( array( 'features' => array( 'support', 'core' ) ) )['total'] );
 		$this->assertSame( 1, AuditLog::query( array( 'features' => array( 'extra' ) ) )['total'] );
 		$this->assertSame( 3, AuditLog::query( array( 'features' => array() ) )['total'] );
+		$this->assertCount( 0, AuditLog::query( array( 'features' => array( '!!' ) ) )['items'] );
 	}
 }
