@@ -196,4 +196,79 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		do_action( 'woocommerce_order_status_changed', 1, 'pending', 'processing', null );
 		$this->assertSame( $before, AuditLog::query( array( 'feature' => 'support', 'token_id' => $this->grant_id ) )['total'] );
 	}
+
+	public function test_user_creation_is_tracked_with_roles() {
+		wp_set_current_user( $this->temp );
+		$id = wp_insert_user(
+			array(
+				'user_login' => 'newbie',
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'newbie@example.org',
+				'role'       => 'editor',
+			)
+		);
+		$this->assertIsInt( $id );
+		$this->assertContains( 'Created user: newbie (editor)', $this->summaries() );
+	}
+
+	public function test_user_creation_without_roles_shows_none() {
+		wp_set_current_user( $this->temp );
+		wp_insert_user(
+			array(
+				'user_login' => 'roleless',
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'roleless@example.org',
+				'role'       => '',
+			)
+		);
+		$this->assertContains( 'Created user: roleless (none)', $this->summaries() );
+	}
+
+	public function test_role_change_is_tracked_with_old_and_new_roles() {
+		$target = self::factory()->user->create( array( 'user_login' => 'swapped', 'role' => 'subscriber' ) );
+		wp_set_current_user( $this->temp );
+		( new WP_User( $target ) )->set_role( 'editor' );
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'user_role_changed' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( 'Changed role for swapped: subscriber to editor', $items[0]['summary'] );
+		$this->assertSame( $this->temp, (int) $items[0]['user_id'] );
+	}
+
+	public function test_role_change_from_no_roles_shows_none() {
+		$target = self::factory()->user->create( array( 'user_login' => 'blank', 'role' => '' ) );
+		wp_set_current_user( $this->temp );
+		( new WP_User( $target ) )->set_role( 'author' );
+		$this->assertContains( 'Changed role for blank: none to author', $this->summaries() );
+	}
+
+	public function test_added_role_is_tracked() {
+		$target = self::factory()->user->create( array( 'user_login' => 'extra', 'role' => 'subscriber' ) );
+		wp_set_current_user( $this->temp );
+		( new WP_User( $target ) )->add_role( 'shop_manager' );
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'user_role_added' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( 'Added role to extra: shop_manager', $items[0]['summary'] );
+	}
+
+	public function test_privacy_erasure_is_tracked() {
+		wp_set_current_user( $this->temp );
+		do_action( 'wp_privacy_personal_data_erased', 42 );
+		$this->assertContains( 'Ran a personal data erasure (#42)', $this->summaries() );
+	}
+
+	public function test_webhook_creation_is_tracked() {
+		wp_set_current_user( $this->temp );
+		do_action( 'woocommerce_new_webhook', 7, null );
+		$this->assertContains( 'Created WooCommerce webhook #7', $this->summaries() );
+	}
+
+	public function test_user_and_role_events_are_not_tracked_for_non_temp_users() {
+		$before = AuditLog::query( array( 'feature' => 'support' ) )['total'];
+		$target = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		( new WP_User( $target ) )->set_role( 'editor' );
+		( new WP_User( $target ) )->add_role( 'author' );
+		do_action( 'wp_privacy_personal_data_erased', 1 );
+		do_action( 'woocommerce_new_webhook', 1, null );
+		$this->assertSame( $before, AuditLog::query( array( 'feature' => 'support' ) )['total'] );
+	}
 }

@@ -64,6 +64,11 @@ final class ActivityTracker {
 		add_action( 'before_delete_post', array( __CLASS__, 'post_deleted' ), 10, 1 );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'order_status_changed' ), 10, 3 );
 		add_action( 'profile_update', array( __CLASS__, 'user_updated' ), 10, 1 );
+		add_action( 'user_register', array( __CLASS__, 'user_created' ), 10, 2 );
+		add_action( 'set_user_role', array( __CLASS__, 'user_role_changed' ), 10, 3 );
+		add_action( 'add_user_role', array( __CLASS__, 'user_role_added' ), 10, 2 );
+		add_action( 'wp_privacy_personal_data_erased', array( __CLASS__, 'privacy_erased' ), 10, 1 );
+		add_action( 'woocommerce_new_webhook', array( __CLASS__, 'wc_webhook_created' ), 10, 1 );
 
 		// One argument only, so option values never reach this class.
 		add_action( 'updated_option', array( __CLASS__, 'collect_option' ), 10, 1 );
@@ -313,6 +318,151 @@ final class ActivityTracker {
 	}
 
 	/**
+	 * Logs a new user. Roles come from the user data when it carries a role,
+	 * and from the stored user otherwise, because the roles may not be set
+	 * yet when the hook fires.
+	 *
+	 * @param int   $user_id  Id of the new user.
+	 * @param array $userdata Data passed to wp_insert_user().
+	 * @return void
+	 */
+	public static function user_created( $user_id, $userdata = array() ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return;
+		}
+		if ( is_array( $userdata ) && array_key_exists( 'role', $userdata ) ) {
+			$roles = '' === (string) $userdata['role'] ? array() : array( (string) $userdata['role'] );
+		} else {
+			$roles = (array) $user->roles;
+		}
+		self::record(
+			'user_created',
+			sprintf(
+				/* translators: 1: user login, 2: comma separated role slugs. */
+				__( 'Created user: %1$s (%2$s)', 'happyaccess' ),
+				$user->user_login,
+				self::role_list( $roles )
+			),
+			array(
+				'user_id' => (int) $user_id,
+				'roles'   => array_values( $roles ),
+			)
+		);
+	}
+
+	/**
+	 * Logs a role being set on a user.
+	 *
+	 * @param int      $user_id   Id of the user.
+	 * @param string   $role      New role.
+	 * @param string[] $old_roles Roles before the change.
+	 * @return void
+	 */
+	public static function user_role_changed( $user_id, $role, $old_roles = array() ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return;
+		}
+		$old = array_values( array_filter( (array) $old_roles, 'strlen' ) );
+		$new = '' === (string) $role ? array() : array( (string) $role );
+		self::record(
+			'user_role_changed',
+			sprintf(
+				/* translators: 1: user login, 2: old role slugs, 3: new role slug. */
+				__( 'Changed role for %1$s: %2$s to %3$s', 'happyaccess' ),
+				$user->user_login,
+				self::role_list( $old ),
+				self::role_list( $new )
+			),
+			array(
+				'user_id'   => (int) $user_id,
+				'old_roles' => $old,
+				'new_roles' => $new,
+			)
+		);
+	}
+
+	/**
+	 * Logs a role being added to a user.
+	 *
+	 * @param int    $user_id Id of the user.
+	 * @param string $role    Role added.
+	 * @return void
+	 */
+	public static function user_role_added( $user_id, $role ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return;
+		}
+		self::record(
+			'user_role_added',
+			sprintf(
+				/* translators: 1: user login, 2: role slug. */
+				__( 'Added role to %1$s: %2$s', 'happyaccess' ),
+				$user->user_login,
+				self::role_list( array( (string) $role ) )
+			),
+			array(
+				'user_id' => (int) $user_id,
+				'role'    => (string) $role,
+			)
+		);
+	}
+
+	/**
+	 * Logs a personal data erasure run. Temp users cannot reach this, so an
+	 * entry here means a guard failed.
+	 *
+	 * @param int $request_id Privacy request id.
+	 * @return void
+	 */
+	public static function privacy_erased( $request_id ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		self::record(
+			'privacy_erased',
+			sprintf(
+				/* translators: %d: privacy request id. */
+				__( 'Ran a personal data erasure (#%d)', 'happyaccess' ),
+				(int) $request_id
+			),
+			array( 'request_id' => (int) $request_id )
+		);
+	}
+
+	/**
+	 * Logs a WooCommerce webhook being created.
+	 *
+	 * @param int $webhook_id Webhook id.
+	 * @return void
+	 */
+	public static function wc_webhook_created( $webhook_id ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		self::record(
+			'wc_webhook_created',
+			sprintf(
+				/* translators: %d: webhook id. */
+				__( 'Created WooCommerce webhook #%d', 'happyaccess' ),
+				(int) $webhook_id
+			),
+			array( 'webhook_id' => (int) $webhook_id )
+		);
+	}
+
+	/**
 	 * Remembers the name of an option that changed, with the temp user who
 	 * changed it. The value is never seen.
 	 *
@@ -511,6 +661,17 @@ final class ActivityTracker {
 	private static function theme_name( $slug ) {
 		$theme = wp_get_theme( $slug );
 		return self::clip( $theme->exists() ? (string) $theme->get( 'Name' ) : $slug );
+	}
+
+	/**
+	 * Role slugs joined with commas, or "none" for an empty list.
+	 *
+	 * @param string[] $roles Role slugs.
+	 * @return string
+	 */
+	private static function role_list( array $roles ) {
+		$roles = array_filter( array_map( 'strval', $roles ), 'strlen' );
+		return $roles ? self::clip( implode( ', ', $roles ) ) : __( 'none', 'happyaccess' );
 	}
 
 	/**

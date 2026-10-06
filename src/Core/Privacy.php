@@ -40,6 +40,43 @@ final class Privacy {
 	);
 
 	/**
+	 * Log events written by a temp user's own requests, or by the login steps
+	 * on behalf of a grant. Every one carries the grant's token id.
+	 */
+	const AGENT_EVENTS = array(
+		'login_success',
+		'login_failed',
+		'access_blocked',
+		'plugin_activated',
+		'plugin_deactivated',
+		'plugin_deleted',
+		'upgrader_ran',
+		'theme_switched',
+		'theme_deleted',
+		'post_created',
+		'post_updated',
+		'post_trashed',
+		'post_deleted',
+		'settings_saved',
+		'order_status_changed',
+		'user_updated',
+		'user_created',
+		'user_role_changed',
+		'user_role_added',
+		'roles_changed',
+		'privacy_erased',
+		'wc_webhook_created',
+	);
+
+	/**
+	 * Log events with no grant token: written by the plugin itself. Emergency
+	 * lock is also one of these, but it is listed once, under ADMIN_EVENTS.
+	 */
+	const CORE_EVENTS = array(
+		'plugin_upgraded',
+	);
+
+	/**
 	 * Adds the policy text, the exporter and the eraser.
 	 *
 	 * @return void
