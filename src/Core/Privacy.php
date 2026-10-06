@@ -7,12 +7,15 @@
 
 namespace HappyAccess\Core;
 
+use HappyAccess\Features\SupportAccess\Grants;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Hooks HappyAccess into the WordPress privacy tools. Data is matched by
- * user ID for the log and by user ID or email for grants. A grant recipient
- * may not be a WordPress user, so the eraser works on the email alone.
+ * Hooks HappyAccess into the WordPress privacy tools. Log entries are matched
+ * by user ID or by the grants addressed to the email. Grants are matched by
+ * recipient email, or by creator for a WordPress user. A grant recipient may
+ * not be a WordPress user, so everything also works on the email alone.
  */
 final class Privacy {
 
@@ -50,19 +53,19 @@ final class Privacy {
 
 		$paragraphs = array(
 			__( 'HappyAccess gives support staff temporary access to this site. When someone uses a support access link or code, the site stores the IP address and browser user agent of that visit, the login times, and a list of the actions taken while the access was active. The list holds names and titles of what changed, never the values of settings or passwords.', 'happyaccess' ),
-			__( 'When an administrator creates support access for a person, the site also stores the label they entered and, if they entered one, the email address of the recipient. The administrator\'s user account is recorded as the creator.', 'happyaccess' ),
+			__( 'When an administrator creates support access for a person, the site also stores the label they entered, the IP allowlist, and, if they entered one, the email address of the recipient. The administrator\'s user account is recorded as the creator.', 'happyaccess' ),
 			sprintf(
 				/* translators: %d: number of days. */
 				_n(
-					'Log entries are deleted after %d day. Login attempt records and expired login challenges are deleted after one day.',
-					'Log entries are deleted after %d days. Login attempt records and expired login challenges are deleted after one day.',
+					'Log entries are deleted after %d day. Support access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day.',
+					'Log entries are deleted after %d days. Support access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day.',
 					$days,
 					'happyaccess'
 				),
 				$days
 			),
 			__( 'If reCAPTCHA is turned on for support logins, the visitor\'s IP address and browser details are sent to Google to check that the visit is from a person. Google handles that data under its own privacy policy.', 'happyaccess' ),
-			__( 'Site owners can export or erase this data from the Tools menu. Erasing it removes the user link and the IP address and user agent from log entries, and clears recipient email addresses from support access records.', 'happyaccess' ),
+			__( 'Site owners can export or erase this data from the Tools menu. Erasing an email address ends any active support access for it, removes the IP address and user agent from the related log entries, and clears the recipient email, label and allowlist from the support access records.', 'happyaccess' ),
 		);
 
 		$html = '';
@@ -110,23 +113,44 @@ final class Privacy {
 	public static function export( $email, $page = 1 ) {
 		global $wpdb;
 
-		$email   = trim( (string) $email );
+		$email = trim( (string) $email );
+		if ( '' === $email ) {
+			return array(
+				'data' => array(),
+				'done' => true,
+			);
+		}
+
 		$user_id = self::user_id_for( $email );
 		$offset  = ( max( 1, (int) $page ) - 1 ) * self::PER_PAGE;
 		$logs    = Installer::table( 'logs' );
 		$tokens  = Installer::table( 'tokens' );
 		$items   = array();
 
-		$log_rows = array();
-		if ( $user_id ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-			$log_rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$logs} WHERE user_id = %d ORDER BY id ASC LIMIT %d OFFSET %d", $user_id, self::PER_PAGE, $offset ), ARRAY_A );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-			$grant_rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$tokens} WHERE created_by = %d OR recipient_email = %s ORDER BY id ASC LIMIT %d OFFSET %d", $user_id, $email, self::PER_PAGE, $offset ), ARRAY_A );
-		} else {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-			$grant_rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$tokens} WHERE recipient_email = %s ORDER BY id ASC LIMIT %d OFFSET %d", $email, self::PER_PAGE, $offset ), ARRAY_A );
-		}
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
+		$log_rows   = (array) $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$logs} WHERE ( ( %d > 0 AND user_id = %d ) OR token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) ) ORDER BY id ASC LIMIT %d OFFSET %d",
+				$user_id,
+				$user_id,
+				$email,
+				self::PER_PAGE,
+				$offset
+			),
+			ARRAY_A
+		);
+		$grant_rows = (array) $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$tokens} WHERE ( ( %d > 0 AND created_by = %d ) OR recipient_email = %s ) ORDER BY id ASC LIMIT %d OFFSET %d",
+				$user_id,
+				$user_id,
+				$email,
+				self::PER_PAGE,
+				$offset
+			),
+			ARRAY_A
+		);
+		// phpcs:enable
 
 		foreach ( $log_rows as $row ) {
 			$items[] = array(
@@ -197,11 +221,20 @@ final class Privacy {
 	}
 
 	/**
-	 * Anonymizes log entries and clears grant fields tied to an email
-	 * address. Works when the email belongs to no user.
+	 * Erases what HappyAccess holds for an email address. Works when the email
+	 * belongs to no user, because a grant recipient can be an outside agent.
 	 *
-	 * Every pass takes the first matching rows. A processed row stops
-	 * matching, so the page number is not used as an offset.
+	 * Each pass runs in this order:
+	 * 1. End the grants addressed to the email that are still current, and
+	 *    swap their labels inside the log summaries.
+	 * 2. Anonymize up to 50 log entries: those of the user, and those of the
+	 *    grants addressed to the email.
+	 * 3. Only when no log entries are left, clear the grant fields. The log
+	 *    match depends on recipient_email, so grants must stay matched until
+	 *    their logs are done.
+	 *
+	 * A processed row stops matching, so the page number is not used as an
+	 * offset.
 	 *
 	 * @param string $email Email address.
 	 * @param int    $page  Page, starting at 1. Unused.
@@ -211,31 +244,127 @@ final class Privacy {
 		global $wpdb;
 
 		unset( $page );
-		$email   = trim( (string) $email );
+		$email = trim( (string) $email );
+		if ( '' === $email ) {
+			return array(
+				'items_removed'  => false,
+				'items_retained' => false,
+				'messages'       => array(),
+				'done'           => true,
+			);
+		}
+
 		$user_id = self::user_id_for( $email );
 		$logs    = Installer::table( 'logs' );
 		$tokens  = Installer::table( 'tokens' );
 
-		$log_count     = 0;
-		$created_count = 0;
-		$email_count   = 0;
+		self::end_and_scrub_grants( $email );
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
-		if ( $user_id ) {
-			$log_count     = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$logs} SET user_id = 0, ip_address = %s, user_agent = %s WHERE user_id = %d LIMIT %d", '0.0.0.0', '', $user_id, self::PER_PAGE ) );
-			$created_count = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$tokens} SET created_by = 0 WHERE created_by = %d LIMIT %d", $user_id, self::PER_PAGE ) );
-		}
-		if ( '' !== $email ) {
-			$email_count = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$tokens} SET recipient_email = %s WHERE recipient_email = %s LIMIT %d", '', $email, self::PER_PAGE ) );
-		}
+		$log_count = (int) $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$logs} SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
+				$user_id,
+				'0.0.0.0',
+				'',
+				$user_id,
+				$user_id,
+				$email,
+				'0.0.0.0',
+				self::PER_PAGE
+			)
+		);
 		// phpcs:enable
 
+		$grant_count   = 0;
+		$created_count = 0;
+		if ( $log_count < self::PER_PAGE ) {
+			$grant_count = self::clear_grants( $email );
+			if ( $user_id ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+				$created_count = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$tokens} SET created_by = 0 WHERE created_by = %d LIMIT %d", $user_id, self::PER_PAGE ) );
+			}
+			Grants::flush_cache();
+		}
+
+		$messages = array();
+		if ( $log_count > 0 ) {
+			$messages[] = __( 'Log entries were kept without IP address or browser details until the retention period ends.', 'happyaccess' );
+		}
+
 		return array(
-			'items_removed'  => ( $log_count + $created_count + $email_count ) > 0,
-			'items_retained' => false,
-			'messages'       => array(),
-			'done'           => $log_count < self::PER_PAGE && $created_count < self::PER_PAGE && $email_count < self::PER_PAGE,
+			'items_removed'  => ( $log_count + $grant_count + $created_count ) > 0,
+			'items_retained' => $log_count > 0,
+			'messages'       => $messages,
+			'done'           => $log_count < self::PER_PAGE && $grant_count < self::PER_PAGE && $created_count < self::PER_PAGE,
 		);
+	}
+
+	/**
+	 * Ends the grants addressed to an email that are still current, and swaps
+	 * their labels inside the log summaries for a placeholder. Running it again
+	 * is harmless.
+	 *
+	 * @param string $email Recipient email.
+	 * @return void
+	 */
+	private static function end_and_scrub_grants( $email ) {
+		global $wpdb;
+
+		$tokens = Installer::table( 'tokens' );
+		$logs   = Installer::table( 'logs' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$tokens} WHERE recipient_email = %s ORDER BY id ASC", $email ) );
+
+		foreach ( $ids as $id ) {
+			$grant = Grants::get( (int) $id );
+			if ( null === $grant ) {
+				continue;
+			}
+			if ( 0 === $grant['revoked_at'] && $grant['expires_at'] > Clock::now() ) {
+				Grants::revoke( $grant['id'], 'privacy_erased' );
+			}
+			if ( '' !== $grant['label'] ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+				$wpdb->query( $wpdb->prepare( "UPDATE {$logs} SET summary = REPLACE( summary, %s, %s ) WHERE token_id = %d AND summary LIKE %s", $grant['label'], '[removed]', $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%' ) );
+			}
+		}
+	}
+
+	/**
+	 * Clears recipient email, label and the IP allowlist of up to 50 grants
+	 * addressed to an email. Menus and the admin bar flag stay.
+	 *
+	 * @param string $email Recipient email.
+	 * @return int Grants cleared.
+	 */
+	private static function clear_grants( $email ) {
+		global $wpdb;
+
+		$tokens = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, restrictions FROM {$tokens} WHERE recipient_email = %s ORDER BY id ASC LIMIT %d", $email, self::PER_PAGE ), ARRAY_A );
+
+		$count = 0;
+		foreach ( $rows as $row ) {
+			$data = array(
+				'recipient_email' => '',
+				'label'           => '',
+				'ip_restrictions' => null,
+			);
+
+			$restrictions = ! empty( $row['restrictions'] ) ? json_decode( (string) $row['restrictions'], true ) : null;
+			if ( is_array( $restrictions ) ) {
+				$restrictions['ips']  = array();
+				$data['restrictions'] = wp_json_encode( $restrictions );
+			}
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+			if ( false !== $wpdb->update( $tokens, $data, array( 'id' => (int) $row['id'] ) ) ) {
+				++$count;
+			}
+		}
+		return $count;
 	}
 
 	/**

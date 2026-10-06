@@ -33,7 +33,12 @@ class CronTest extends WP_UnitTestCase {
 
 	public function test_run_ends_expired_grants_and_purges_old_logs() {
 		Clock::freeze( 1790000000 );
-		Grants::create( array( 'label' => 'old', 'duration' => 3600 ) );
+		Grants::create(
+			array(
+				'label'    => 'old',
+				'duration' => 3600,
+			)
+		);
 		AuditLog::add( 'ancient' );
 		Clock::freeze( 1790000000 + 40 * DAY_IN_SECONDS );
 		$counts = Cron::run();
@@ -72,5 +77,37 @@ class CronTest extends WP_UnitTestCase {
 		}
 		$counts = Cron::run();
 		$this->assertSame( 1, $counts['challenges'] );
+	}
+
+	public function test_run_deletes_grants_ended_before_retention_and_keeps_active_ones() {
+		Clock::freeze( 1790000000 );
+		$ended  = Grants::create( array( 'label' => 'ended' ) );
+		$active = Grants::create(
+			array(
+				'label'    => 'active',
+				'duration' => 30 * DAY_IN_SECONDS,
+			)
+		);
+		Grants::revoke( $ended['id'] );
+
+		Clock::freeze( 1790000000 + 31 * DAY_IN_SECONDS );
+		$counts = Cron::run();
+
+		$this->assertSame( 1, $counts['grants_purged'] );
+		$this->assertNull( Grants::get( $ended['id'] ) );
+		$this->assertNotNull( Grants::get( $active['id'] ) );
+	}
+
+	public function test_run_leaves_an_active_grant_untouched() {
+		$active = Grants::create(
+			array(
+				'label'    => 'still going',
+				'duration' => DAY_IN_SECONDS,
+			)
+		);
+		Cron::run();
+		$grant = Grants::get( $active['id'] );
+		$this->assertSame( 0, $grant['revoked_at'] );
+		$this->assertSame( 'active', $grant['status'] );
 	}
 }
