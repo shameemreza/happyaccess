@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\AccountGuard;
@@ -228,6 +229,62 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertSame( 'protected', CapabilityGuard::level_for( $temp ) );
 		$this->assertTrue( current_user_can( 'install_plugins' ) );
 		$this->assertFalse( current_user_can( 'create_users' ) );
+	}
+
+	public function test_full_cannot_change_its_own_login_details() {
+		$temp   = $this->full();
+		$before = get_userdata( $temp );
+		wp_update_user(
+			array(
+				'ID'         => $temp,
+				'user_pass'  => 'a-new-password',
+				'user_email' => 'self@example.com',
+			)
+		);
+		clean_user_cache( $temp );
+		$after = get_userdata( $temp );
+		$this->assertSame( $before->user_pass, $after->user_pass );
+		$this->assertSame( $before->user_email, $after->user_email );
+		$this->assertFalse( apply_filters( 'allow_password_reset', true, $temp ) );
+	}
+
+	public function test_custom_cannot_change_its_own_login_details() {
+		$temp   = $this->custom( array( 'edit_posts' ) );
+		$before = get_userdata( $temp );
+		wp_update_user(
+			array(
+				'ID'         => $temp,
+				'user_pass'  => 'a-new-password',
+				'user_email' => 'self@example.com',
+			)
+		);
+		clean_user_cache( $temp );
+		$after = get_userdata( $temp );
+		$this->assertSame( $before->user_pass, $after->user_pass );
+		$this->assertSame( $before->user_email, $after->user_email );
+		$this->assertFalse( AccountGuard::skip_change_email( true, array( 'ID' => $temp ) ) );
+	}
+
+	public function test_full_role_edits_are_written_and_logged_once() {
+		global $wpdb;
+		$temp = $this->full();
+		$key  = $wpdb->prefix . 'user_roles';
+
+		get_role( 'editor' )->add_cap( 'happyaccess_test_one' );
+		get_role( 'editor' )->add_cap( 'happyaccess_test_two' );
+		$stored = get_option( $key )['editor']['capabilities'];
+		get_role( 'editor' )->remove_cap( 'happyaccess_test_one' );
+		get_role( 'editor' )->remove_cap( 'happyaccess_test_two' );
+
+		$this->assertTrue( ! empty( $stored['happyaccess_test_one'] ) && ! empty( $stored['happyaccess_test_two'] ) );
+		$rows = AuditLog::query(
+			array(
+				'event'    => 'roles_changed',
+				'token_id' => Capabilities::grant_id( $temp ),
+			)
+		);
+		$this->assertSame( 1, $rows['total'] );
+		$this->assertSame( 'Changed role permissions', $rows['items'][0]['summary'] );
 	}
 
 	public function test_unreadable_grant_fails_closed_to_protected() {

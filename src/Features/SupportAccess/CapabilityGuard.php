@@ -186,6 +186,13 @@ final class CapabilityGuard {
 	private static $roles_logged = false;
 
 	/**
+	 * Whether a custom or full pass already logged a role change in this request.
+	 *
+	 * @var bool
+	 */
+	private static $open_roles_logged = false;
+
+	/**
 	 * Hooks everything the guard needs.
 	 *
 	 * @return void
@@ -289,6 +296,7 @@ final class CapabilityGuard {
 		self::$activation_writes = 0;
 		self::$upgrade_writes    = 0;
 		self::$roles_logged      = false;
+		self::$open_roles_logged = false;
 	}
 
 	/**
@@ -528,6 +536,9 @@ final class CapabilityGuard {
 		}
 		$level = self::level_for( $user_id );
 		if ( 'protected' !== $level ) {
+			if ( self::is_roles_option( $option ) ) {
+				self::log_open_role_change( $user_id, $value, $old_value );
+			}
 			return self::is_protected_option( $option, $level ) ? $old_value : $value;
 		}
 		if ( self::plugin_work_active() && self::is_roles_option( $option ) ) {
@@ -546,6 +557,30 @@ final class CapabilityGuard {
 			return $value;
 		}
 		return self::is_protected_option( $option, $level ) ? $old_value : $value;
+	}
+
+	/**
+	 * Logs the first role table change a custom or full pass makes in a request.
+	 *
+	 * @param int   $user_id   Temp user id.
+	 * @param mixed $value     New role table.
+	 * @param mixed $old_value Current role table.
+	 * @return void
+	 */
+	private static function log_open_role_change( $user_id, $value, $old_value ) {
+		if ( self::$open_roles_logged || $value === $old_value ) {
+			return;
+		}
+		self::$open_roles_logged = true;
+		AuditLog::add(
+			'roles_changed',
+			array(
+				'feature'  => 'support',
+				'token_id' => Capabilities::grant_id( $user_id ),
+				'user_id'  => $user_id,
+				'summary'  => 'Changed role permissions',
+			)
+		);
 	}
 
 	/**

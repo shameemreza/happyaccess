@@ -15,7 +15,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * On the protected level a temp admin may edit customer profiles but never
  * change a password or email, start a password reset, or mint WooCommerce
- * API keys. Custom and full passes are only kept away from the creator's account.
+ * API keys. Custom and full passes are kept away from the creator's
+ * account and their own login details.
  */
 final class AccountGuard {
 
@@ -56,7 +57,7 @@ final class AccountGuard {
 	/**
 	 * Whether the current temp user's rules cover changes to this account.
 	 * On the protected level that is every account. On custom and full it
-	 * is only the grant's creator.
+	 * is the grant's creator and the temp user's own account.
 	 *
 	 * @param int $user_id Account being changed.
 	 * @return bool
@@ -69,13 +70,17 @@ final class AccountGuard {
 		if ( 'protected' === CapabilityGuard::level_for( $current ) ) {
 			return true;
 		}
+		$user_id = (int) $user_id;
+		if ( $user_id === $current ) {
+			return true;
+		}
 		$creator = CapabilityGuard::creator_for( $current );
-		return $creator > 0 && (int) $user_id === $creator;
+		return $creator > 0 && $user_id === $creator;
 	}
 
 	/**
 	 * Restores the stored password hash and email when a temp user updates an existing user.
-	 * On custom and full this applies only to the grant's creator.
+	 * On custom and full this applies to the grant's creator and the temp user.
 	 *
 	 * @param array    $data     Data about to be saved, with the password already hashed.
 	 * @param bool     $update   Whether this is an update.
@@ -100,7 +105,7 @@ final class AccountGuard {
 	/**
 	 * Skips the "password changed" and "email changed" notices when a temp user
 	 * saves a profile. The change is frozen, so the customer would get a false alarm.
-	 * On custom and full this applies only to the grant's creator.
+	 * On custom and full this applies to the grant's creator and the temp user.
 	 *
 	 * @param bool  $send     Whether to send the email.
 	 * @param array $user     User data before the update.
@@ -115,7 +120,8 @@ final class AccountGuard {
 
 	/**
 	 * Stops password resets for temp users, and any reset started by a temp
-	 * user. On custom and full only a reset of the creator's account is stopped.
+	 * user. On custom and full only resets of the creator's account and the
+	 * temp user's own account are stopped.
 	 *
 	 * @param bool $allow   Whether the reset is allowed.
 	 * @param int  $user_id User the reset is for.
