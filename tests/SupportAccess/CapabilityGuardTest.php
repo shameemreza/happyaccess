@@ -217,6 +217,38 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		$this->assertSame( 'Admin renamed', get_option( $key )['administrator']['name'] );
 	}
 
+	public function test_roles_changed_is_logged_once_per_open_window() {
+		global $wpdb;
+		$temp = $this->temp();
+		$key  = $wpdb->prefix . 'user_roles';
+		wp_set_current_user( $temp );
+		$rename = function ( $name ) use ( $key ) {
+			$roles                            = get_option( $key );
+			$roles['administrator']['name'] = $name;
+			update_option( $key, $roles );
+		};
+
+		do_action( 'activate_plugin', 'x/x.php', false );
+		do_action( 'activate_plugin', 'y/y.php', false );
+		$rename( 'One' );
+		$rename( 'Two' );
+		do_action( 'activated_plugin', 'y/y.php', false );
+		$rename( 'Three' );
+		$this->assertSame( 'Three', get_option( $key )['administrator']['name'] );
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'roles_changed' ) )['total'] );
+		do_action( 'activated_plugin', 'x/x.php', false );
+
+		do_action( 'activate_plugin', 'z/z.php', false );
+		$rename( 'Four' );
+		$this->assertSame( 2, AuditLog::query( array( 'event' => 'roles_changed' ) )['total'] );
+
+		CapabilityGuard::reset();
+		do_action( 'activate_plugin', 'z/z.php', false );
+		$rename( 'Five' );
+		$this->assertSame( 3, AuditLog::query( array( 'event' => 'roles_changed' ) )['total'] );
+		do_action( 'activated_plugin', 'z/z.php', false );
+	}
+
 	public function test_other_protected_options_stay_protected_during_activation() {
 		$temp = $this->temp();
 		update_option( 'default_role', 'subscriber' );

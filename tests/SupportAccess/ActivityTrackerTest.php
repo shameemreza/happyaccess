@@ -122,6 +122,20 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		$this->assertSame( 'Saved settings: 1 options', $items[0]['summary'] );
 	}
 
+	public function test_the_role_table_is_left_to_the_roles_changed_event() {
+		global $wpdb;
+		wp_set_current_user( $this->temp );
+		$key                              = $wpdb->prefix . 'user_roles';
+		$roles                            = get_option( $key );
+		$roles['administrator']['name'] = 'Renamed';
+		update_option( $key, $roles );
+		update_option( 'blogname', 'Visible change' );
+		ActivityTracker::flush();
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( array( 'blogname' ), $items[0]['meta']['options'] );
+	}
+
 	public function test_only_noise_options_write_no_entry() {
 		wp_set_current_user( $this->temp );
 		update_option( 'active_plugins', array( 'hello.php' ) );

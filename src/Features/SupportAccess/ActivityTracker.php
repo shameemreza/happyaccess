@@ -639,7 +639,12 @@ final class ActivityTracker {
 	 * @return bool
 	 */
 	private static function is_skipped_option( $option ) {
+		global $wpdb;
 		if ( in_array( $option, self::SKIPPED_OPTIONS, true ) ) {
+			return true;
+		}
+		// The role table has its own roles_changed event.
+		if ( $wpdb->prefix . 'user_roles' === $option ) {
 			return true;
 		}
 		foreach ( self::SKIPPED_PREFIXES as $prefix ) {

@@ -143,6 +143,15 @@ final class CapabilityGuard {
 	private static $upgrade_writes = 0;
 
 	/**
+	 * Whether the open plugin work window already logged a role change. Core
+	 * saves the whole role table on every add_cap(), so one row per window
+	 * is enough.
+	 *
+	 * @var bool
+	 */
+	private static $roles_logged = false;
+
+	/**
 	 * Hooks everything the guard needs.
 	 *
 	 * @return void
@@ -194,6 +203,7 @@ final class CapabilityGuard {
 	 */
 	public static function plugin_work_finished() {
 		self::$activation_writes = max( 0, self::$activation_writes - 1 );
+		self::forget_logged_roles_when_closed();
 	}
 
 	/**
@@ -203,6 +213,18 @@ final class CapabilityGuard {
 	 */
 	public static function upgrade_work_finished() {
 		self::$upgrade_writes = 0;
+		self::forget_logged_roles_when_closed();
+	}
+
+	/**
+	 * Lets the next window log its own role change once no plugin work is left.
+	 *
+	 * @return void
+	 */
+	private static function forget_logged_roles_when_closed() {
+		if ( ! self::plugin_work_active() ) {
+			self::$roles_logged = false;
+		}
 	}
 
 	/**
@@ -224,7 +246,7 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Clears the cache and both plugin work counters. For tests.
+	 * Clears the cache, both plugin work counters and the logged role flag. For tests.
 	 *
 	 * @return void
 	 */
@@ -232,6 +254,7 @@ final class CapabilityGuard {
 		self::flush_cache();
 		self::$activation_writes = 0;
 		self::$upgrade_writes    = 0;
+		self::$roles_logged      = false;
 	}
 
 	/**
@@ -390,7 +413,8 @@ final class CapabilityGuard {
 			return $value;
 		}
 		if ( self::plugin_work_active() && self::is_roles_option( $option ) ) {
-			if ( $value !== $old_value ) {
+			if ( ! self::$roles_logged && $value !== $old_value ) {
+				self::$roles_logged = true;
 				AuditLog::add(
 					'roles_changed',
 					array(
