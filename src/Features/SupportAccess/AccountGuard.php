@@ -7,6 +7,7 @@
 
 namespace HappyAccess\Features\SupportAccess;
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 
 defined( 'ABSPATH' ) || exit;
@@ -29,7 +30,8 @@ final class AccountGuard {
 		add_filter( 'allow_password_reset', array( __CLASS__, 'block_reset' ), PHP_INT_MAX, 2 );
 		add_filter( 'woocommerce_save_account_details_errors', array( __CLASS__, 'block_wc_account' ), 10, 2 );
 		add_action( 'wp_ajax_woocommerce_update_api_key', array( __CLASS__, 'block_wc_api_key' ), 0 );
-		add_action( 'parse_request', array( __CLASS__, 'block_wc_auth' ), 0 );
+		// WooCommerce hooks wc-auth on parse_request at priority 0 when it loads, before this runs, so go first.
+		add_action( 'parse_request', array( __CLASS__, 'block_wc_auth' ), PHP_INT_MIN );
 	}
 
 	/**
@@ -116,6 +118,7 @@ final class AccountGuard {
 		if ( ! self::is_blocked_request() ) {
 			return;
 		}
+		self::log_blocked( 'ajax' );
 		wp_send_json_error( array( 'message' => __( "Temporary support accounts can't manage API keys.", 'happyaccess' ) ), 403 );
 	}
 
@@ -129,6 +132,28 @@ final class AccountGuard {
 		if ( ! $wp instanceof \WP || empty( $wp->query_vars['wc-auth-version'] ) || ! self::is_blocked_request() ) {
 			return;
 		}
+		self::log_blocked( 'wc-auth' );
 		wp_die( esc_html__( "Temporary support accounts can't authorize API access.", 'happyaccess' ), '', array( 'response' => 403 ) );
+	}
+
+	/**
+	 * Logs a blocked API key request under the current temp user's grant.
+	 * WooCommerce has no action for a new key, so the attempt is what gets logged.
+	 *
+	 * @param string $source ajax or wc-auth.
+	 * @return void
+	 */
+	private static function log_blocked( $source ) {
+		$user_id = get_current_user_id();
+		AuditLog::add(
+			'wc_key_blocked',
+			array(
+				'feature'  => 'support',
+				'token_id' => Capabilities::grant_id( $user_id ),
+				'user_id'  => $user_id,
+				'summary'  => __( 'Blocked a WooCommerce API key request', 'happyaccess' ),
+				'meta'     => array( 'source' => $source ),
+			)
+		);
 	}
 }

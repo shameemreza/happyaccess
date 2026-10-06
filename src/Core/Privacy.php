@@ -66,6 +66,7 @@ final class Privacy {
 		'roles_changed',
 		'privacy_erased',
 		'wc_webhook_created',
+		'wc_key_blocked',
 	);
 
 	/**

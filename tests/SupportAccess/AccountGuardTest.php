@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\AccountGuard;
@@ -113,6 +114,72 @@ class AccountGuardTest extends WP_UnitTestCase {
 		$wp->query_vars['wc-auth-version'] = 1;
 		$this->expectException( WPDieException::class );
 		AccountGuard::block_wc_auth( $wp );
+	}
+
+	public function test_wc_auth_block_runs_before_a_priority_zero_handler_added_earlier() {
+		// WooCommerce adds its wc-auth handler at priority 0 when it loads, before HappyAccess registers.
+		remove_all_actions( 'parse_request' );
+		$ran = false;
+		$wc  = function () use ( &$ran ) {
+			$ran = true;
+		};
+		add_action( 'parse_request', $wc, 0 );
+		AccountGuard::register();
+
+		wp_set_current_user( $this->temp );
+		$wp                                = new WP();
+		$wp->query_vars['wc-auth-version'] = 1;
+		$died                              = false;
+		try {
+			do_action_ref_array( 'parse_request', array( &$wp ) );
+		} catch ( WPDieException $e ) {
+			$died = true;
+		}
+		$this->assertTrue( $died );
+		$this->assertFalse( $ran );
+		$this->assertSame( 1, $this->blocked_rows() );
+	}
+
+	public function test_wc_api_key_ajax_request_is_stopped_and_logged_for_temp_users() {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter( 'wp_die_ajax_handler', array( $this, 'get_wp_die_handler' ) );
+		wp_set_current_user( $this->temp );
+		$died = false;
+		ob_start();
+		try {
+			do_action( 'wp_ajax_woocommerce_update_api_key' );
+		} catch ( WPDieException $e ) {
+			$died = true;
+		} catch ( WPAjaxDieStopException $e ) {
+			$died = true;
+		}
+		$output = (string) ob_get_clean();
+		$this->assertTrue( $died );
+		$this->assertStringContainsString( '"success":false', $output );
+		$this->assertSame( 1, $this->blocked_rows() );
+	}
+
+	public function test_wc_key_requests_by_other_users_are_not_blocked_or_logged() {
+		$wp                                = new WP();
+		$wp->query_vars['wc-auth-version'] = 1;
+		AccountGuard::block_wc_auth( $wp );
+		AccountGuard::block_wc_api_key();
+		$this->assertSame( 0, $this->blocked_rows() );
+	}
+
+	/**
+	 * Blocked key requests logged for the temp user's grant.
+	 *
+	 * @return int
+	 */
+	private function blocked_rows() {
+		$rows = AuditLog::query( array( 'event' => 'wc_key_blocked' ) )['items'];
+		foreach ( $rows as $row ) {
+			$this->assertSame( Capabilities::grant_id( $this->temp ), (int) $row['token_id'] );
+			$this->assertSame( $this->temp, (int) $row['user_id'] );
+			$this->assertSame( 'Blocked a WooCommerce API key request', $row['summary'] );
+		}
+		return count( $rows );
 	}
 
 	public function test_credential_change_emails_are_skipped_for_temp_users() {
