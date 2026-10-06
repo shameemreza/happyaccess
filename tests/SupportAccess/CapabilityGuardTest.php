@@ -43,17 +43,24 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		foreach ( array( 'create_users', 'promote_users', 'delete_users', 'edit_plugins', 'edit_themes', 'edit_files', Capabilities::MANAGE ) as $cap ) {
 			$this->assertFalse( user_can( $temp, $cap ), $cap );
 		}
-		foreach ( array( 'manage_options', 'activate_plugins', 'install_plugins', 'edit_posts' ) as $cap ) {
+		foreach ( array( 'manage_options', 'activate_plugins', 'edit_posts' ) as $cap ) {
 			$this->assertTrue( user_can( $temp, $cap ), $cap );
 		}
 	}
 
-	public function test_block_installs_removes_install_caps() {
-		$temp = $this->temp( array( 'block_installs' => true ) );
-		foreach ( array( 'install_plugins', 'update_plugins', 'delete_plugins', 'install_themes', 'update_core' ) as $cap ) {
+	public function test_default_grant_blocks_installs_but_allows_activation() {
+		$temp = $this->temp();
+		foreach ( array( 'install_plugins', 'upload_plugins', 'update_plugins', 'delete_plugins', 'install_themes', 'update_core' ) as $cap ) {
 			$this->assertFalse( user_can( $temp, $cap ), $cap );
 		}
 		$this->assertTrue( user_can( $temp, 'activate_plugins' ) );
+	}
+
+	public function test_allow_installs_restores_install_caps() {
+		$temp = $this->temp( array( 'allow_installs' => true ) );
+		foreach ( array( 'install_plugins', 'update_core' ) as $cap ) {
+			$this->assertTrue( user_can( $temp, $cap ), $cap );
+		}
 	}
 
 	public function test_user_edits_on_self_owner_and_admins_are_blocked() {

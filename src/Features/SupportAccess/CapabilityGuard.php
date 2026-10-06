@@ -43,7 +43,7 @@ final class CapabilityGuard {
 	);
 
 	/**
-	 * Caps removed when the grant blocks installs.
+	 * Caps removed unless the grant allows installs.
 	 */
 	const INSTALL_CAPS = array(
 		'install_plugins',
@@ -166,7 +166,7 @@ final class CapabilityGuard {
 		}
 
 		$rules = self::rules( $user_id );
-		if ( 'protected' !== $rules['protection'] && array_intersect( $asked, self::INSTALL_CAPS ) ) {
+		if ( 'protected_allow_installs' !== $rules['protection'] && array_intersect( $asked, self::INSTALL_CAPS ) ) {
 			return $deny;
 		}
 
@@ -319,7 +319,7 @@ final class CapabilityGuard {
 
 	/**
 	 * Protection level and creator of a temp user's grant. A grant that
-	 * cannot be read fails closed to the no installs level.
+	 * cannot be read fails closed to the default level, which blocks installs.
 	 *
 	 * @param int $user_id Temp user id.
 	 * @return array protection and created_by.
@@ -330,7 +330,7 @@ final class CapabilityGuard {
 		if ( ! isset( self::$rules[ $key ] ) ) {
 			$grant               = $grant_id > 0 ? Grants::get( $grant_id ) : null;
 			self::$rules[ $key ] = array(
-				'protection' => is_array( $grant ) ? $grant['protection'] : 'protected_no_installs',
+				'protection' => is_array( $grant ) ? $grant['protection'] : 'protected',
 				'created_by' => is_array( $grant ) ? (int) $grant['created_by'] : 0,
 			);
 		}

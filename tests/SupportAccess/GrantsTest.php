@@ -49,7 +49,7 @@ class GrantsTest extends WP_UnitTestCase {
 	}
 
 	public function test_get_normalizes_and_defaults() {
-		$made  = Grants::create( array( 'label' => 'Acme', 'role' => 'editor', 'one_time' => true, 'ips' => array( '203.0.113.9', 'nope' ), 'menus' => array( 'edit.php' ), 'block_installs' => true, 'notify' => 'every' ) );
+		$made  = Grants::create( array( 'label' => 'Acme', 'role' => 'editor', 'one_time' => true, 'ips' => array( '203.0.113.9', 'nope' ), 'menus' => array( 'edit.php' ), 'allow_installs' => true, 'notify' => 'every' ) );
 		$grant = Grants::get( $made['id'] );
 
 		$this->assertSame( 'editor', $grant['role'] );
@@ -57,7 +57,9 @@ class GrantsTest extends WP_UnitTestCase {
 		$this->assertSame( array( '203.0.113.9' ), $grant['restrictions']['ips'] );
 		$this->assertSame( array( 'edit.php' ), $grant['restrictions']['menus'] );
 		$this->assertFalse( $grant['restrictions']['hide_admin_bar'] );
-		$this->assertSame( 'protected_no_installs', $grant['protection'] );
+		$this->assertSame( 'protected_allow_installs', $grant['protection'] );
+		$default = Grants::get( Grants::create( array( 'label' => 'Plain' ) )['id'] );
+		$this->assertSame( 'protected', $default['protection'] );
 		$this->assertSame( 'every', $grant['notify'] );
 		$this->assertSame( $this->owner, $grant['created_by'] );
 		$this->assertSame( 'active', $grant['status'] );

@@ -43,7 +43,7 @@ final class Grants {
 	/**
 	 * Creates a grant.
 	 *
-	 * @param array $args label, email, role, duration, one_time, ips, menus, hide_admin_bar, redirect_to, block_installs, notify, created_by.
+	 * @param array $args label, email, role, duration, one_time, ips, menus, hide_admin_bar, redirect_to, allow_installs, notify, created_by.
 	 * @return array id, code, link_key, expires_at.
 	 * @throws \InvalidArgumentException When an argument is not valid.
 	 * @throws \RuntimeException         When the site key is not stored or no free code was found.
@@ -132,7 +132,7 @@ final class Grants {
 				'label'           => $label,
 				'recipient_email' => $email,
 				'role'            => $role,
-				'protection'      => empty( $args['block_installs'] ) ? 'protected' : 'protected_no_installs',
+				'protection'      => empty( $args['allow_installs'] ) ? 'protected' : 'protected_allow_installs',
 				'restrictions'    => wp_json_encode(
 					array(
 						'ips'            => $ips,
