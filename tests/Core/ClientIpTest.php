@@ -1,0 +1,74 @@
+<?php
+/**
+ * ClientIp tests.
+ *
+ * @package HappyAccess
+ */
+
+use HappyAccess\Core\ClientIp;
+use HappyAccess\Core\Settings;
+
+class ClientIpTest extends WP_UnitTestCase {
+
+	private $saved_server;
+
+	public function set_up() {
+		parent::set_up();
+		delete_option( Settings::OPTION );
+		$this->saved_server = $_SERVER;
+	}
+
+	public function tear_down() {
+		$_SERVER = $this->saved_server;
+		parent::tear_down();
+	}
+
+	public function test_remote_addr_is_used_by_default() {
+		$server = array(
+			'REMOTE_ADDR'           => '203.0.113.9',
+			'HTTP_CF_CONNECTING_IP' => '198.51.100.1',
+		);
+		$this->assertSame( '203.0.113.9', ClientIp::from_server( $server ) );
+	}
+
+	public function test_trusted_header_when_configured() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array(
+			'REMOTE_ADDR'          => '10.0.0.1',
+			'HTTP_X_FORWARDED_FOR' => '198.51.100.7, 10.0.0.1',
+		);
+		$this->assertSame( '198.51.100.7', ClientIp::from_server( $server ) );
+
+		$server['HTTP_X_FORWARDED_FOR'] = 'not-an-ip';
+		$this->assertSame( '10.0.0.1', ClientIp::from_server( $server ) );
+	}
+
+	public function test_missing_remote_addr_falls_back() {
+		$this->assertSame( '0.0.0.0', ClientIp::from_server( array() ) );
+	}
+
+	public function test_filter_overrides_and_invalid_filter_is_ignored() {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		add_filter( 'happyaccess_client_ip', function () {
+			return '192.0.2.44';
+		} );
+		$this->assertSame( '192.0.2.44', ClientIp::get() );
+
+		remove_all_filters( 'happyaccess_client_ip' );
+		add_filter( 'happyaccess_client_ip', function () {
+			return 'garbage';
+		} );
+		$this->assertSame( '203.0.113.9', ClientIp::get() );
+	}
+
+	public function test_ipv6_bucket_groups_a_64() {
+		$this->assertSame( ClientIp::bucket( '2001:db8:1:2::a' ), ClientIp::bucket( '2001:db8:1:2:ffff::1' ) );
+		$this->assertNotSame( ClientIp::bucket( '2001:db8:1:2::a' ), ClientIp::bucket( '2001:db8:1:3::a' ) );
+		$this->assertSame( '203.0.113.9', ClientIp::bucket( '203.0.113.9' ) );
+	}
+
+	public function test_anonymize() {
+		$this->assertSame( '203.0.113.0', ClientIp::anonymize( '203.0.113.9' ) );
+		$this->assertSame( '2001:db8:1::', ClientIp::anonymize( '2001:db8:1:2:3:4:5:6' ) );
+	}
+}
