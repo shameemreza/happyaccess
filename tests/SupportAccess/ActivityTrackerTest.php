@@ -26,6 +26,11 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		ActivityTracker::register();
 	}
 
+	public function tear_down() {
+		ActivityTracker::reset();
+		parent::tear_down();
+	}
+
 	private function summaries() {
 		return wp_list_pluck( AuditLog::query( array( 'token_id' => $this->grant_id, 'feature' => 'support', 'per_page' => 100 ) )['items'], 'summary' );
 	}
@@ -62,5 +67,133 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		wp_set_current_user( $this->temp );
 		do_action( 'activated_plugin', 'hello.php', false );
 		$this->assertContains( 'Activated plugin: hello.php', $this->summaries() );
+	}
+
+	public function test_plugin_deactivation_is_tracked() {
+		wp_set_current_user( $this->temp );
+		do_action( 'deactivated_plugin', 'hello.php', false );
+		$this->assertContains( 'Deactivated plugin: hello.php', $this->summaries() );
+	}
+
+	public function test_theme_switch_is_tracked() {
+		wp_set_current_user( $this->temp );
+		do_action( 'switch_theme', 'Storefront', null, null );
+		$this->assertContains( 'Switched theme to Storefront', $this->summaries() );
+	}
+
+	public function test_user_update_is_tracked() {
+		$other = self::factory()->user->create( array( 'user_login' => 'someone_else' ) );
+		wp_set_current_user( $this->temp );
+		wp_update_user( array( 'ID' => $other, 'display_name' => 'Changed' ) );
+		$this->assertContains( 'Updated user: someone_else', $this->summaries() );
+	}
+
+	public function test_order_status_change_is_tracked_with_fake_ids() {
+		wp_set_current_user( $this->temp );
+		do_action( 'woocommerce_order_status_changed', 987654, 'pending', 'processing', null );
+		$this->assertContains( 'Order #987654: pending to processing', $this->summaries() );
+	}
+
+	public function test_noise_options_are_skipped() {
+		wp_set_current_user( $this->temp );
+		update_option( 'active_plugins', array( 'hello.php' ) );
+		update_option( 'cron', array() );
+		update_option( 'happyaccess_anything', 'x' );
+		update_option( 'rewrite_rules', 'x' );
+		update_option( 'recently_activated', array( 'hello.php' => 1 ) );
+		update_option( 'blogname', 'Visible change' );
+		ActivityTracker::flush();
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( array( 'blogname' ), $items[0]['meta']['options'] );
+		$this->assertSame( 'Saved settings: 1 options', $items[0]['summary'] );
+	}
+
+	public function test_only_noise_options_write_no_entry() {
+		wp_set_current_user( $this->temp );
+		update_option( 'active_plugins', array( 'hello.php' ) );
+		update_option( 'happyaccess_anything', 'x' );
+		ActivityTracker::flush();
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_flush_uses_the_user_stored_when_the_option_changed() {
+		wp_set_current_user( $this->temp );
+		update_option( 'blogname', 'Changed by support' );
+		wp_set_current_user( 0 );
+		ActivityTracker::flush();
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( (int) $this->temp, (int) $items[0]['user_id'] );
+	}
+
+	public function test_flush_empties_the_collected_options() {
+		wp_set_current_user( $this->temp );
+		update_option( 'blogname', 'Changed once' );
+		ActivityTracker::flush();
+		ActivityTracker::flush();
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_permanent_delete_is_tracked_even_after_trash() {
+		wp_set_current_user( $this->temp );
+		$id = self::factory()->post->create( array( 'post_title' => 'Gone', 'post_type' => 'page' ) );
+		wp_trash_post( $id );
+		wp_delete_post( $id, true );
+		$this->assertContains( 'Deleted Page: Gone (#' . $id . ')', $this->summaries() );
+	}
+
+	public function test_permanent_delete_by_owner_is_not_tracked() {
+		$id = self::factory()->post->create( array( 'post_title' => 'Owner page', 'post_type' => 'page' ) );
+		wp_delete_post( $id, true );
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'post_deleted' ) )['total'] );
+	}
+
+	/**
+	 * Core reads DOING_AUTOSAVE, so the constant is defined in a separate
+	 * process and cannot leak into other tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_draft_update_is_still_logged_during_autosave() {
+		wp_set_current_user( $this->temp );
+		$id = self::factory()->post->create( array( 'post_title' => 'Draft', 'post_type' => 'post', 'post_status' => 'draft' ) );
+		define( 'DOING_AUTOSAVE', true );
+		wp_update_post( array( 'ID' => $id, 'post_title' => 'Draft v2' ) );
+		$this->assertContains( 'Updated Post: Draft v2 (#' . $id . ')', $this->summaries() );
+	}
+
+	public function test_revisions_and_unlisted_types_are_not_tracked() {
+		wp_set_current_user( $this->temp );
+		$id = self::factory()->post->create( array( 'post_title' => 'Rev', 'post_type' => 'post' ) );
+		wp_update_post( array( 'ID' => $id, 'post_content' => 'changed' ) );
+		self::factory()->post->create( array( 'post_title' => 'Menu thing', 'post_type' => 'nav_menu_item' ) );
+		$joined = implode( '|', $this->summaries() );
+		$this->assertStringNotContainsString( 'Revision', $joined );
+		$this->assertStringNotContainsString( 'Menu thing', $joined );
+	}
+
+	public function test_long_titles_are_clipped() {
+		wp_set_current_user( $this->temp );
+		$id = self::factory()->post->create( array( 'post_title' => str_repeat( 'a', 300 ), 'post_type' => 'page' ) );
+		$this->assertContains( 'Created Page: ' . str_repeat( 'a', 150 ) . ' (#' . $id . ')', $this->summaries() );
+	}
+
+	public function test_core_and_translation_upgrades_are_tracked() {
+		wp_set_current_user( $this->temp );
+		ActivityTracker::upgrader_ran( null, array( 'type' => 'core', 'action' => 'update' ) );
+		ActivityTracker::upgrader_ran( null, array( 'type' => 'translation', 'action' => 'update' ) );
+		$summaries = $this->summaries();
+		$this->assertContains( 'Updated WordPress core', $summaries );
+		$this->assertContains( 'Updated translations', $summaries );
+	}
+
+	public function test_handlers_do_nothing_for_non_temp_users() {
+		$before = AuditLog::query( array( 'feature' => 'support', 'token_id' => $this->grant_id ) )['total'];
+		do_action( 'activated_plugin', 'hello.php', false );
+		ActivityTracker::upgrader_ran( null, array( 'type' => 'core', 'action' => 'update' ) );
+		do_action( 'woocommerce_order_status_changed', 1, 'pending', 'processing', null );
+		$this->assertSame( $before, AuditLog::query( array( 'feature' => 'support', 'token_id' => $this->grant_id ) )['total'] );
 	}
 }

@@ -35,9 +35,15 @@ final class ActivityTracker {
 	const SKIPPED_PREFIXES = array( '_transient', '_site_transient', 'cron', 'happyaccess_' );
 
 	/**
-	 * Option names changed during this request, in the order they changed.
+	 * Longest title or name stored in a summary.
+	 */
+	const MAX_NAME = 150;
+
+	/**
+	 * Option names changed during this request, grouped by grant. Each group
+	 * holds the user id, the grant id and the names in the order they changed.
 	 *
-	 * @var string[]
+	 * @var array
 	 */
 	private static $options = array();
 
@@ -55,7 +61,8 @@ final class ActivityTracker {
 		add_action( 'deleted_theme', array( __CLASS__, 'theme_deleted' ), 10, 2 );
 		add_action( 'transition_post_status', array( __CLASS__, 'post_transitioned' ), 10, 3 );
 		add_action( 'wp_trash_post', array( __CLASS__, 'post_trashed' ), 10, 1 );
-		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'order_status_changed' ), 10, 4 );
+		add_action( 'before_delete_post', array( __CLASS__, 'post_deleted' ), 10, 1 );
+		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'order_status_changed' ), 10, 3 );
 		add_action( 'profile_update', array( __CLASS__, 'user_updated' ), 10, 1 );
 
 		// One argument only, so option values never reach this class.
@@ -72,6 +79,10 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function plugin_activated( $plugin ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+
 		self::record( 'plugin_activated', 'Activated plugin: ' . self::plugin_name( $plugin ), array( 'plugin' => $plugin ) );
 	}
 
@@ -82,6 +93,10 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function plugin_deactivated( $plugin ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+
 		self::record( 'plugin_deactivated', 'Deactivated plugin: ' . self::plugin_name( $plugin ), array( 'plugin' => $plugin ) );
 	}
 
@@ -93,10 +108,13 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function plugin_deleted( $plugin, $deleted = true ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
 		if ( ! $deleted ) {
 			return;
 		}
-		self::record( 'plugin_deleted', 'Deleted plugin: ' . $plugin, array( 'plugin' => $plugin ) );
+		self::record( 'plugin_deleted', 'Deleted plugin: ' . self::clip( $plugin ), array( 'plugin' => $plugin ) );
 	}
 
 	/**
@@ -107,10 +125,21 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function upgrader_ran( $upgrader, $hook_extra ) {
-		if ( ! is_array( $hook_extra ) || empty( $hook_extra['type'] ) || ! in_array( $hook_extra['type'], array( 'plugin', 'theme' ), true ) ) {
+		if ( ! self::is_tracking() ) {
 			return;
 		}
-		if ( ! self::is_tracking() ) {
+		if ( ! is_array( $hook_extra ) || empty( $hook_extra['type'] ) ) {
+			return;
+		}
+		if ( 'core' === $hook_extra['type'] ) {
+			self::record( 'upgrader_ran', 'Updated WordPress core', array( 'type' => 'core' ) );
+			return;
+		}
+		if ( 'translation' === $hook_extra['type'] ) {
+			self::record( 'upgrader_ran', 'Updated translations', array( 'type' => 'translation' ) );
+			return;
+		}
+		if ( ! in_array( $hook_extra['type'], array( 'plugin', 'theme' ), true ) ) {
 			return;
 		}
 
@@ -133,7 +162,7 @@ final class ActivityTracker {
 			if ( ! $items && is_object( $upgrader ) && method_exists( $upgrader, 'theme_info' ) ) {
 				$theme = $upgrader->theme_info();
 				if ( $theme instanceof \WP_Theme ) {
-					$items[] = (string) $theme->get( 'Name' );
+					$items[] = self::clip( (string) $theme->get( 'Name' ) );
 				}
 			}
 		}
@@ -159,7 +188,11 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function theme_switched( $new_name ) {
-		self::record( 'theme_switched', 'Switched theme to ' . $new_name );
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+
+		self::record( 'theme_switched', 'Switched theme to ' . self::clip( $new_name ) );
 	}
 
 	/**
@@ -170,10 +203,13 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function theme_deleted( $stylesheet, $deleted = true ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
 		if ( ! $deleted ) {
 			return;
 		}
-		self::record( 'theme_deleted', 'Deleted theme: ' . $stylesheet, array( 'theme' => $stylesheet ) );
+		self::record( 'theme_deleted', 'Deleted theme: ' . self::clip( $stylesheet ), array( 'theme' => $stylesheet ) );
 	}
 
 	/**
@@ -185,6 +221,9 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function post_transitioned( $new_status, $old_status, $post ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
 		if ( ! $post instanceof \WP_Post || ! self::is_tracked_post( $post ) ) {
 			return;
 		}
@@ -203,11 +242,32 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function post_trashed( $post_id ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+
 		$post = get_post( $post_id );
 		if ( ! $post instanceof \WP_Post || ! self::is_tracked_post( $post ) ) {
 			return;
 		}
 		self::record_post( 'post_trashed', 'Trashed', $post );
+	}
+
+	/**
+	 * Logs a permanent delete, also for a post that was already in the trash.
+	 *
+	 * @param int $post_id Post id.
+	 * @return void
+	 */
+	public static function post_deleted( $post_id ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post || ! self::is_tracked_post( $post ) ) {
+			return;
+		}
+		self::record_post( 'post_deleted', 'Deleted', $post );
 	}
 
 	/**
@@ -220,6 +280,10 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function order_status_changed( $order_id, $from, $to ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+
 		self::record(
 			'order_status_changed',
 			sprintf( 'Order #%d: %s to %s', (int) $order_id, $from, $to ),
@@ -249,37 +313,63 @@ final class ActivityTracker {
 	}
 
 	/**
-	 * Remembers the name of an option that changed. The value is never seen.
+	 * Remembers the name of an option that changed, with the temp user who
+	 * changed it. The value is never seen.
 	 *
 	 * @param string $option Option name.
 	 * @return void
 	 */
 	public static function collect_option( $option ) {
-		if ( ! is_string( $option ) || self::is_skipped_option( $option ) || ! self::is_tracking() ) {
+		if ( ! self::is_tracking() ) {
 			return;
 		}
-		if ( ! in_array( $option, self::$options, true ) ) {
-			self::$options[] = $option;
+		if ( ! is_string( $option ) || self::is_skipped_option( $option ) ) {
+			return;
+		}
+		$user_id  = get_current_user_id();
+		$grant_id = Capabilities::grant_id( $user_id );
+		if ( ! isset( self::$options[ $grant_id ] ) ) {
+			self::$options[ $grant_id ] = array(
+				'user_id' => $user_id,
+				'names'   => array(),
+			);
+		}
+		if ( ! in_array( $option, self::$options[ $grant_id ]['names'], true ) ) {
+			self::$options[ $grant_id ]['names'][] = $option;
 		}
 	}
 
 	/**
-	 * Writes the collected option names as one entry, then empties the list.
+	 * Writes the collected option names as one entry per grant, then empties
+	 * the list. Uses the user and grant stored when each option changed.
 	 *
 	 * @return void
 	 */
 	public static function flush() {
-		$options       = self::$options;
+		$groups        = self::$options;
 		self::$options = array();
 
-		if ( ! $options || ! self::is_tracking() ) {
-			return;
+		foreach ( $groups as $grant_id => $group ) {
+			AuditLog::add(
+				'settings_saved',
+				array(
+					'feature'  => 'support',
+					'token_id' => (int) $grant_id,
+					'user_id'  => (int) $group['user_id'],
+					'summary'  => sprintf( 'Saved settings: %d options', count( $group['names'] ) ),
+					'meta'     => array( 'options' => $group['names'] ),
+				)
+			);
 		}
-		self::record(
-			'settings_saved',
-			sprintf( 'Saved settings: %d options', count( $options ) ),
-			array( 'options' => $options )
-		);
+	}
+
+	/**
+	 * Empties the collected option names without writing them.
+	 *
+	 * @return void
+	 */
+	public static function reset() {
+		self::$options = array();
 	}
 
 	/**
@@ -327,7 +417,7 @@ final class ActivityTracker {
 	private static function record_post( $event, $verb, \WP_Post $post ) {
 		$type  = get_post_type_object( $post->post_type );
 		$label = ( $type && isset( $type->labels->singular_name ) ) ? $type->labels->singular_name : $post->post_type;
-		$title = '' === trim( $post->post_title ) ? '(no title)' : $post->post_title;
+		$title = '' === trim( $post->post_title ) ? '(no title)' : self::clip( $post->post_title );
 
 		self::record(
 			$event,
@@ -341,7 +431,7 @@ final class ActivityTracker {
 
 	/**
 	 * Whether a post is one this tracker reports: a post, page or product that
-	 * is not a revision and is not saved by autosave.
+	 * is not a revision or an auto-draft.
 	 *
 	 * @param \WP_Post $post Post.
 	 * @return bool
@@ -350,7 +440,7 @@ final class ActivityTracker {
 		if ( ! in_array( $post->post_type, self::POST_TYPES, true ) ) {
 			return false;
 		}
-		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+		if ( 'auto-draft' === $post->post_status ) {
 			return false;
 		}
 		return ! wp_is_post_revision( $post );
@@ -406,10 +496,10 @@ final class ActivityTracker {
 			}
 			$data = get_plugin_data( $path, false, false );
 			if ( ! empty( $data['Name'] ) ) {
-				return $data['Name'];
+				return self::clip( $data['Name'] );
 			}
 		}
-		return $plugin;
+		return self::clip( $plugin );
 	}
 
 	/**
@@ -420,6 +510,17 @@ final class ActivityTracker {
 	 */
 	private static function theme_name( $slug ) {
 		$theme = wp_get_theme( $slug );
-		return $theme->exists() ? (string) $theme->get( 'Name' ) : $slug;
+		return self::clip( $theme->exists() ? (string) $theme->get( 'Name' ) : $slug );
+	}
+
+	/**
+	 * Cuts a title or name to MAX_NAME characters.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function clip( $text ) {
+		$text = (string) $text;
+		return function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::MAX_NAME ) : substr( $text, 0, self::MAX_NAME );
 	}
 }
