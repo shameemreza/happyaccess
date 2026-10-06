@@ -33,6 +33,13 @@ final class Grants {
 	const CODE_ATTEMPTS = 5;
 
 	/**
+	 * Per-request cache of resolver results, keyed by user id.
+	 *
+	 * @var array
+	 */
+	private static $resolved = array();
+
+	/**
 	 * Creates a grant.
 	 *
 	 * @param array $args label, email, role, duration, one_time, ips, menus, hide_admin_bar, redirect_to, block_installs, notify, created_by.
@@ -108,22 +115,7 @@ final class Grants {
 		$now        = Clock::now();
 		$table      = Installer::table( 'tokens' );
 
-		$code      = '';
-		$code_hash = '';
-		for ( $attempt = 0; $attempt < self::CODE_ATTEMPTS; $attempt++ ) {
-			$candidate = Codes::numeric( 8 );
-			$hash      = Codes::hash_code( $candidate );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-			$taken = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE code_hash = %s AND revoked_at IS NULL AND expires_at > %s LIMIT 1", $hash, Clock::mysql() ) );
-			if ( ! $taken ) {
-				$code      = $candidate;
-				$code_hash = $hash;
-				break;
-			}
-		}
-		if ( '' === $code ) {
-			throw new \RuntimeException( 'Could not generate an unused code.' );
-		}
+		list( $code, $code_hash ) = self::unused_code();
 
 		$link_key  = Codes::link_key();
 		$link_hash = Codes::hash_key( $link_key );
@@ -274,11 +266,339 @@ final class Grants {
 	}
 
 	/**
-	 * Clears cached grant lookups. Nothing is cached yet.
+	 * Clears the per-request resolver cache.
 	 *
 	 * @return void
 	 */
 	public static function flush_cache() {
+		self::$resolved = array();
+	}
+
+	/**
+	 * Moves the expiry forward by a number of seconds, never further than
+	 * MAX_DURATION from now.
+	 *
+	 * @param int $id      Grant id.
+	 * @param int $seconds Seconds to add.
+	 * @return bool False for an unknown, revoked or expired grant.
+	 */
+	public static function extend( $id, $seconds ) {
+		global $wpdb;
+		$grant = self::get( $id );
+		if ( null === $grant || ! in_array( $grant['status'], array( 'active', 'used', 'suspended' ), true ) ) {
+			return false;
+		}
+
+		$now     = Clock::now();
+		$expires = min( max( $grant['expires_at'], $now ) + max( 0, (int) $seconds ), $now + self::MAX_DURATION );
+		$table   = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$result = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET expires_at = %s WHERE id = %d AND revoked_at IS NULL", Clock::mysql( $expires ), $grant['id'] ) );
+		self::flush_cache();
+		if ( false === $result ) {
+			return false;
+		}
+
+		AuditLog::add(
+			'grant_extended',
+			array(
+				'feature'  => 'support',
+				'token_id' => $grant['id'],
+				/* translators: %s: label of the support grant. */
+				'summary'  => sprintf( __( 'Support access extended for %s', 'happyaccess' ), $grant['label'] ),
+				'meta'     => array( 'expires_at' => $expires ),
+			)
+		);
+		return true;
+	}
+
+	/**
+	 * Pauses a grant and signs its temp user out.
+	 *
+	 * @param int $id Grant id.
+	 * @return bool False when the grant is not active or used.
+	 */
+	public static function suspend( $id ) {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET suspended_at = %s WHERE id = %d AND revoked_at IS NULL AND suspended_at IS NULL AND expires_at > %s", Clock::mysql(), (int) $id, Clock::mysql() ) );
+		self::flush_cache();
+		if ( 1 !== $changed ) {
+			return false;
+		}
+
+		$grant = self::get( $id );
+		if ( null !== $grant ) {
+			TempUsers::destroy_sessions( $grant['user_id'] );
+			/* translators: %s: label of the support grant. */
+			self::log( 'grant_suspended', $grant, sprintf( __( 'Support access suspended for %s', 'happyaccess' ), $grant['label'] ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Lifts a suspension.
+	 *
+	 * @param int $id Grant id.
+	 * @return bool False when the grant is not suspended.
+	 */
+	public static function resume( $id ) {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET suspended_at = NULL WHERE id = %d AND revoked_at IS NULL AND suspended_at IS NOT NULL AND expires_at > %s", (int) $id, Clock::mysql() ) );
+		self::flush_cache();
+		if ( 1 !== $changed ) {
+			return false;
+		}
+
+		$grant = self::get( $id );
+		if ( null !== $grant ) {
+			/* translators: %s: label of the support grant. */
+			self::log( 'grant_resumed', $grant, sprintf( __( 'Support access resumed for %s', 'happyaccess' ), $grant['label'] ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Replaces the code and the link key. The old ones stop working at once.
+	 *
+	 * @param int $id Grant id.
+	 * @return array|null code and link_key, or null for an unknown, revoked or expired grant.
+	 * @throws \RuntimeException When no free code was found.
+	 */
+	public static function regenerate( $id ) {
+		global $wpdb;
+		$grant = self::get( $id );
+		if ( null === $grant || ! in_array( $grant['status'], array( 'active', 'used', 'suspended' ), true ) ) {
+			return null;
+		}
+
+		list( $code, $code_hash ) = self::unused_code();
+		$link_key                 = Codes::link_key();
+		$link_hash                = Codes::hash_key( $link_key );
+		$table                    = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET code_hash = %s, link_hash = %s, token_hash = %s WHERE id = %d AND revoked_at IS NULL", $code_hash, $link_hash, $link_hash, $grant['id'] ) );
+		self::flush_cache();
+		if ( 1 !== $changed ) {
+			return null;
+		}
+
+		/* translators: %s: label of the support grant. */
+		self::log( 'grant_regenerated', $grant, sprintf( __( 'Support access code and link replaced for %s', 'happyaccess' ), $grant['label'] ) );
+		return array(
+			'code'     => $code,
+			'link_key' => $link_key,
+		);
+	}
+
+	/**
+	 * Ends a grant for good and removes its temp user.
+	 *
+	 * If the user cannot be deleted now, the grant is still revoked and the
+	 * Session resolver keeps the user out.
+	 *
+	 * @param int    $id     Grant id.
+	 * @param string $reason Why it ended, for example revoked, expired or lockdown.
+	 * @return bool False when the grant is unknown or already revoked.
+	 */
+	public static function revoke( $id, $reason = 'revoked' ) {
+		global $wpdb;
+		$grant = self::get( $id );
+		if ( null === $grant || 0 !== $grant['revoked_at'] ) {
+			return false;
+		}
+
+		$reason = sanitize_key( $reason );
+		if ( '' === $reason ) {
+			$reason = 'revoked';
+		}
+
+		$table = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$raw      = $wpdb->get_var( $wpdb->prepare( "SELECT metadata FROM {$table} WHERE id = %d", $grant['id'] ) );
+		$metadata = ! empty( $raw ) ? json_decode( (string) $raw, true ) : null;
+		$metadata = is_array( $metadata ) ? $metadata : array();
+
+		$metadata['end_reason'] = $reason;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET revoked_at = %s, metadata = %s WHERE id = %d AND revoked_at IS NULL", Clock::mysql(), wp_json_encode( $metadata ), $grant['id'] ) );
+		self::flush_cache();
+		if ( 1 !== $changed ) {
+			return false;
+		}
+
+		TempUsers::destroy_sessions( $grant['user_id'] );
+		TempUsers::delete( $grant );
+		self::flush_cache();
+
+		$ended = self::get( $grant['id'] );
+		$ended = null === $ended ? $grant : $ended;
+
+		AuditLog::add(
+			'grant_ended',
+			array(
+				'feature'  => 'support',
+				'token_id' => $ended['id'],
+				/* translators: %s: label of the support grant. */
+				'summary'  => sprintf( __( 'Support access ended for %s', 'happyaccess' ), $ended['label'] ),
+				'meta'     => array( 'reason' => $reason ),
+			)
+		);
+
+		/**
+		 * Fires after a grant has ended.
+		 *
+		 * @param array  $grant  The grant as stored after it ended.
+		 * @param string $reason Why it ended.
+		 */
+		do_action( 'happyaccess_grant_ended', $ended, $reason );
+		return true;
+	}
+
+	/**
+	 * Ends every grant that is not revoked yet.
+	 *
+	 * @param string $reason Why they ended.
+	 * @return int How many were revoked.
+	 */
+	public static function revoke_all( $reason ) {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- Custom table, no input.
+		$ids = $wpdb->get_col( "SELECT id FROM {$table} WHERE revoked_at IS NULL ORDER BY id ASC" );
+
+		$count = 0;
+		foreach ( (array) $ids as $id ) {
+			if ( self::revoke( (int) $id, $reason ) ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Counts one login. A single UPDATE checks the limits and writes the
+	 * counters, so two requests cannot both use the last login of a one-time
+	 * grant.
+	 *
+	 * @param int $id Grant id.
+	 * @return bool True when this login was counted.
+	 */
+	public static function record_login( $id ) {
+		global $wpdb;
+		$now   = Clock::mysql();
+		$table = Installer::table( 'tokens' );
+		$sql   = "UPDATE {$table} SET use_count = use_count + 1, login_count = login_count + 1, last_login_at = %s, used_at = COALESCE( used_at, %s )
+			WHERE id = %d AND revoked_at IS NULL AND suspended_at IS NULL AND expires_at > %s AND ( max_uses = 0 OR use_count < max_uses )";
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Custom table; the query is prepared here.
+		$changed = $wpdb->query( $wpdb->prepare( $sql, $now, $now, (int) $id, $now ) );
+		self::flush_cache();
+		return 1 === $changed;
+	}
+
+	/**
+	 * Ends every grant that has run out.
+	 *
+	 * @return int How many were ended.
+	 */
+	public static function cleanup_expired() {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$table} WHERE revoked_at IS NULL AND expires_at <= %s ORDER BY id ASC", Clock::mysql() ) );
+
+		$count = 0;
+		foreach ( (array) $ids as $id ) {
+			if ( self::revoke( (int) $id, 'expired' ) ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Session resolver for temp users. Session calls this from inside
+	 * determine_current_user, so it must only read user meta and the grant row.
+	 * Never call get_current_user_id(), wp_get_current_user() or
+	 * current_user_can() here.
+	 *
+	 * @param int $user_id Temp user id.
+	 * @return array|null state (active, revoked or suspended) and expires_at, or null when the grant is missing.
+	 */
+	public static function resolve_user( $user_id ) {
+		$user_id = (int) $user_id;
+		if ( array_key_exists( $user_id, self::$resolved ) ) {
+			return self::$resolved[ $user_id ];
+		}
+
+		$result  = null;
+		$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
+		if ( $blog_id > 0 && get_current_blog_id() !== $blog_id ) {
+			// The user has no role on this site, so there is nothing to end here.
+			$result = array(
+				'state'      => 'active',
+				'expires_at' => PHP_INT_MAX,
+			);
+		} else {
+			$grant = self::get( (int) get_user_meta( $user_id, 'happyaccess_token_id', true ) );
+			if ( null !== $grant ) {
+				$states = array(
+					'suspended' => 'suspended',
+					'revoked'   => 'revoked',
+				);
+				$result = array(
+					// Active, used and expired all pass; Session ends an expired one from expires_at.
+					'state'      => isset( $states[ $grant['status'] ] ) ? $states[ $grant['status'] ] : 'active',
+					'expires_at' => $grant['expires_at'],
+				);
+			}
+		}
+
+		self::$resolved[ $user_id ] = $result;
+		return $result;
+	}
+
+	/**
+	 * Finds a code that no current grant uses.
+	 *
+	 * @return array The code and its hash.
+	 * @throws \RuntimeException When every attempt hit a used code.
+	 */
+	private static function unused_code() {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		for ( $attempt = 0; $attempt < self::CODE_ATTEMPTS; $attempt++ ) {
+			$candidate = Codes::numeric( 8 );
+			$hash      = Codes::hash_code( $candidate );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+			$taken = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE code_hash = %s AND revoked_at IS NULL AND expires_at > %s LIMIT 1", $hash, Clock::mysql() ) );
+			if ( ! $taken ) {
+				return array( $candidate, $hash );
+			}
+		}
+		throw new \RuntimeException( 'Could not generate an unused code.' );
+	}
+
+	/**
+	 * Writes a grant audit entry.
+	 *
+	 * @param string $event   Event key.
+	 * @param array  $grant   Grant with id.
+	 * @param string $summary Translated summary.
+	 * @return void
+	 */
+	private static function log( $event, array $grant, $summary ) {
+		AuditLog::add(
+			$event,
+			array(
+				'feature'  => 'support',
+				'token_id' => $grant['id'],
+				'summary'  => $summary,
+			)
+		);
 	}
 
 	/**
