@@ -58,6 +58,13 @@ final class ActivityTracker {
 	private static $role_events = array();
 
 	/**
+	 * How many quietly() calls are open right now.
+	 *
+	 * @var int
+	 */
+	private static $quiet = 0;
+
+	/**
 	 * Hooks every tracked event, the option collectors and the shutdown flush.
 	 *
 	 * @return void
@@ -555,16 +562,35 @@ final class ActivityTracker {
 	public static function reset() {
 		self::$options     = array();
 		self::$role_events = array();
+		self::$quiet       = 0;
+	}
+
+	/**
+	 * Runs a callable without logging anything it changes, and returns what
+	 * it returns. For HappyAccess's own cleanup, which can run inside a temp
+	 * user's request. The option guards stay on. The counter is restored
+	 * even when the callable throws.
+	 *
+	 * @param callable $callback Work to run.
+	 * @return mixed
+	 */
+	public static function quietly( callable $callback ) {
+		++self::$quiet;
+		try {
+			return $callback();
+		} finally {
+			--self::$quiet;
+		}
 	}
 
 	/**
 	 * Whether the current user is a temp user, so their changes are logged.
-	 * HappyAccess's own writes, run under Internal, are never theirs.
+	 * HappyAccess's own writes, run under Internal or quietly(), are never theirs.
 	 *
 	 * @return bool
 	 */
 	private static function is_tracking() {
-		return ! Internal::active() && Capabilities::is_temp_user( get_current_user_id() );
+		return 0 === self::$quiet && ! Internal::active() && Capabilities::is_temp_user( get_current_user_id() );
 	}
 
 	/**

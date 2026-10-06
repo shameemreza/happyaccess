@@ -13,7 +13,6 @@ use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
-use HappyAccess\Core\Internal;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Session;
@@ -476,8 +475,8 @@ final class Grants {
 			return false;
 		}
 
-		// HappyAccess's own writes. Under Internal, the activity log never pins them on a temp user whose request runs this.
-		$deleted = Internal::run(
+		// HappyAccess's own cleanup. The activity log must not pin it on a temp user whose request runs this.
+		$deleted = ActivityTracker::quietly(
 			static function () use ( $grant ) {
 				if ( $grant['user_id'] > 0 && false !== get_userdata( $grant['user_id'] )
 					&& ( Capabilities::is_temp_user( $grant['user_id'] ) || TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) ) {
@@ -620,7 +619,15 @@ final class Grants {
 		$count = 0;
 		foreach ( (array) $ids as $id ) {
 			$grant = self::get( (int) $id );
-			if ( null !== $grant && TempUsers::delete( $grant ) ) {
+			if ( null === $grant ) {
+				continue;
+			}
+			$deleted = ActivityTracker::quietly(
+				static function () use ( $grant ) {
+					return TempUsers::delete( $grant );
+				}
+			);
+			if ( $deleted ) {
 				++$count;
 			}
 		}

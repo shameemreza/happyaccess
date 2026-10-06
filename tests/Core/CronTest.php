@@ -10,6 +10,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\Cron;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\ActivityTracker;
+use HappyAccess\Features\SupportAccess\CapabilityGuard;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
 
@@ -180,6 +181,37 @@ class CronTest extends WP_UnitTestCase {
 
 		$this->assertSame( 1, $counts['grants'] );
 		$this->assertGreaterThan( 0, Grants::get( $b_id )['revoked_at'] );
+		$this->assertFalse( get_userdata( $b_user ) );
+		$this->assertSame( array(), $this->role_and_settings_rows( $a_id ) );
+	}
+
+	public function test_option_guards_stay_on_during_a_revoke_in_a_temp_users_request() {
+		list( , , $b_id, $b_user ) = $this->agent_browsing_while_another_grant_expired();
+		CapabilityGuard::register();
+		$before = get_option( 'admin_email' );
+		add_action(
+			'delete_user',
+			function () {
+				update_option( 'admin_email', 'x@example.com' );
+			}
+		);
+
+		$this->assertTrue( Grants::revoke( $b_id ) );
+
+		$this->assertFalse( get_userdata( $b_user ) );
+		$this->assertSame( $before, get_option( 'admin_email' ) );
+	}
+
+	public function test_retry_orphans_in_a_temp_users_request_logs_nothing_under_that_agent() {
+		list( $a_id, , $b_id, $b_user ) = $this->agent_browsing_while_another_grant_expired();
+		// Without the marker the delete fails, so the revoked grant keeps its user.
+		delete_user_meta( $b_user, 'happyaccess_temp_user' );
+		$this->assertTrue( Grants::revoke( $b_id ) );
+		$this->assertNotFalse( get_userdata( $b_user ) );
+		update_user_meta( $b_user, 'happyaccess_temp_user', 1 );
+
+		$this->assertSame( 1, Grants::retry_orphans() );
+
 		$this->assertFalse( get_userdata( $b_user ) );
 		$this->assertSame( array(), $this->role_and_settings_rows( $a_id ) );
 	}
