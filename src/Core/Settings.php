@@ -102,12 +102,17 @@ final class Settings {
 	}
 
 	/**
-	 * Merges changes into the stored settings and saves them.
+	 * Merges changes into the stored settings and saves them. A temp user's
+	 * request can't change them, unless HappyAccess itself makes the write.
 	 *
 	 * @param array $changes Nested array of changes.
 	 * @return array The saved settings.
 	 */
 	public static function update( array $changes ) {
+		if ( Capabilities::is_temp_user( get_current_user_id() ) && ! Internal::active() ) {
+			return self::all();
+		}
+
 		$merged = self::clean( self::defaults(), array_replace_recursive( self::all(), $changes ), '' );
 		Internal::run(
 			static function () use ( $merged ) {

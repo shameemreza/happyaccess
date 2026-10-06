@@ -75,9 +75,13 @@ class InternalTest extends WP_UnitTestCase {
 		$this->assertFalse( Internal::active() );
 	}
 
-	public function test_settings_update_works_as_a_temp_user_but_a_direct_write_does_not() {
+	public function test_internal_settings_update_works_as_a_temp_user_but_a_direct_write_does_not() {
 		$this->become_temp_user();
-		Settings::update( array( 'security' => array( 'max_attempts' => 7 ) ) );
+		Internal::run(
+			function () {
+				Settings::update( array( 'security' => array( 'max_attempts' => 7 ) ) );
+			}
+		);
 		$this->assertSame( 7, Settings::get( 'security.max_attempts' ) );
 
 		$stored                             = get_option( 'happyaccess_settings' );

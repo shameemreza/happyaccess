@@ -6,6 +6,7 @@
  */
 
 use HappyAccess\Core\Features;
+use HappyAccess\Core\Internal;
 use HappyAccess\Core\Settings;
 
 class SettingsTest extends WP_UnitTestCase {
@@ -69,5 +70,31 @@ class SettingsTest extends WP_UnitTestCase {
 
 		$this->assertFalse( Features::set( 'made_up', true ) );
 		$this->assertFalse( Features::is_enabled( 'made_up' ) );
+	}
+
+	public function test_temp_user_cannot_update_settings() {
+		$temp = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $temp, 'happyaccess_temp_user', 1 );
+		wp_set_current_user( $temp );
+
+		$saved = Settings::update( array( 'privacy' => array( 'logging' => false ) ) );
+
+		$this->assertTrue( $saved['privacy']['logging'] );
+		$this->assertTrue( Settings::get( 'privacy.logging' ) );
+		$this->assertFalse( get_option( Settings::OPTION ) );
+	}
+
+	public function test_internal_write_during_a_temp_user_request_still_saves() {
+		$temp = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $temp, 'happyaccess_temp_user', 1 );
+		wp_set_current_user( $temp );
+
+		Internal::run(
+			static function () {
+				Settings::update( array( 'privacy' => array( 'logging' => false ) ) );
+			}
+		);
+
+		$this->assertFalse( Settings::get( 'privacy.logging' ) );
 	}
 }
