@@ -37,6 +37,7 @@ final class Feature {
 		Session::set_resolver( array( Grants::class, 'resolve_user' ) );
 		Session::register();
 		CapabilityGuard::register();
+		AccountGuard::register();
 		MenuGuard::register();
 		ActivityTracker::register();
 		AdminBar::register();

@@ -175,11 +175,12 @@ final class CapabilityGuard {
 		if ( in_array( $cap, self::USER_CAPS, true ) ) {
 			$target = $first instanceof \WP_User ? (int) $first->ID : ( is_scalar( $first ) ? (int) $first : 0 );
 			if ( $target > 0 ) {
+				// Customers only. Admins, the owner and self all fail the low privilege check.
 				if ( $target === $user_id || $target === $rules['created_by'] ) {
 					return $deny;
 				}
-				// Self was handled above, so this check cannot loop back here for the same user.
-				if ( user_can( $target, 'manage_options' ) ) {
+				$target_user = $first instanceof \WP_User ? $first : get_userdata( $target );
+				if ( ! $target_user instanceof \WP_User || ! self::is_low_privilege( $target_user ) ) {
 					return $deny;
 				}
 			}
@@ -190,6 +191,26 @@ final class CapabilityGuard {
 		}
 
 		return $caps;
+	}
+
+	/**
+	 * Whether a user's caps go no further than read, like a customer or subscriber.
+	 * Role names and legacy level_N caps are ignored.
+	 *
+	 * @param \WP_User $user User to check.
+	 * @return bool
+	 */
+	public static function is_low_privilege( \WP_User $user ) {
+		$roles = array_keys( wp_roles()->roles );
+		$caps  = array();
+		foreach ( (array) $user->allcaps as $name => $granted ) {
+			$name = (string) $name;
+			if ( ! $granted || in_array( $name, $roles, true ) || ( 0 === strpos( $name, 'level_' ) && ctype_digit( substr( $name, 6 ) ) ) ) {
+				continue;
+			}
+			$caps[] = $name;
+		}
+		return array() === $caps || array( 'read' ) === $caps;
 	}
 
 	/**

@@ -142,6 +142,9 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 	}
 
 	public function test_plural_user_caps_with_a_target_follow_the_target_rules() {
+		if ( ! get_role( 'customer' ) ) {
+			add_role( 'customer', 'Customer', array( 'read' => true ) );
+		}
 		$temp     = $this->temp();
 		$customer = self::factory()->user->create( array( 'role' => 'customer' ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', $this->owner ) );
@@ -232,5 +235,17 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		$theme = get_stylesheet();
 		switch_theme( $theme );
 		$this->assertSame( $theme, get_option( 'stylesheet' ) );
+	}
+
+	public function test_edit_users_with_a_target_is_allowed_for_low_privilege_targets_only() {
+		if ( ! get_role( 'shop_manager_test' ) ) {
+			add_role( 'shop_manager_test', 'Shop manager test', array( 'read' => true, 'manage_woocommerce' => true, 'edit_users' => true ) );
+		}
+		$temp       = $this->temp();
+		$manager    = self::factory()->user->create( array( 'role' => 'shop_manager_test' ) );
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->assertFalse( user_can( $temp, 'edit_users', $manager ) );
+		$this->assertTrue( user_can( $temp, 'edit_users', $subscriber ) );
+		$this->assertFalse( user_can( $temp, 'edit_users', 999999 ) );
 	}
 }
