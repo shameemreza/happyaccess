@@ -275,6 +275,7 @@ final class Grants {
 		self::$resolved = array();
 		Session::flush_cache();
 		CapabilityGuard::flush_cache();
+		MenuGuard::flush_cache();
 	}
 
 	/**
