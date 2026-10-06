@@ -76,6 +76,51 @@ class ClientIpTest extends WP_UnitTestCase {
 		$this->assertSame( '198.51.100.7', ClientIp::get() );
 	}
 
+	public function test_port_is_stripped_from_hops() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array( 'REMOTE_ADDR' => '10.0.0.1' );
+
+		$server['HTTP_X_FORWARDED_FOR'] = '1.2.3.4, 203.0.113.9:8080';
+		$this->assertSame( '203.0.113.9', ClientIp::from_server( $server ) );
+
+		$server['HTTP_X_FORWARDED_FOR'] = '1.2.3.4, [2001:db8::1]:80';
+		$this->assertSame( '2001:db8::1', ClientIp::from_server( $server ) );
+	}
+
+	public function test_unparseable_hop_stops_the_walk() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array(
+			'REMOTE_ADDR'          => '10.0.0.1',
+			'HTTP_X_FORWARDED_FOR' => '1.2.3.4, garbage',
+		);
+		$this->assertSame( '10.0.0.1', ClientIp::from_server( $server ) );
+	}
+
+	public function test_loopback_hop_is_skipped() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array(
+			'REMOTE_ADDR'          => '10.0.0.1',
+			'HTTP_X_FORWARDED_FOR' => '198.51.100.7, 127.0.0.1',
+		);
+		$this->assertSame( '198.51.100.7', ClientIp::from_server( $server ) );
+	}
+
+	public function test_mapped_private_hop_is_skipped() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array(
+			'REMOTE_ADDR'          => '10.0.0.1',
+			'HTTP_X_FORWARDED_FOR' => '::ffff:10.0.0.1, 198.51.100.7',
+		);
+		$this->assertSame( '198.51.100.7', ClientIp::from_server( $server ) );
+		$server['HTTP_X_FORWARDED_FOR'] = '198.51.100.7, ::ffff:10.0.0.1';
+		$this->assertSame( '198.51.100.7', ClientIp::from_server( $server ) );
+	}
+
+	public function test_bucket_and_anonymize_normalize_mapped_addresses() {
+		$this->assertSame( '203.0.113.9', ClientIp::bucket( '::ffff:203.0.113.9' ) );
+		$this->assertSame( '203.0.113.0', ClientIp::anonymize( '::ffff:203.0.113.9' ) );
+	}
+
 	public function test_missing_remote_addr_falls_back() {
 		$this->assertSame( '0.0.0.0', ClientIp::from_server( array() ) );
 	}

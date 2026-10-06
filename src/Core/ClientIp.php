@@ -23,7 +23,7 @@ final class ClientIp {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Values are validated with FILTER_VALIDATE_IP in from_server().
 		$ip       = self::from_server( $_SERVER );
 		$filtered = apply_filters( 'happyaccess_client_ip', $ip );
-		return self::valid( $filtered ) ? $filtered : $ip;
+		return self::valid( $filtered ) ? self::normalize( $filtered ) : $ip;
 	}
 
 	/**
@@ -55,35 +55,60 @@ final class ClientIp {
 	/**
 	 * Nearest public IP in a comma separated list, walking from the right.
 	 *
+	 * Stops at the first hop that is not an IP, so entries further left,
+	 * which the client controls, are never reached past a broken hop.
+	 *
 	 * @param string $header_value Header value.
-	 * @return string Empty string when the list has no valid IP.
+	 * @return string Empty string when the walk hits an unparseable hop or the list is empty.
 	 */
 	private static function pick_from_list( $header_value ) {
-		$valid = array();
-		foreach ( explode( ',', $header_value ) as $entry ) {
-			$entry = trim( $entry );
-			if ( self::valid( $entry ) ) {
-				$valid[] = self::normalize( $entry );
+		$rightmost = '';
+		foreach ( array_reverse( explode( ',', $header_value ) ) as $entry ) {
+			$entry = self::strip_port( trim( $entry ) );
+			if ( ! self::valid( $entry ) ) {
+				return '';
 			}
-		}
-		if ( empty( $valid ) ) {
-			return '';
-		}
-		foreach ( array_reverse( $valid ) as $ip ) {
-			if ( false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE ) ) {
+			$ip = self::normalize( $entry );
+			if ( '' === $rightmost ) {
+				$rightmost = $ip;
+			}
+			if ( false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
 				return $ip;
 			}
 		}
-		return end( $valid );
+		return $rightmost;
+	}
+
+	/**
+	 * Removes a port from "[v6]:port" or "a.b.c.d:port".
+	 *
+	 * @param string $entry One header entry.
+	 * @return string
+	 */
+	private static function strip_port( $entry ) {
+		if ( '[' === substr( $entry, 0, 1 ) ) {
+			$end = strpos( $entry, ']' );
+			return false === $end ? $entry : substr( $entry, 1, $end - 1 );
+		}
+		if ( 1 === substr_count( $entry, ':' ) ) {
+			$host = substr( $entry, 0, strpos( $entry, ':' ) );
+			if ( false !== filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+				return $host;
+			}
+		}
+		return $entry;
 	}
 
 	/**
 	 * Converts an IPv4-mapped IPv6 address to dotted IPv4.
 	 *
-	 * @param string $ip Valid IP address.
+	 * @param string $ip IP address. Other values are returned unchanged.
 	 * @return string
 	 */
 	private static function normalize( $ip ) {
+		if ( ! self::valid( $ip ) ) {
+			return $ip;
+		}
 		$binary = inet_pton( $ip );
 		if ( false !== $binary && 16 === strlen( $binary ) && str_repeat( "\0", 10 ) . "\xff\xff" === substr( $binary, 0, 12 ) ) {
 			return inet_ntop( substr( $binary, 12 ) );
@@ -108,6 +133,7 @@ final class ClientIp {
 	 * @return string
 	 */
 	public static function bucket( $ip ) {
+		$ip = self::normalize( $ip );
 		if ( false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
 			$binary = inet_pton( $ip );
 			return inet_ntop( substr( $binary, 0, 8 ) . str_repeat( "\0", 8 ) ) . '/64';
@@ -122,6 +148,7 @@ final class ClientIp {
 	 * @return string
 	 */
 	public static function anonymize( $ip ) {
+		$ip = self::normalize( $ip );
 		if ( false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
 			$parts    = explode( '.', $ip );
 			$parts[3] = '0';
