@@ -1,0 +1,300 @@
+<?php
+/**
+ * Settings, setup, catalog and lock route tests.
+ *
+ * @package HappyAccess
+ */
+
+use HappyAccess\Core\AuditLog;
+use HappyAccess\Core\Clock;
+use HappyAccess\Core\Settings;
+use HappyAccess\Features\SupportAccess\Grants;
+
+require_once __DIR__ . '/RestTestCase.php';
+
+class SettingsControllerTest extends RestTestCase {
+
+	const SECRET = 'happyaccess_recaptcha_secret_key';
+
+	/**
+	 * Every route, with params that pass validation so only the permission
+	 * check decides.
+	 *
+	 * @return array
+	 */
+	public function routes_provider() {
+		return array(
+			'get settings'  => array( 'GET', '/settings', array() ),
+			'save settings' => array( 'POST', '/settings', array( 'security' => array( 'max_attempts' => 9 ) ) ),
+			'setup'         => array(
+				'POST',
+				'/setup',
+				array(
+					'features' => array( 'support_access' => true ),
+					'consent'  => true,
+				),
+			),
+			'catalog'       => array( 'GET', '/catalog', array() ),
+			'lock'          => array( 'POST', '/lock', array() ),
+		);
+	}
+
+	/**
+	 * @dataProvider routes_provider
+	 */
+	public function test_logged_out_gets_401( $method, $path, $params ) {
+		Grants::create( array( 'label' => 'Target' ) );
+		wp_set_current_user( 0 );
+
+		$this->assertSame( 401, $this->request( $method, $path, $params )->get_status() );
+		$this->assertSame( 1, count( Grants::list_current() ) );
+		$this->assertSame( 5, Settings::get( 'security.max_attempts' ) );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+	}
+
+	/**
+	 * @dataProvider routes_provider
+	 */
+	public function test_protected_temp_user_gets_403( $method, $path, $params ) {
+		$this->as_temp_user();
+
+		$this->assertSame( 403, $this->request( $method, $path, $params )->get_status() );
+		$this->assertSame( 5, Settings::get( 'security.max_attempts' ) );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+		$this->assertSame( 1, count( Grants::list_current() ) );
+	}
+
+	/**
+	 * @dataProvider routes_provider
+	 */
+	public function test_full_temp_user_gets_403( $method, $path, $params ) {
+		$this->as_temp_user(
+			array(
+				'level'        => 'full',
+				'confirm_full' => true,
+			)
+		);
+
+		$this->assertSame( 403, $this->request( $method, $path, $params )->get_status() );
+		$this->assertSame( 5, Settings::get( 'security.max_attempts' ) );
+		$this->assertSame( 1, count( Grants::list_current() ) );
+	}
+
+	public function test_get_hides_the_secret_and_reports_it_is_set() {
+		$data = $this->request( 'GET', '/settings' )->get_data();
+		$this->assertFalse( $data['recaptcha_secret_set'] );
+
+		update_option( self::SECRET, 'sk_live_abc123', false );
+		$response = $this->request( 'GET', '/settings' );
+		$data     = $response->get_data();
+
+		$this->assertTrue( $data['recaptcha_secret_set'] );
+		$this->assertSame( 5, $data['security']['max_attempts'] );
+		$this->assertArrayNotHasKey( 'recaptcha_secret_key', $data['security'] );
+		$this->assertStringNotContainsString( 'sk_live_abc123', wp_json_encode( $data ) );
+	}
+
+	public function test_save_changes_only_what_was_sent() {
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'privacy' => array( 'retention_days' => 90 ),
+				'bogus'   => array( 'x' => 1 ),
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 90, $data['privacy']['retention_days'] );
+		$this->assertSame( 5, $data['security']['max_attempts'] );
+		$this->assertArrayNotHasKey( 'bogus', $data );
+		$this->assertSame( 90, Settings::get( 'privacy.retention_days' ) );
+	}
+
+	public function test_save_clamps_out_of_range_values() {
+		$data = $this->request( 'POST', '/settings', array( 'security' => array( 'max_attempts' => 999 ) ) )->get_data();
+
+		$this->assertSame( 20, $data['security']['max_attempts'] );
+		$this->assertSame( 20, Settings::get( 'security.max_attempts' ) );
+	}
+
+	public function test_save_rejects_a_non_object_group() {
+		$response = $this->request( 'POST', '/settings', array( 'security' => 'nope' ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 5, Settings::get( 'security.max_attempts' ) );
+	}
+
+	public function test_save_cannot_fake_consent() {
+		$this->request(
+			'POST',
+			'/settings',
+			array(
+				'support' => array(
+					'default_duration' => 7200,
+					'consent_given_at' => '2026-01-01 00:00:00',
+					'consent_user_id'  => 99,
+				),
+			)
+		);
+
+		$this->assertSame( 7200, Settings::get( 'support.default_duration' ) );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+		$this->assertSame( 0, Settings::get( 'support.consent_user_id' ) );
+	}
+
+	public function test_turning_support_access_off_revokes_current_passes() {
+		Grants::create( array( 'label' => 'One' ) );
+		Grants::create( array( 'label' => 'Two' ) );
+
+		$response = $this->request( 'POST', '/settings', array( 'features' => array( 'support_access' => false ) ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 2, $data['revoked'] );
+		$this->assertFalse( $data['features']['support_access'] );
+		$this->assertSame( array(), Grants::list_current() );
+	}
+
+	public function test_saving_other_settings_does_not_revoke_or_report_revoked() {
+		Grants::create( array( 'label' => 'One' ) );
+
+		$data = $this->request( 'POST', '/settings', array( 'features' => array( 'two_step' => true ) ) )->get_data();
+
+		$this->assertArrayNotHasKey( 'revoked', $data );
+		$this->assertCount( 1, Grants::list_current() );
+	}
+
+	public function test_secret_is_written_with_autoload_off_and_never_returned() {
+		global $wpdb;
+
+		$data = $this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => 'sk_live_abc123' ) )->get_data();
+
+		$this->assertTrue( $data['recaptcha_secret_set'] );
+		$this->assertStringNotContainsString( 'sk_live_abc123', wp_json_encode( $data ) );
+		$this->assertSame( 'sk_live_abc123', get_option( self::SECRET ) );
+		$autoload = $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", self::SECRET ) );
+		$this->assertContains( $autoload, array( 'no', 'off' ) );
+	}
+
+	public function test_secret_inside_the_security_group_is_stored_and_not_kept_in_settings() {
+		$data = $this->request( 'POST', '/settings', array( 'security' => array( 'recaptcha_secret_key' => 'sk_nested' ) ) )->get_data();
+
+		$this->assertTrue( $data['recaptcha_secret_set'] );
+		$this->assertSame( 'sk_nested', get_option( self::SECRET ) );
+		$this->assertStringNotContainsString( 'sk_nested', wp_json_encode( get_option( Settings::OPTION ) ) );
+	}
+
+	public function test_empty_secret_clears_it() {
+		update_option( self::SECRET, 'sk_live_abc123', false );
+
+		$data = $this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => '' ) )->get_data();
+
+		$this->assertFalse( $data['recaptcha_secret_set'] );
+		$this->assertFalse( get_option( self::SECRET, false ) );
+	}
+
+	public function test_bad_secret_type_is_refused_without_echoing_it() {
+		$response = $this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => array( 'leak-me-123' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertStringNotContainsString( 'leak-me-123', wp_json_encode( $response->get_data() ) );
+		$this->assertFalse( get_option( self::SECRET, false ) );
+	}
+
+	public function test_needs_setup_until_consent_is_recorded() {
+		$this->assertTrue( $this->request( 'GET', '/settings' )->get_data()['needs_setup'] );
+
+		Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+		$this->assertFalse( $this->request( 'GET', '/settings' )->get_data()['needs_setup'] );
+	}
+
+	public function test_setup_without_consent_is_refused() {
+		$response = $this->request( 'POST', '/setup', array( 'features' => array( 'support_access' => true ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_consent_required', $response->get_data()['code'] );
+		$this->assertSame( 'Please confirm before giving anyone access.', $response->get_data()['message'] );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+		$this->assertFalse( Settings::get( 'features.passwordless' ) );
+	}
+
+	public function test_setup_with_consent_records_time_and_user() {
+		$response = $this->request(
+			'POST',
+			'/setup',
+			array(
+				'features' => array(
+					'support_access' => true,
+					'passwordless'   => true,
+					'two_step'       => false,
+				),
+				'consent'  => true,
+			)
+		);
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $data['features']['passwordless'] );
+		$this->assertFalse( $data['needs_setup'] );
+		$this->assertSame( Clock::mysql(), Settings::get( 'support.consent_given_at' ) );
+		$this->assertSame( $this->owner, Settings::get( 'support.consent_user_id' ) );
+	}
+
+	public function test_setup_with_support_access_off_needs_no_consent() {
+		$response = $this->request( 'POST', '/setup', array( 'features' => array( 'support_access' => false ) ) );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $data['features']['support_access'] );
+		$this->assertFalse( $data['needs_setup'] );
+	}
+
+	public function test_setup_rejects_unknown_feature_names() {
+		$response = $this->request(
+			'POST',
+			'/setup',
+			array(
+				'features' => array( 'everything' => true ),
+				'consent'  => true,
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+	}
+
+	public function test_setup_requires_features() {
+		$this->assertSame( 400, $this->request( 'POST', '/setup', array( 'consent' => true ) )->get_status() );
+	}
+
+	public function test_catalog_returns_groups_and_presets() {
+		$response = $this->request( 'GET', '/catalog' );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotEmpty( $data['groups'] );
+		$this->assertArrayHasKey( 'id', $data['groups'][0] );
+		$this->assertArrayHasKey( 'administrator', $data['presets'] );
+		$this->assertArrayHasKey( 'editor', $data['presets'] );
+	}
+
+	public function test_lock_revokes_every_grant_and_logs_it() {
+		$first  = Grants::create( array( 'label' => 'One' ) )['id'];
+		$second = Grants::create( array( 'label' => 'Two' ) )['id'];
+
+		$response = $this->request( 'POST', '/lock' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'revoked' => 2 ), $response->get_data() );
+		$this->assertSame( 'revoked', Grants::get( $first )['status'] );
+		$this->assertSame( 'revoked', Grants::get( $second )['status'] );
+		$this->assertSame( array(), Grants::list_current() );
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'emergency_lock' ) )['total'] );
+	}
+
+	public function test_lock_with_no_passes_returns_zero() {
+		$this->assertSame( array( 'revoked' => 0 ), $this->request( 'POST', '/lock' )->get_data() );
+	}
+}
