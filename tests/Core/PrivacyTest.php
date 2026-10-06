@@ -83,23 +83,48 @@ class PrivacyTest extends WP_UnitTestCase {
 		$this->assertSame( 'No email', $this->grant_by_label( 'No email' )['label'] );
 	}
 
-	public function test_export_by_recipient_email_includes_grant_logs() {
+	public function test_export_by_recipient_email_has_agent_logs_but_not_the_admins_ip() {
+		$grant = $this->grant_by_label( 'Acme' );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+		AuditLog::add( 'login', array( 'token_id' => $grant['id'], 'user_id' => 0 ) );
+
 		$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
 		$result    = call_user_func( $exporters['happyaccess']['callback'], 'agent@example.org', 1 );
 		$groups    = wp_list_pluck( $result['data'], 'group_id' );
 		$this->assertContains( 'happyaccess_logs', $groups );
 		$this->assertContains( 'happyaccess_grants', $groups );
+
+		$values = array();
+		foreach ( $result['data'] as $item ) {
+			$values = array_merge( $values, wp_list_pluck( $item['data'], 'value' ) );
+		}
+		$this->assertContains( '198.51.100.7', $values );
+		$this->assertNotContains( '203.0.113.9', $values );
 	}
 
-	public function test_erase_by_recipient_email_anonymizes_grant_logs() {
+	public function test_creator_export_leaves_out_the_recipient_email_and_label() {
+		$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
+		$result    = call_user_func( $exporters['happyaccess']['callback'], 'me@example.org', 1 );
+		$names     = array();
+		foreach ( $result['data'] as $item ) {
+			if ( 'happyaccess_grants' === $item['group_id'] ) {
+				$names = array_merge( $names, wp_list_pluck( $item['data'], 'name' ) );
+			}
+		}
+		$this->assertNotEmpty( $names );
+		$this->assertNotContains( 'Label', $names );
+		$this->assertNotContains( 'Recipient email', $names );
+		$this->assertContains( 'Role', $names );
+	}
+
+	public function test_erase_by_recipient_email_anonymizes_agent_logs_and_leaves_the_admins() {
 		global $wpdb;
-		$_SERVER['HTTP_USER_AGENT'] = 'Agent Browser';
+		$_SERVER['HTTP_USER_AGENT'] = 'Admin Browser';
 		$created = Grants::create( array( 'label' => 'Agent job', 'email' => 'outside@example.net' ) );
+		$_SERVER['REMOTE_ADDR']     = '198.51.100.7';
+		$_SERVER['HTTP_USER_AGENT'] = 'Agent Browser';
 		AuditLog::add( 'login', array( 'token_id' => $created['id'], 'user_id' => 0 ) );
 		$logs = Installer::table( 'logs' );
-
-		$before = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND ip_address = %s", $created['id'], '203.0.113.9' ) );
-		$this->assertGreaterThan( 0, (int) $before );
 
 		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
 		$result  = call_user_func( $erasers['happyaccess']['callback'], 'outside@example.net', 1 );
@@ -108,8 +133,29 @@ class PrivacyTest extends WP_UnitTestCase {
 		$this->assertTrue( $result['items_retained'] );
 		$this->assertNotEmpty( $result['messages'] );
 		$this->assertTrue( $result['done'] );
-		$this->assertSame( '0', $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND ( ip_address <> %s OR user_agent <> %s )", $created['id'], '0.0.0.0', '' ) ) );
-		$this->assertGreaterThan( 0, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND ip_address = %s", $created['id'], '0.0.0.0' ) ) );
+
+		$agent = $wpdb->get_row( $wpdb->prepare( "SELECT ip_address, user_agent FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'login' ), ARRAY_A );
+		$this->assertSame( '0.0.0.0', $agent['ip_address'] );
+		$this->assertSame( '', $agent['user_agent'] );
+
+		$admin = $wpdb->get_row( $wpdb->prepare( "SELECT ip_address, user_agent FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ), ARRAY_A );
+		$this->assertSame( '203.0.113.9', $admin['ip_address'] );
+		$this->assertSame( 'Admin Browser', $admin['user_agent'] );
+	}
+
+	public function test_label_scrub_only_replaces_the_trailing_label() {
+		global $wpdb;
+		$logs    = Installer::table( 'logs' );
+		$created = Grants::create( array( 'label' => 'Acme', 'email' => 'acme@example.net' ) );
+		$short   = Grants::create( array( 'label' => 'ti', 'email' => 'short@example.net' ) );
+		AuditLog::add( 'note', array( 'token_id' => $short['id'], 'summary' => 'Saved settings: 3 options' ) );
+
+		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
+		call_user_func( $erasers['happyaccess']['callback'], 'acme@example.net', 1 );
+		call_user_func( $erasers['happyaccess']['callback'], 'short@example.net', 1 );
+
+		$this->assertSame( 'Support access granted to [removed]', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ) ) );
+		$this->assertSame( 'Saved settings: 3 options', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $short['id'], 'note' ) ) );
 	}
 
 	public function test_erase_ends_active_grant_and_clears_label_allowlist_and_summaries() {

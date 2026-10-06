@@ -130,7 +130,7 @@ final class Privacy {
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
 		$log_rows   = (array) $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$logs} WHERE ( ( %d > 0 AND user_id = %d ) OR token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) ) ORDER BY id ASC LIMIT %d OFFSET %d",
+				"SELECT * FROM {$logs} WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND " . self::agent_rows_sql() . ' ) ) ORDER BY id ASC LIMIT %d OFFSET %d',
 				$user_id,
 				$user_id,
 				$email,
@@ -184,33 +184,52 @@ final class Privacy {
 		}
 
 		foreach ( $grant_rows as $row ) {
+			$data = array(
+				array(
+					'name'  => __( 'Created (UTC)', 'happyaccess' ),
+					'value' => (string) $row['created_at'],
+				),
+				array(
+					'name'  => __( 'Expires (UTC)', 'happyaccess' ),
+					'value' => (string) $row['expires_at'],
+				),
+				array(
+					'name'  => __( 'Role', 'happyaccess' ),
+					'value' => (string) $row['role'],
+				),
+			);
+
+			// The label, recipient email and allowlist belong to the recipient. A creator only gets the rest.
+			if ( 0 === strcasecmp( (string) $row['recipient_email'], $email ) ) {
+				$restrictions = ! empty( $row['restrictions'] ) ? json_decode( (string) $row['restrictions'], true ) : null;
+				$ips          = is_array( $restrictions ) && isset( $restrictions['ips'] ) ? array_filter( array_map( 'strval', (array) $restrictions['ips'] ) ) : array();
+				$data         = array_merge(
+					array(
+						array(
+							'name'  => __( 'Label', 'happyaccess' ),
+							'value' => (string) $row['label'],
+						),
+						array(
+							'name'  => __( 'Recipient email', 'happyaccess' ),
+							'value' => (string) $row['recipient_email'],
+						),
+					),
+					$data,
+					array(
+						array(
+							'name'  => __( 'IP allowlist', 'happyaccess' ),
+							'value' => implode( ', ', $ips ),
+						),
+					)
+				);
+			}
+
 			$items[] = array(
 				'group_id'          => 'happyaccess_grants',
 				'group_label'       => __( 'HappyAccess support access', 'happyaccess' ),
 				'group_description' => __( 'Support access records that name this user or email address.', 'happyaccess' ),
 				'item_id'           => 'happyaccess-grant-' . (int) $row['id'],
-				'data'              => array(
-					array(
-						'name'  => __( 'Label', 'happyaccess' ),
-						'value' => (string) $row['label'],
-					),
-					array(
-						'name'  => __( 'Recipient email', 'happyaccess' ),
-						'value' => (string) $row['recipient_email'],
-					),
-					array(
-						'name'  => __( 'Created by user ID', 'happyaccess' ),
-						'value' => (string) (int) $row['created_by'],
-					),
-					array(
-						'name'  => __( 'Created (UTC)', 'happyaccess' ),
-						'value' => (string) $row['created_at'],
-					),
-					array(
-						'name'  => __( 'Expires (UTC)', 'happyaccess' ),
-						'value' => (string) $row['expires_at'],
-					),
-				),
+				'data'              => $data,
 			);
 		}
 
@@ -263,7 +282,7 @@ final class Privacy {
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
 		$log_count = (int) $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$logs} SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
+				"UPDATE {$logs} SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND " . self::agent_rows_sql() . " AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
 				$user_id,
 				'0.0.0.0',
 				'',
@@ -313,8 +332,9 @@ final class Privacy {
 
 		$tokens = Installer::table( 'tokens' );
 		$logs   = Installer::table( 'logs' );
+		// Grants with an empty label that already ended have nothing left to do.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$tokens} WHERE recipient_email = %s ORDER BY id ASC", $email ) );
+		$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$tokens} WHERE recipient_email = %s AND ( revoked_at IS NULL OR label <> %s ) ORDER BY id ASC LIMIT %d", $email, '', self::PER_PAGE ) );
 
 		foreach ( $ids as $id ) {
 			$grant = Grants::get( (int) $id );
@@ -324,11 +344,26 @@ final class Privacy {
 			if ( 0 === $grant['revoked_at'] && $grant['expires_at'] > Clock::now() ) {
 				Grants::revoke( $grant['id'], 'privacy_erased' );
 			}
-			if ( '' !== $grant['label'] ) {
+
+			// Summaries end with the label ("Support access granted to Acme"). Only that trailing part is replaced, and short labels are skipped because they could match other text.
+			if ( mb_strlen( $grant['label'] ) >= 3 ) {
+				$suffix = ' ' . $grant['label'];
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-				$wpdb->query( $wpdb->prepare( "UPDATE {$logs} SET summary = REPLACE( summary, %s, %s ) WHERE token_id = %d AND summary LIKE %s", $grant['label'], '[removed]', $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%' ) );
+				$wpdb->query( $wpdb->prepare( "UPDATE {$logs} SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND RIGHT( summary, CHAR_LENGTH( %s ) ) = %s", $suffix, ' [removed]', $grant['id'], $suffix, $suffix ) );
 			}
 		}
+	}
+
+	/**
+	 * SQL condition for log rows that belong to the support agent: no user,
+	 * a user that is gone, or a temporary user. It keeps out rows of the
+	 * administrators who created or ended the grant.
+	 *
+	 * @return string Condition on the user_id column. No placeholders.
+	 */
+	private static function agent_rows_sql() {
+		global $wpdb;
+		return "( COALESCE( user_id, 0 ) = 0 OR user_id NOT IN ( SELECT ID FROM {$wpdb->users} ) OR user_id IN ( SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = 'happyaccess_temp_user' ) )";
 	}
 
 	/**
