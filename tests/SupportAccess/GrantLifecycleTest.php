@@ -168,6 +168,46 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertSame( array(), get_userdata( $user_id )->roles );
 	}
 
+	private function api_keys_table() {
+		global $wpdb;
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_api_keys ( key_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, description VARCHAR(200) NULL )" );
+		return $wpdb->prefix . 'woocommerce_api_keys';
+	}
+
+	private function key_count( $table, $user_id ) {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE user_id = %d", $user_id ) );
+	}
+
+	public function test_failed_delete_still_clears_the_temp_users_wc_api_keys() {
+		global $wpdb;
+		$table = $this->api_keys_table();
+		list( $id, $user_id ) = $this->grant_with_user();
+		$wpdb->insert( $table, array( 'user_id' => $user_id, 'description' => 'temp' ) );
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		delete_user_meta( $user_id, 'happyaccess_token_id' );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		// Make the delete bail: the user belongs to no grant once the token link is gone.
+		$this->assertTrue( Grants::revoke( $id ) );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertSame( 0, $this->key_count( $table, $user_id ) );
+	}
+
+	public function test_revoke_never_strips_or_clears_a_normal_user_linked_by_mistake() {
+		global $wpdb;
+		$table = $this->api_keys_table();
+		$made  = Grants::create( array( 'label' => 'Acme', 'duration' => DAY_IN_SECONDS ) );
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$wpdb->update( Installer::table( 'tokens' ), array( 'user_id' => $admin ), array( 'id' => $made['id'] ) );
+		Grants::flush_cache();
+		$wpdb->insert( $table, array( 'user_id' => $admin, 'description' => 'admin key' ) );
+
+		$this->assertTrue( Grants::revoke( $made['id'] ) );
+		$this->assertSame( array( 'administrator' ), get_userdata( $admin )->roles );
+		$this->assertSame( 1, $this->key_count( $table, $admin ) );
+	}
+
 	public function test_retry_orphans_counts_deleted_users() {
 		list( $id, $user_id ) = $this->grant_with_user();
 		delete_user_meta( $user_id, 'happyaccess_temp_user' );

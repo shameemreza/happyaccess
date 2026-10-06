@@ -475,9 +475,11 @@ final class Grants {
 			return false;
 		}
 
-		if ( $grant['user_id'] > 0 && TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) {
-			// If the delete below fails, the account stays but can do nothing.
+		if ( $grant['user_id'] > 0 && false !== get_userdata( $grant['user_id'] )
+			&& ( Capabilities::is_temp_user( $grant['user_id'] ) || TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) ) {
+			// If the delete below fails, the account stays but can do nothing and has no API keys.
 			( new \WP_User( $grant['user_id'] ) )->set_role( '' );
+			TempUsers::delete_wc_api_keys( $grant['user_id'] );
 		}
 		TempUsers::destroy_sessions( $grant['user_id'] );
 		$deleted = TempUsers::delete( $grant );
