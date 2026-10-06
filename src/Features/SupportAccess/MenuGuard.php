@@ -28,6 +28,11 @@ final class MenuGuard {
 	);
 
 	/**
+	 * Admin files that list posts of one type, "post" when the slug names none.
+	 */
+	const POST_TYPE_FILES = array( 'edit.php', 'post-new.php', 'edit-tags.php' );
+
+	/**
 	 * Per request cache of grant restrictions, keyed by blog, user and grant id.
 	 *
 	 * @var array
@@ -102,9 +107,10 @@ final class MenuGuard {
 	/**
 	 * Refuses a blocked admin page when it is opened by URL.
 	 *
+	 * @param \WP_Screen|object|null $screen Current screen.
 	 * @return void
 	 */
-	public static function block_screen() {
+	public static function block_screen( $screen = null ) {
 		$user_id = get_current_user_id();
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
@@ -115,12 +121,42 @@ final class MenuGuard {
 		}
 
 		$pagenow = isset( $GLOBALS['pagenow'] ) && is_string( $GLOBALS['pagenow'] ) ? $GLOBALS['pagenow'] : '';
-        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read only check of the requested screen.
-		$page      = isset( $_GET['page'] ) && is_string( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
-		$post_type = isset( $_GET['post_type'] ) && is_string( $_GET['post_type'] ) ? sanitize_text_field( wp_unslash( $_GET['post_type'] ) ) : '';
-        // phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		if ( ! self::is_blocked( $blocked, $pagenow, $page, $post_type ) ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read only check of the requested screen.
+		$query = array();
+		foreach ( $_GET as $key => $value ) {
+			if ( is_string( $value ) ) {
+				$query[ sanitize_key( $key ) ] = sanitize_text_field( wp_unslash( $value ) );
+			}
+		}
+		$post_type = isset( $_REQUEST['post_type'] ) && is_string( $_REQUEST['post_type'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['post_type'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		// Core reads the page arg through plugin_basename(), so "/wc-settings" opens wc-settings.
+		$page = isset( $query['page'] ) ? plugin_basename( $query['page'] ) : '';
+		if ( '' !== $page ) {
+			$query['page'] = $page;
+		}
+		if ( is_object( $screen ) && isset( $screen->post_type ) && is_string( $screen->post_type ) && '' !== $screen->post_type ) {
+			$post_type = $screen->post_type;
+		}
+		if ( '' !== $post_type ) {
+			$query['post_type'] = $post_type;
+		}
+		if ( is_object( $screen ) && isset( $screen->taxonomy ) && is_string( $screen->taxonomy ) && '' !== $screen->taxonomy ) {
+			$query['taxonomy'] = $screen->taxonomy;
+		}
+
+		$hit = self::is_blocked( $blocked, $pagenow, $page, $post_type, $query );
+		if ( ! $hit && in_array( $pagenow, array( 'post.php', 'post-new.php' ), true ) && '' !== $post_type ) {
+			// An edit screen belongs to its list page, so blocking the list blocks the editor.
+			$list_query = $query;
+			if ( 'post' === $post_type ) {
+				unset( $list_query['post_type'] );
+			}
+			$hit = self::is_blocked( $blocked, 'edit.php', '', 'post' === $post_type ? '' : $post_type, $list_query );
+		}
+		if ( ! $hit ) {
 			return;
 		}
 
@@ -164,26 +200,34 @@ final class MenuGuard {
 	 * @param array  $blocked   Blocked slugs, "slug" or "parent::child".
 	 * @param string $pagenow   Current admin file, for example "edit.php".
 	 * @param string $page      The page query arg.
-	 * @param string $post_type The post_type query arg.
+	 * @param string $post_type The post_type of the request or screen.
+	 * @param array  $query     Request query args. page and post_type are filled in when missing.
 	 * @return bool
 	 */
-	public static function is_blocked( array $blocked, $pagenow, $page, $post_type ) {
+	public static function is_blocked( array $blocked, $pagenow, $page, $post_type, array $query = array() ) {
+		if ( ! isset( $query['page'] ) && '' !== $page ) {
+			$query['page'] = $page;
+		}
+		if ( ! isset( $query['post_type'] ) && '' !== $post_type ) {
+			$query['post_type'] = $post_type;
+		}
+
 		foreach ( $blocked as $entry ) {
 			if ( ! is_string( $entry ) || '' === $entry ) {
 				continue;
 			}
 			$parts = explode( '::', $entry, 2 );
 			if ( 2 === count( $parts ) ) {
-				if ( self::slug_matches( $parts[1], $pagenow, $page, $post_type ) ) {
+				if ( self::slug_matches( $parts[1], $pagenow, $page, $query ) ) {
 					return true;
 				}
 				continue;
 			}
-			if ( self::slug_matches( $entry, $pagenow, $page, $post_type ) ) {
+			if ( self::slug_matches( $entry, $pagenow, $page, $query ) ) {
 				return true;
 			}
 			foreach ( self::children_of( $entry ) as $child ) {
-				if ( self::slug_matches( $child, $pagenow, $page, $post_type ) ) {
+				if ( self::slug_matches( $child, $pagenow, $page, $query ) ) {
 					return true;
 				}
 			}
@@ -258,23 +302,52 @@ final class MenuGuard {
 	/**
 	 * Whether one menu slug is the requested screen.
 	 *
-	 * @param string $slug      Menu slug, such as "tools.php", "wc-settings" or "edit.php?post_type=product".
-	 * @param string $pagenow   Current admin file.
-	 * @param string $page      The page query arg.
-	 * @param string $post_type The post_type query arg.
+	 * A slug is a base plus optional args. A base before "?" is an admin file
+	 * ("edit.php?post_type=product"). A base before "&" or a plain slug is a
+	 * page arg ("wc-admin&path=/customers", "wc-settings"); a plain slug also
+	 * matches the admin file when no page arg is present ("tools.php"). Every
+	 * arg in the slug must equal the request's.
+	 *
+	 * @param string $slug    Menu slug.
+	 * @param string $pagenow Current admin file.
+	 * @param string $page    The page query arg.
+	 * @param array  $query   Request query args.
 	 * @return bool
 	 */
-	private static function slug_matches( $slug, $pagenow, $page, $post_type ) {
-		if ( $pagenow === $slug || $page === $slug ) {
-			return true;
+	private static function slug_matches( $slug, $pagenow, $page, array $query ) {
+		$pos  = strcspn( $slug, '?&' );
+		$base = substr( $slug, 0, $pos );
+		$sep  = $pos < strlen( $slug ) ? $slug[ $pos ] : '';
+		$args = array();
+		if ( '' !== $sep ) {
+			wp_parse_str( substr( $slug, $pos + 1 ), $args );
 		}
-		$pos = strpos( $slug, '?' );
-		if ( false === $pos || '' === $post_type ) {
+
+		$is_file = '?' === $sep;
+		if ( $is_file ) {
+			if ( $base !== $pagenow ) {
+				return false;
+			}
+		} elseif ( $base !== $page && ! ( '' === $page && $base === $pagenow ) ) {
 			return false;
 		}
-		$args = array();
-		wp_parse_str( substr( $slug, $pos + 1 ), $args );
-		return substr( $slug, 0, $pos ) === $pagenow && isset( $args['post_type'] ) && $args['post_type'] === $post_type;
+
+		foreach ( $args as $key => $value ) {
+			if ( ! isset( $query[ $key ] ) || (string) $value !== (string) $query[ $key ] ) {
+				return false;
+			}
+		}
+
+		if ( ! $is_file && ! isset( $args['path'] ) && ! empty( $query['path'] ) ) {
+			// A bare page slug such as wc-admin is the home screen, not its path based sub pages.
+			return false;
+		}
+
+		if ( in_array( $base, self::POST_TYPE_FILES, true ) && ! isset( $args['post_type'] ) ) {
+			$type = isset( $query['post_type'] ) ? $query['post_type'] : '';
+			return '' === $type || 'post' === $type;
+		}
+		return true;
 	}
 
 	/**
