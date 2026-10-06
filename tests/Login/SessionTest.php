@@ -55,6 +55,13 @@ class SessionTest extends WP_UnitTestCase {
 		$this->assertEqualsWithDelta( 7 * DAY_IN_SECONDS, Session::cap_cookie( 172800, $this->temp, true ), 2 );
 	}
 
+	public function test_cookie_length_is_left_alone_for_a_temp_user_from_another_site() {
+		update_user_meta( $this->temp, 'happyaccess_blog_id', get_current_blog_id() + 1 );
+		Session::set_resolver( array( \HappyAccess\Features\SupportAccess\Grants::class, 'resolve_user' ) );
+		\HappyAccess\Features\SupportAccess\Grants::flush_cache();
+		$this->assertSame( 172800, Session::cap_cookie( 172800, $this->temp, true ) );
+	}
+
 	public function test_cookie_length_is_never_below_one_second() {
 		$this->resolve_to( 'active', 1790000000 );
 		$this->assertSame( 1, Session::cap_cookie( 172800, $this->temp, true ) );

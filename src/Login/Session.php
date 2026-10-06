@@ -192,6 +192,10 @@ final class Session {
 		if ( 'active' !== $grant['state'] ) {
 			return 1;
 		}
+		if ( PHP_INT_MAX === (int) $grant['expires_at'] ) {
+			// The user belongs to another site, whose own enforce() owns the session. A huge value would overflow when core adds it to time().
+			return (int) $length;
+		}
 		return max( 1, (int) $grant['expires_at'] - Clock::now() );
 	}
 
