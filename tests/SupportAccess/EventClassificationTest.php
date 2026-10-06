@@ -17,6 +17,17 @@ class EventClassificationTest extends WP_UnitTestCase {
 		array( 'self', 'log' ),
 		array( 'self', 'record' ),
 		array( 'self', 'record_post' ),
+		array( 'self', 'buffer_role_event' ),
+	);
+
+	/**
+	 * Methods that take the event key as a variable. Their callers are scanned.
+	 */
+	const WRAPPERS = array(
+		'Grants::log',
+		'ActivityTracker::record',
+		'ActivityTracker::record_post',
+		'ActivityTracker::flush',
 	);
 
 	/**
@@ -44,18 +55,17 @@ class EventClassificationTest extends WP_UnitTestCase {
 				)
 			);
 
+			$class   = '';
 			$wrapper = '';
 			$count   = count( $tokens );
 			for ( $i = 0; $i < $count; $i++ ) {
-				// Track the first parameter name of the method being read.
-				if ( is_array( $tokens[ $i ] ) && T_FUNCTION === $tokens[ $i ][0] ) {
-					$wrapper = '';
-					for ( $j = $i + 1; $j < $count && '(' !== $tokens[ $j ]; $j++ ) {
-						continue;
-					}
-					if ( isset( $tokens[ $j + 1 ] ) && is_array( $tokens[ $j + 1 ] ) && T_VARIABLE === $tokens[ $j + 1 ][0] ) {
-						$wrapper = $tokens[ $j + 1 ][1];
-					}
+				// Track the class and the method being read.
+				if ( is_array( $tokens[ $i ] ) && T_CLASS === $tokens[ $i ][0] && isset( $tokens[ $i + 1 ][1] ) ) {
+					$class = $tokens[ $i + 1 ][1];
+					continue;
+				}
+				if ( is_array( $tokens[ $i ] ) && T_FUNCTION === $tokens[ $i ][0] && isset( $tokens[ $i + 1 ][1] ) ) {
+					$wrapper = $class . '::' . $tokens[ $i + 1 ][1];
 					continue;
 				}
 
@@ -69,8 +79,8 @@ class EventClassificationTest extends WP_UnitTestCase {
 
 				$literals = array();
 				$ok       = ! empty( $arg );
-				if ( $ok && '$event' === $arg[0][1] && 1 === count( $arg ) && '$event' === $wrapper ) {
-					// A wrapper that takes the key as its own first argument. Its callers are scanned.
+				if ( $ok && is_array( $arg[0] ) && '$event' === $arg[0][1] && 1 === count( $arg ) && in_array( $wrapper, self::WRAPPERS, true ) ) {
+					// A listed wrapper that passes its own key on. Its callers are scanned.
 					continue;
 				}
 				$question = array_search( '?', $arg, true );

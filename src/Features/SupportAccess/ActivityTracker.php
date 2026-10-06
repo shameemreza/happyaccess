@@ -48,6 +48,15 @@ final class ActivityTracker {
 	private static $options = array();
 
 	/**
+	 * Role events waiting for the shutdown flush, keyed by event, user and
+	 * role. A role change fires several hooks for one real change, so they
+	 * are merged here before anything is written.
+	 *
+	 * @var array
+	 */
+	private static $role_events = array();
+
+	/**
 	 * Hooks every tracked event, the option collectors and the shutdown flush.
 	 *
 	 * @return void
@@ -334,6 +343,7 @@ final class ActivityTracker {
 		if ( ! $user ) {
 			return;
 		}
+		self::drop_role_events( (int) $user_id );
 		if ( is_array( $userdata ) && array_key_exists( 'role', $userdata ) ) {
 			$roles = '' === (string) $userdata['role'] ? array() : array( (string) $userdata['role'] );
 		} else {
@@ -372,8 +382,13 @@ final class ActivityTracker {
 		}
 		$old = array_values( array_filter( (array) $old_roles, 'strlen' ) );
 		$new = '' === (string) $role ? array() : array( (string) $role );
-		self::record(
+
+		// The add hook for this role already fired. This entry replaces it.
+		unset( self::$role_events[ self::role_key( 'user_role_added', (int) $user_id, (string) $role ) ] );
+		self::buffer_role_event(
 			'user_role_changed',
+			(int) $user_id,
+			(string) $role,
 			sprintf(
 				/* translators: 1: user login, 2: old role slugs, 3: new role slug. */
 				__( 'Changed role for %1$s: %2$s to %3$s', 'happyaccess' ),
@@ -404,8 +419,10 @@ final class ActivityTracker {
 		if ( ! $user ) {
 			return;
 		}
-		self::record(
+		self::buffer_role_event(
 			'user_role_added',
+			(int) $user_id,
+			(string) $role,
 			sprintf(
 				/* translators: 1: user login, 2: role slug. */
 				__( 'Added role to %1$s: %2$s', 'happyaccess' ),
@@ -490,14 +507,30 @@ final class ActivityTracker {
 	}
 
 	/**
-	 * Writes the collected option names as one entry per grant, then empties
-	 * the list. Uses the user and grant stored when each option changed.
+	 * Writes the collected role events, then the option names as one entry per
+	 * grant, and empties both lists. Uses the user and grant stored when each option changed.
 	 *
 	 * @return void
 	 */
 	public static function flush() {
-		$groups        = self::$options;
-		self::$options = array();
+		$groups            = self::$options;
+		$roles             = self::$role_events;
+		self::$options     = array();
+		self::$role_events = array();
+
+		foreach ( $roles as $entry ) {
+			$event = $entry['event'];
+			AuditLog::add(
+				$event,
+				array(
+					'feature'  => 'support',
+					'token_id' => (int) $entry['grant_id'],
+					'user_id'  => (int) $entry['actor'],
+					'summary'  => $entry['summary'],
+					'meta'     => $entry['meta'],
+				)
+			);
+		}
 
 		foreach ( $groups as $grant_id => $group ) {
 			AuditLog::add(
@@ -519,7 +552,8 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function reset() {
-		self::$options = array();
+		self::$options     = array();
+		self::$role_events = array();
 	}
 
 	/**
@@ -661,6 +695,56 @@ final class ActivityTracker {
 	private static function theme_name( $slug ) {
 		$theme = wp_get_theme( $slug );
 		return self::clip( $theme->exists() ? (string) $theme->get( 'Name' ) : $slug );
+	}
+
+	/**
+	 * Buffer key for one role event.
+	 *
+	 * @param string $event   Event key.
+	 * @param int    $user_id Id of the user whose role changed.
+	 * @param string $role    Role slug.
+	 * @return string
+	 */
+	private static function role_key( $event, $user_id, $role ) {
+		return $event . ':' . $user_id . ':' . $role;
+	}
+
+	/**
+	 * Holds a role event until the flush, with the temp user who caused it.
+	 *
+	 * @param string $event   Event key.
+	 * @param int    $target  Id of the user whose role changed.
+	 * @param string $role    Role slug.
+	 * @param string $summary Readable summary.
+	 * @param array  $meta    Names and ids only.
+	 * @return void
+	 */
+	private static function buffer_role_event( $event, $target, $role, $summary, array $meta ) {
+		$key                       = self::role_key( $event, $target, $role );
+		$actor                     = get_current_user_id();
+		self::$role_events[ $key ] = array(
+			'target'   => $target,
+			'actor'    => $actor,
+			'grant_id' => Capabilities::grant_id( $actor ),
+			'event'    => $event,
+			'summary'  => $summary,
+			'meta'     => $meta,
+		);
+	}
+
+	/**
+	 * Forgets the buffered role events of a user. A new user's roles are
+	 * already in the created entry.
+	 *
+	 * @param int $user_id Id of the user.
+	 * @return void
+	 */
+	private static function drop_role_events( $user_id ) {
+		foreach ( self::$role_events as $key => $entry ) {
+			if ( $user_id === $entry['target'] ) {
+				unset( self::$role_events[ $key ] );
+			}
+		}
 	}
 
 	/**
