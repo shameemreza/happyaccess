@@ -15,12 +15,10 @@
  */
 
 defined( 'ABSPATH' ) || exit;
-
-$is_changed = 'changed' === $variant;
 ?>
 <h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;">
 <?php
-echo $is_changed
+echo 'changed' === $variant
 	? esc_html__( "A support pass changed an administrator's login details", 'happyaccess' )
 	: esc_html__( 'A support pass made an administrator account', 'happyaccess' );
 ?>
@@ -28,7 +26,7 @@ echo $is_changed
 <p style="margin:0 0 16px;">
 <?php
 printf(
-	$is_changed
+	'changed' === $variant
 		/* translators: 1: grant label, 2: site name. */
 		? esc_html__( 'The support access "%1$s" changed the login details of an administrator account on %2$s.', 'happyaccess' )
 		/* translators: 1: grant label, 2: site name. */
@@ -47,7 +45,7 @@ printf(
 <td style="padding:4px 16px 4px 0;color:#646970;"><?php esc_html_e( 'Email', 'happyaccess' ); ?></td>
 <td style="padding:4px 0;"><?php echo esc_html( $user_email ); ?></td>
 </tr>
-<?php if ( $is_changed && ! empty( $changed ) ) : ?>
+<?php if ( 'changed' === $variant && ! empty( $changed ) ) : ?>
 <tr>
 <td style="padding:4px 16px 4px 0;color:#646970;"><?php esc_html_e( 'Changed', 'happyaccess' ); ?></td>
 <td style="padding:4px 0;"><?php echo esc_html( implode( ', ', array_map( 'strval', $changed ) ) ); ?></td>
