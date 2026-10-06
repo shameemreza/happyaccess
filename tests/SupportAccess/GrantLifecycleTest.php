@@ -10,6 +10,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
+use HappyAccess\Login\Session;
 
 class GrantLifecycleTest extends WP_UnitTestCase {
 
@@ -25,6 +26,7 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		Session::reset();
 		Clock::freeze( null );
 		parent::tear_down();
 	}
@@ -40,7 +42,7 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 			)
 		);
 		$user_id = TempUsers::get_or_create( Grants::get( $made['id'] ) );
-		WP_Session_Tokens::get_instance( $user_id )->create( 1790000000 + 3600 );
+		WP_Session_Tokens::get_instance( $user_id )->create( time() + 3600 );
 		return array( $made['id'], $user_id );
 	}
 
@@ -63,11 +65,89 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 
 	public function test_regenerate_replaces_both_secrets() {
 		list( $id ) = $this->grant_with_user();
-		$old_link   = Grants::get( $id );
-		$new        = Grants::regenerate( $id );
-		$this->assertSame( $id, Grants::find_by_code( $new['code'] )['id'] );
-		$this->assertSame( $id, Grants::find_by_link( $new['link_key'] )['id'] );
-		$this->assertNotNull( $old_link );
+		$old        = Grants::get( $id );
+		$this->assertNotNull( $old );
+		// The original secrets are only known from create(), so make a second grant to capture them.
+		$made = Grants::create( array( 'label' => 'Second', 'duration' => DAY_IN_SECONDS ) );
+		$this->assertTrue( Grants::record_login( $made['id'] ) );
+		$new = Grants::regenerate( $made['id'] );
+		$this->assertNull( Grants::find_by_code( $made['code'] ) );
+		$this->assertNull( Grants::find_by_link( $made['link_key'] ) );
+		$this->assertSame( $made['id'], Grants::find_by_code( $new['code'] )['id'] );
+		$this->assertSame( $made['id'], Grants::find_by_link( $new['link_key'] )['id'] );
+		$this->assertSame( 1, Grants::get( $made['id'] )['use_count'] );
+	}
+
+	public function test_regenerate_returns_null_for_a_revoked_grant() {
+		list( $id ) = $this->grant_with_user();
+		Grants::revoke( $id );
+		$this->assertNull( Grants::regenerate( $id ) );
+	}
+
+	public function test_extend_returns_false_for_revoked_and_unknown_grants() {
+		list( $id ) = $this->grant_with_user();
+		Grants::revoke( $id );
+		$this->assertFalse( Grants::extend( $id, 3600 ) );
+		$this->assertFalse( Grants::extend( 999999, 3600 ) );
+	}
+
+	public function test_revoke_destroys_sessions() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		Grants::revoke( $id );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all() );
+	}
+
+	public function test_revoke_all_returns_its_count() {
+		$this->grant_with_user();
+		$this->grant_with_user();
+		list( $done ) = $this->grant_with_user();
+		Grants::revoke( $done );
+		$this->assertSame( 2, Grants::revoke_all( 'lockdown' ) );
+		$this->assertSame( 0, Grants::revoke_all( 'lockdown' ) );
+		$this->assertSame( 'revoked', Grants::get( $done )['end_reason'] );
+	}
+
+	public function test_failed_delete_is_logged_and_retried_by_cleanup() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+
+		$this->assertTrue( Grants::revoke( $id ) );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'temp_user_delete_failed', 'token_id' => $id ) )['total'] );
+
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		Grants::cleanup_expired();
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertSame( 0, Grants::retry_orphans() );
+	}
+
+	public function test_retry_orphans_counts_deleted_users() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		Grants::revoke( $id );
+		$this->assertSame( 0, Grants::retry_orphans() );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		$this->assertSame( 1, Grants::retry_orphans() );
+	}
+
+	public function test_resolver_reports_revoked_for_a_grant_revoked_early_as_expired() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		// Keep the user alive so the resolver can still read its meta.
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		$this->assertTrue( Grants::revoke( $id, 'expired' ) );
+		$grant = Grants::get( $id );
+		$this->assertSame( 'expired', $grant['status'] );
+		$this->assertGreaterThan( Clock::now(), $grant['expires_at'] );
+		$this->assertSame( 'revoked', Grants::resolve_user( $user_id )['state'] );
+	}
+
+	public function test_session_sees_a_suspension_in_the_same_request() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		Session::set_resolver( array( Grants::class, 'resolve_user' ) );
+		$this->assertNull( Session::end_reason( $user_id ) );
+		Grants::suspend( $id );
+		$this->assertSame( 'suspended', Session::end_reason( $user_id ) );
 	}
 
 	public function test_revoke_deletes_user_logs_and_fires_action() {

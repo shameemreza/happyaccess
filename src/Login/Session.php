@@ -105,6 +105,16 @@ final class Session {
 	}
 
 	/**
+	 * Clears the cached grant states and keeps the resolver, so a change to a
+	 * grant takes effect within the same request.
+	 *
+	 * @return void
+	 */
+	public static function flush_cache() {
+		self::$cache = array();
+	}
+
+	/**
 	 * Clears the resolver and cache.
 	 *
 	 * @return void

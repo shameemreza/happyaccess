@@ -14,6 +14,7 @@ use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
+use HappyAccess\Login\Session;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -266,12 +267,13 @@ final class Grants {
 	}
 
 	/**
-	 * Clears the per-request resolver cache.
+	 * Clears the per-request resolver cache and Session's cached grant states.
 	 *
 	 * @return void
 	 */
 	public static function flush_cache() {
 		self::$resolved = array();
+		Session::flush_cache();
 	}
 
 	/**
@@ -431,8 +433,19 @@ final class Grants {
 		}
 
 		TempUsers::destroy_sessions( $grant['user_id'] );
-		TempUsers::delete( $grant );
+		$deleted = TempUsers::delete( $grant );
 		self::flush_cache();
+		if ( $grant['user_id'] > 0 && ! $deleted ) {
+			AuditLog::add(
+				'temp_user_delete_failed',
+				array(
+					'feature'  => 'support',
+					'token_id' => $grant['id'],
+					'user_id'  => 0,
+					'meta'     => array( 'user_id' => $grant['user_id'] ),
+				)
+			);
+		}
 
 		$ended = self::get( $grant['id'] );
 		$ended = null === $ended ? $grant : $ended;
@@ -516,6 +529,30 @@ final class Grants {
 				++$count;
 			}
 		}
+		self::retry_orphans();
+		return $count;
+	}
+
+	/**
+	 * Deletes temp users that outlived their revoked grant, for example after
+	 * a failed delete in revoke().
+	 *
+	 * @return int How many users were deleted.
+	 */
+	public static function retry_orphans() {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$table} WHERE revoked_at IS NOT NULL AND user_id > %d ORDER BY id ASC LIMIT %d", 0, 50 ) );
+
+		$count = 0;
+		foreach ( (array) $ids as $id ) {
+			$grant = self::get( (int) $id );
+			if ( null !== $grant && TempUsers::delete( $grant ) ) {
+				++$count;
+			}
+		}
+		self::flush_cache();
 		return $count;
 	}
 
@@ -530,8 +567,9 @@ final class Grants {
 	 */
 	public static function resolve_user( $user_id ) {
 		$user_id = (int) $user_id;
-		if ( array_key_exists( $user_id, self::$resolved ) ) {
-			return self::$resolved[ $user_id ];
+		$key     = get_current_blog_id() . ':' . $user_id;
+		if ( array_key_exists( $key, self::$resolved ) ) {
+			return self::$resolved[ $key ];
 		}
 
 		$result  = null;
@@ -545,19 +583,23 @@ final class Grants {
 		} else {
 			$grant = self::get( (int) get_user_meta( $user_id, 'happyaccess_token_id', true ) );
 			if ( null !== $grant ) {
-				$states = array(
-					'suspended' => 'suspended',
-					'revoked'   => 'revoked',
-				);
-				$result = array(
+				// A revoked grant can have status "expired" (reason expired), so check revoked_at first.
+				if ( $grant['revoked_at'] > 0 ) {
+					$state = 'revoked';
+				} elseif ( 'suspended' === $grant['status'] ) {
+					$state = 'suspended';
+				} else {
 					// Active, used and expired all pass; Session ends an expired one from expires_at.
-					'state'      => isset( $states[ $grant['status'] ] ) ? $states[ $grant['status'] ] : 'active',
+					$state = 'active';
+				}
+				$result = array(
+					'state'      => $state,
 					'expires_at' => $grant['expires_at'],
 				);
 			}
 		}
 
-		self::$resolved[ $user_id ] = $result;
+		self::$resolved[ $key ] = $result;
 		return $result;
 	}
 
