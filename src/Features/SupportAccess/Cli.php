@@ -33,13 +33,13 @@ final class Cli {
 	 *
 	 * @param array $assoc Associative arguments from WP-CLI.
 	 * @return array
-	 * @throws \InvalidArgumentException When --expires or --notify is not valid.
+	 * @throws \InvalidArgumentException When --expires, --notify or a boolean flag is not valid.
 	 */
 	public static function grant_args( array $assoc ) {
 		$args = array(
 			'label'          => isset( $assoc['label'] ) && is_string( $assoc['label'] ) ? $assoc['label'] : '',
-			'one_time'       => ! empty( $assoc['one-time'] ),
-			'allow_installs' => ! empty( $assoc['allow-installs'] ),
+			'one_time'       => self::flag( $assoc, 'one-time' ),
+			'allow_installs' => self::flag( $assoc, 'allow-installs' ),
 		);
 
 		foreach ( array( 'email', 'role' ) as $key ) {
@@ -106,7 +106,7 @@ final class Cli {
 	 * ---
 	 *
 	 * [--expires=<duration>]
-	 * : How long the access lasts, for example 1d, 3d, 7d, 12h. Units are d (days) and h (hours). Defaults to the duration set in HappyAccess settings.
+	 * : How long the access lasts, for example 1d, 3d, 7d, 12h. Units are d (days) and h (hours). The range is 1 hour to 30 days; longer values are capped at 30 days. Defaults to the duration set in HappyAccess settings.
 	 *
 	 * [--one-time]
 	 * : End the access after the first login.
@@ -161,8 +161,10 @@ final class Cli {
 
 		/* translators: %d: grant id. */
 		\WP_CLI::success( sprintf( __( 'Created grant %d. The link and code below are shown once.', 'happyaccess' ), $grant['id'] ) );
-		\WP_CLI::line( sprintf( 'Link: %s', Router::url( 'link', array( 'k' => $result['link_key'] ) ) ) );
-		\WP_CLI::line( sprintf( 'Code: %s', Codes::format_code( $result['code'] ) ) );
+		/* translators: %s: login link. */
+		\WP_CLI::line( sprintf( __( 'Link: %s', 'happyaccess' ), Router::url( 'link', array( 'k' => $result['link_key'] ) ) ) );
+		/* translators: %s: access code. */
+		\WP_CLI::line( sprintf( __( 'Code: %s', 'happyaccess' ), Codes::format_code( $result['code'] ) ) );
 		\WP_CLI::line( '' );
 		\WP_CLI::line( Notifications::bundle_text( $grant, $result['code'], $result['link_key'] ) );
 
@@ -174,6 +176,10 @@ final class Cli {
 				/* translators: %s: email address. */
 				\WP_CLI::warning( sprintf( __( 'Could not email %s. Share the details above yourself.', 'happyaccess' ), $grant['recipient_email'] ) );
 			}
+		}
+
+		if ( ! empty( $create['redirect_to'] ) && '' === $grant['redirect_to'] ) {
+			\WP_CLI::warning( __( 'The --redirect URL was dropped because it is not on this site.', 'happyaccess' ) );
 		}
 	}
 
@@ -239,9 +245,9 @@ final class Cli {
 	 * @return void
 	 */
 	public function extend( $args, $assoc_args ) {
-		$id = isset( $args[0] ) ? absint( $args[0] ) : 0;
-		if ( $id < 1 ) {
-			\WP_CLI::error( __( 'Give the id of a grant.', 'happyaccess' ) );
+		$id = self::grant_id( $args );
+		if ( 0 === $id ) {
+			\WP_CLI::error( __( 'Give the id of exactly one grant.', 'happyaccess' ) );
 			return;
 		}
 
@@ -277,6 +283,9 @@ final class Cli {
 	 * [--all]
 	 * : End every grant that has not ended yet.
 	 *
+	 * [--yes]
+	 * : Skip the confirmation question for --all.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     $ wp happyaccess revoke 4
@@ -287,15 +296,22 @@ final class Cli {
 	 * @return void
 	 */
 	public function revoke( $args, $assoc_args ) {
-		$all = ! empty( $assoc_args['all'] );
-		$id  = isset( $args[0] ) ? absint( $args[0] ) : 0;
+		try {
+			$all = self::flag( $assoc_args, 'all' );
+		} catch ( \InvalidArgumentException $e ) {
+			\WP_CLI::error( $e->getMessage() );
+			return;
+		}
 
-		if ( ( $id > 0 ) === $all ) {
-			\WP_CLI::error( __( 'Give either a grant id or --all.', 'happyaccess' ) );
+		$id      = self::grant_id( $args );
+		$invalid = $all ? array() !== $args : 0 === $id;
+		if ( $invalid ) {
+			\WP_CLI::error( __( 'Give either the id of one grant or --all.', 'happyaccess' ) );
 			return;
 		}
 
 		if ( $all ) {
+			\WP_CLI::confirm( __( 'End all active support access?', 'happyaccess' ), $assoc_args );
 			$count = Grants::revoke_all( 'revoked_cli' );
 			/* translators: %d: number of grants ended. */
 			\WP_CLI::success( sprintf( _n( 'Ended %d grant.', 'Ended %d grants.', $count, 'happyaccess' ), $count ) );
@@ -308,6 +324,50 @@ final class Cli {
 		}
 		/* translators: %d: grant id. */
 		\WP_CLI::success( sprintf( __( 'Ended grant %d.', 'happyaccess' ), $id ) );
+	}
+
+	/**
+	 * Reads a boolean flag strictly.
+	 *
+	 * @param array  $assoc Associative arguments from WP-CLI.
+	 * @param string $name  Flag name without the dashes.
+	 * @return bool
+	 * @throws \InvalidArgumentException When the value is not a recognised yes or no.
+	 */
+	private static function flag( array $assoc, $name ) {
+		if ( ! isset( $assoc[ $name ] ) ) {
+			return false;
+		}
+
+		$value = $assoc[ $name ];
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+
+		$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+		if ( in_array( $value, array( '', '1', 'true', 'yes' ), true ) ) {
+			return true;
+		}
+		if ( in_array( $value, array( '0', 'false', 'no' ), true ) ) {
+			return false;
+		}
+
+		/* translators: %s: flag name, for example --allow-installs. */
+		throw new \InvalidArgumentException( esc_html( sprintf( __( 'Use true or false for --%s.', 'happyaccess' ), $name ) ) );
+	}
+
+	/**
+	 * Grant id from positional arguments.
+	 *
+	 * @param array $args Positional arguments.
+	 * @return int The id, or 0 unless there is exactly one argument made of digits and above zero.
+	 */
+	private static function grant_id( array $args ) {
+		if ( 1 !== count( $args ) ) {
+			return 0;
+		}
+		$id = reset( $args );
+		return is_string( $id ) && ctype_digit( $id ) ? (int) $id : 0;
 	}
 
 	/**
