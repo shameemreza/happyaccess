@@ -45,6 +45,16 @@ class SettingsTest extends WP_UnitTestCase {
 		$this->assertSame( 30, Settings::get( 'privacy.retention_days' ) );
 	}
 
+	public function test_site_code_cap_is_clamped_to_5_to_100() {
+		$this->assertSame( 30, Settings::get( 'security.site_code_cap' ) );
+
+		Settings::update( array( 'security' => array( 'site_code_cap' => 1000 ) ) );
+		$this->assertSame( 100, Settings::get( 'security.site_code_cap' ) );
+
+		Settings::update( array( 'security' => array( 'site_code_cap' => 1 ) ) );
+		$this->assertSame( 5, Settings::get( 'security.site_code_cap' ) );
+	}
+
 	public function test_valid_choice_is_kept() {
 		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_CF_CONNECTING_IP' ) ) );
 		$this->assertSame( 'HTTP_CF_CONNECTING_IP', Settings::get( 'security.proxy_header' ) );

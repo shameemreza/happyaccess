@@ -24,7 +24,7 @@ final class Settings {
 		'security.max_attempts'        => array( 1, 20 ),
 		'security.attempt_window'      => array( 60, 86400 ),
 		'security.lockout_duration'    => array( 60, 86400 ),
-		'security.site_code_cap'       => array( 5, 1000 ),
+		'security.site_code_cap'       => array( 5, 100 ),
 		'security.recaptcha_threshold' => array( 0, 1 ),
 		'privacy.retention_days'       => array( 1, 365 ),
 		'support.default_duration'     => array( 3600, 2592000 ),

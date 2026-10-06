@@ -466,4 +466,16 @@ class MigrationTest extends WP_UnitTestCase {
 		$columns = wp_list_pluck( $wpdb->get_results( 'SHOW COLUMNS FROM ' . Installer::table( 'attempts' ) ), 'Field' );
 		$this->assertContains( 'scope', $columns );
 	}
+	public function test_migrated_six_digit_grants_expire_within_seven_days() {
+		$this->insert_legacy_token( 'long', array( 'otp_code' => '444444', 'expires_at' => Clock::mysql( 1790000000 + 20 * DAY_IN_SECONDS ) ) );
+		$this->insert_legacy_token( 'short', array( 'otp_code' => '555555', 'expires_at' => Clock::mysql( 1790000000 + 2 * DAY_IN_SECONDS ) ) );
+		$this->insert_legacy_token( 'link-only', array( 'expires_at' => Clock::mysql( 1790000000 + 20 * DAY_IN_SECONDS ) ) );
+
+		Installer::migrate();
+
+		$this->assertSame( Clock::mysql( 1790000000 + 7 * DAY_IN_SECONDS ), $this->token( 'long' )['expires_at'] );
+		$this->assertSame( Clock::mysql( 1790000000 + 2 * DAY_IN_SECONDS ), $this->token( 'short' )['expires_at'] );
+		$this->assertSame( Clock::mysql( 1790000000 + 20 * DAY_IN_SECONDS ), $this->token( 'link-only' )['expires_at'], 'Rows without a code keep their expiry.' );
+		$this->assertTrue( Codes::verify_code( '444444', $this->token( 'long' )['code_hash'] ) );
+	}
 }

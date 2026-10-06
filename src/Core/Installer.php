@@ -22,6 +22,8 @@ final class Installer {
 
 	const LOCK_TTL = 300;
 
+	const LEGACY_CODE_MAX_AGE = 7 * DAY_IN_SECONDS;
+
 	/**
 	 * Columns 1.1.0 needs that 1.0.6 didn't have, by short table name. A table
 	 * with an empty list only has to exist.
@@ -341,6 +343,8 @@ final class Installer {
 			$active    = empty( $row['revoked_at'] ) && ! $exhausted && Clock::from_mysql( $row['expires_at'] ) > Clock::now();
 			if ( $active ) {
 				$data['code_hash'] = Codes::hash_code( $row['otp_code'] );
+				// A 6-digit code is the weakest secret here, so it can't outlive a week.
+				$data['expires_at'] = Clock::mysql( min( Clock::from_mysql( $row['expires_at'] ), Clock::now() + self::LEGACY_CODE_MAX_AGE ) );
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 			if ( false === $wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) ) ) {
