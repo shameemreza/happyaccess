@@ -233,4 +233,30 @@ class SessionTest extends WP_UnitTestCase {
 		);
 		$this->assertSame( 'expired', Session::end_reason( $this->temp ) );
 	}
+
+	public function test_block_core_auth_rejects_a_temp_user() {
+		$result = Session::block_core_auth( get_userdata( $this->temp ) );
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_temp_user', $result->get_error_code() );
+	}
+
+	public function test_block_core_auth_passes_other_results_through() {
+		$admin = get_userdata( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$error = new WP_Error( 'x', 'y' );
+
+		$this->assertSame( $admin, Session::block_core_auth( $admin ) );
+		$this->assertSame( $error, Session::block_core_auth( $error ) );
+		$this->assertNull( Session::block_core_auth( null ) );
+	}
+
+	public function test_core_login_is_blocked_for_a_temp_user_with_a_valid_password() {
+		Session::register();
+		wp_set_password( 'a-known-password-123', $this->temp );
+		$login = get_userdata( $this->temp )->user_login;
+
+		$result = wp_authenticate( $login, 'a-known-password-123' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_temp_user', $result->get_error_code() );
+	}
 }

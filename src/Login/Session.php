@@ -15,7 +15,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Caps the auth cookie at the grant's expiry and checks the grant on every
  * logged-in request, so access ends on time without WP-Cron. A temp user
- * whose grant can't be found is logged out.
+ * whose grant can't be found is logged out. Three hooks cover the ways in:
+ * enforce() on init handles cookie sessions, the determine_current_user
+ * filter handles re-resolution after init such as REST, and the authenticate
+ * filter keeps temp users out of core's password, application password and
+ * XML-RPC logins entirely.
  */
 final class Session {
 
@@ -42,11 +46,31 @@ final class Session {
 		add_filter( 'auth_cookie_expiration', array( __CLASS__, 'cap_cookie' ), 99, 3 );
 		add_action( 'init', array( __CLASS__, 'enforce' ), 1 );
 		add_filter( 'determine_current_user', array( __CLASS__, 'filter_current_user' ), 99 );
+		add_filter( 'authenticate', array( __CLASS__, 'block_core_auth' ), 99, 1 );
 	}
 
 	/**
-	 * Drops an ended temp user from authentication that happens after init,
-	 * such as Application Passwords over REST or XML-RPC.
+	 * Keeps temp users out of core's authenticate chain (password, application
+	 * password, wp-login.php, XML-RPC). They sign in through the HappyAccess
+	 * link or code flow, which sets the auth cookie directly.
+	 *
+	 * @param \WP_User|\WP_Error|null $user Authentication result.
+	 * @return \WP_User|\WP_Error|null
+	 */
+	public static function block_core_auth( $user ) {
+		if ( $user instanceof \WP_User && Capabilities::is_temp_user( $user->ID ) ) {
+			return new \WP_Error(
+				'happyaccess_temp_user',
+				__( 'Temporary support accounts sign in with their access link or code.', 'happyaccess' )
+			);
+		}
+		return $user;
+	}
+
+	/**
+	 * Drops an ended temp user when the current user is resolved again after
+	 * init, such as a REST request. XML-RPC and password logins are covered by
+	 * block_core_auth().
 	 *
 	 * The filter only acts after init, so enforce() keeps the logout path
 	 * (wp_logout, the ended action and the redirect). The grant resolver must
