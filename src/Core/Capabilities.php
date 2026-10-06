@@ -23,7 +23,7 @@ final class Capabilities {
 	 * @return void
 	 */
 	public static function register() {
-		add_filter( 'map_meta_cap', array( __CLASS__, 'map' ), 10, 4 );
+		add_filter( 'map_meta_cap', array( __CLASS__, 'map' ), PHP_INT_MAX, 4 );
 	}
 
 	/**

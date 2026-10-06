@@ -94,4 +94,36 @@ class SessionTest extends WP_UnitTestCase {
 		$this->assertSame( array( $this->temp, 'revoked' ), $ended );
 		$this->assertSame( 0, get_current_user_id() );
 	}
+
+	public function test_filter_current_user_drops_ended_temp_user() {
+		$this->resolve_to( 'revoked', 1790000000 + 3600 );
+		$this->assertFalse( Session::filter_current_user( $this->temp ) );
+	}
+
+	public function test_filter_current_user_keeps_active_temp_user() {
+		$this->resolve_to( 'active', 1790000000 + 3600 );
+		$this->assertSame( $this->temp, Session::filter_current_user( $this->temp ) );
+	}
+
+	public function test_filter_current_user_passes_normal_users_and_empty_through() {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$this->assertSame( $admin, Session::filter_current_user( $admin ) );
+		$this->assertFalse( Session::filter_current_user( false ) );
+		$this->assertSame( 0, Session::filter_current_user( 0 ) );
+	}
+
+	public function test_registered_filter_drops_revoked_temp_user_after_init() {
+		$this->resolve_to( 'revoked', 1790000000 + 3600 );
+		Session::register();
+		$this->assertFalse( apply_filters( 'determine_current_user', $this->temp ) );
+	}
+
+	public function test_resolver_with_missing_keys_fails_closed_without_notice() {
+		Session::set_resolver(
+			function () {
+				return array( 'state' => 'active' );
+			}
+		);
+		$this->assertSame( 'expired', Session::end_reason( $this->temp ) );
+	}
 }

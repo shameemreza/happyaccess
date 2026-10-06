@@ -41,6 +41,24 @@ final class Session {
 	public static function register() {
 		add_filter( 'auth_cookie_expiration', array( __CLASS__, 'cap_cookie' ), 99, 3 );
 		add_action( 'init', array( __CLASS__, 'enforce' ), 1 );
+		add_filter( 'determine_current_user', array( __CLASS__, 'filter_current_user' ), 99 );
+	}
+
+	/**
+	 * Drops an ended temp user from authentication that happens after init,
+	 * such as Application Passwords over REST or XML-RPC.
+	 *
+	 * @param int|false $user_id User id or false.
+	 * @return int|false
+	 */
+	public static function filter_current_user( $user_id ) {
+		if ( empty( $user_id ) || ! Capabilities::is_temp_user( (int) $user_id ) ) {
+			return $user_id;
+		}
+		if ( null !== self::end_reason( (int) $user_id ) ) {
+			return false;
+		}
+		return $user_id;
 	}
 
 	/**
@@ -77,9 +95,12 @@ final class Session {
 		}
 		if ( ! array_key_exists( $user_id, self::$cache ) ) {
 			$grant                   = self::$resolver ? call_user_func( self::$resolver, $user_id ) : null;
-			self::$cache[ $user_id ] = is_array( $grant ) ? $grant : array(
-				'expires_at' => 0,
-				'state'      => 'revoked',
+			self::$cache[ $user_id ] = wp_parse_args(
+				is_array( $grant ) ? $grant : array(),
+				array(
+					'expires_at' => 0,
+					'state'      => 'revoked',
+				)
 			);
 		}
 		return self::$cache[ $user_id ];
@@ -126,7 +147,7 @@ final class Session {
 	}
 
 	/**
-	 * Logs out a temp user whose access has ended.
+	 * Logs out a temp user whose access has ended. WP-CLI is deliberately exempt.
 	 *
 	 * @return void
 	 */
