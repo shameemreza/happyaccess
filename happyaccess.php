@@ -27,6 +27,10 @@ define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'HAPPYACCESS_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
+// Namespaced 1.1.0 code. Stage 2 boots it; for now it is only loadable.
+require_once HAPPYACCESS_PLUGIN_DIR . 'src/Autoloader.php';
+\HappyAccess\Autoloader::register();
+
 // Declare HPOS compatibility (if WooCommerce is active).
 add_action( 'before_woocommerce_init', function() {
 	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
