@@ -106,6 +106,40 @@ final class CapabilityGuard {
 	);
 
 	/**
+	 * Caps blocked on every level, including full. The network caps match
+	 * the ones in Catalog::NEVER.
+	 */
+	const SELF_BLOCKED = array(
+		'create_app_password',
+		'edit_app_password',
+		'list_app_passwords',
+		'read_app_password',
+		'delete_app_password',
+		'delete_app_passwords',
+		'erase_others_personal_data',
+		'export_others_personal_data',
+		'manage_network',
+		'manage_network_users',
+		'manage_network_plugins',
+		'manage_network_themes',
+		'manage_network_options',
+		'manage_sites',
+		'create_sites',
+		'delete_sites',
+		'upgrade_network',
+		'setup_network',
+	);
+
+	/**
+	 * Secret options protected on every level. Both carry the prefix too,
+	 * so this list keeps them covered if the prefix rule ever changes.
+	 */
+	const SECRET_OPTIONS = array(
+		'happyaccess_secret',
+		'happyaccess_recaptcha_secret_key',
+	);
+
+	/**
 	 * Caps that act on another user.
 	 */
 	const USER_CAPS = array(
@@ -271,11 +305,17 @@ final class CapabilityGuard {
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return $caps;
 		}
-		$caps = (array) $caps;
-		$cap  = (string) $cap;
-		$deny = array( 'do_not_allow' );
-
+		$caps  = (array) $caps;
+		$cap   = (string) $cap;
+		$deny  = array( 'do_not_allow' );
 		$asked = array_merge( array( $cap ), $caps );
+		$rules = self::rules( $user_id );
+		$first = is_array( $args ) && isset( $args[0] ) ? $args[0] : null;
+
+		if ( 'protected' !== $rules['level'] ) {
+			return self::map_open_level( $caps, $cap, $asked, $user_id, $first );
+		}
+
 		if ( array_intersect( $asked, self::ALWAYS_BLOCKED ) ) {
 			return $deny;
 		}
@@ -284,15 +324,12 @@ final class CapabilityGuard {
 			return $deny;
 		}
 
-		$rules = self::rules( $user_id );
 		if ( 'protected_allow_installs' !== $rules['protection'] && array_intersect( $asked, self::INSTALL_CAPS ) ) {
 			return $deny;
 		}
 
-		$first = is_array( $args ) && isset( $args[0] ) ? $args[0] : null;
-
 		if ( in_array( $cap, self::USER_CAPS, true ) ) {
-			$target = $first instanceof \WP_User ? (int) $first->ID : ( is_scalar( $first ) ? (int) $first : 0 );
+			$target = self::target_id( $first );
 			if ( $target > 0 ) {
 				// Customers only. Admins, the owner and self all fail the low privilege check.
 				if ( $target === $user_id || $target === $rules['created_by'] ) {
@@ -310,6 +347,78 @@ final class CapabilityGuard {
 		}
 
 		return $caps;
+	}
+
+	/**
+	 * Custom and full passes keep only the self-protection rules: no
+	 * application passwords, privacy or network caps, no edits to the
+	 * creator, and HappyAccess stays active.
+	 *
+	 * @param array  $caps    Primitive caps.
+	 * @param string $cap     Requested cap.
+	 * @param array  $asked   Requested cap plus primitive caps.
+	 * @param int    $user_id Temp user id.
+	 * @param mixed  $first   First extra arg.
+	 * @return array
+	 */
+	private static function map_open_level( array $caps, $cap, array $asked, $user_id, $first ) {
+		$deny = array( 'do_not_allow' );
+		if ( array_intersect( $asked, self::SELF_BLOCKED ) ) {
+			return $deny;
+		}
+		if ( in_array( $cap, self::USER_CAPS, true ) ) {
+			$creator = self::creator_for( $user_id );
+			if ( $creator > 0 && self::target_id( $first ) === $creator ) {
+				return $deny;
+			}
+		}
+		if ( in_array( $cap, array( 'deactivate_plugin', 'delete_plugin' ), true ) && self::is_happyaccess_path( $first ) ) {
+			return $deny;
+		}
+		return $caps;
+	}
+
+	/**
+	 * User id from a cap check argument.
+	 *
+	 * @param mixed $first First extra arg: a user id or a WP_User.
+	 * @return int
+	 */
+	private static function target_id( $first ) {
+		if ( $first instanceof \WP_User ) {
+			return (int) $first->ID;
+		}
+		return is_scalar( $first ) ? (int) $first : 0;
+	}
+
+	/**
+	 * Access level of a temp user's grant. Anyone else, or a grant that
+	 * can't be read, gets protected.
+	 *
+	 * @param int $user_id User id.
+	 * @return string protected, custom or full.
+	 */
+	public static function level_for( $user_id ) {
+		$user_id = (int) $user_id;
+		if ( ! Capabilities::is_temp_user( $user_id ) ) {
+			return 'protected';
+		}
+		return self::rules( $user_id )['level'];
+	}
+
+	/**
+	 * Creator of a temp user's grant, or 0 when there is none or the account is gone.
+	 *
+	 * @param int $user_id Temp user id.
+	 * @return int
+	 */
+	public static function creator_for( $user_id ) {
+		$user_id = (int) $user_id;
+		if ( ! Capabilities::is_temp_user( $user_id ) ) {
+			return 0;
+		}
+		$creator = self::rules( $user_id )['created_by'];
+		return $creator > 0 && false !== get_userdata( $creator ) ? $creator : 0;
 	}
 
 	/**
@@ -360,16 +469,21 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Removes protected options and the catch-all options page group for temp users.
+	 * Removes protected options for temp users, and on the protected level
+	 * the catch-all options page group too.
 	 *
 	 * @param array $allowed Options by group.
 	 * @return array
 	 */
 	public static function filter_allowed_options( $allowed ) {
-		if ( ! is_array( $allowed ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+		$user_id = get_current_user_id();
+		if ( ! is_array( $allowed ) || ! Capabilities::is_temp_user( $user_id ) ) {
 			return $allowed;
 		}
-		unset( $allowed['options'] );
+		$level = self::level_for( $user_id );
+		if ( 'protected' === $level ) {
+			unset( $allowed['options'] );
+		}
 		foreach ( $allowed as $group => $options ) {
 			if ( 0 === strpos( (string) $group, self::OPTION_PREFIX ) ) {
 				unset( $allowed[ $group ] );
@@ -379,8 +493,8 @@ final class CapabilityGuard {
 				$allowed[ $group ] = array_values(
 					array_filter(
 						$options,
-						static function ( $option ) {
-							return ! self::is_protected_option( $option );
+						static function ( $option ) use ( $level ) {
+							return ! self::is_protected_option( $option, $level );
 						}
 					)
 				);
@@ -412,6 +526,10 @@ final class CapabilityGuard {
 			}
 			return $value;
 		}
+		$level = self::level_for( $user_id );
+		if ( 'protected' !== $level ) {
+			return self::is_protected_option( $option, $level ) ? $old_value : $value;
+		}
 		if ( self::plugin_work_active() && self::is_roles_option( $option ) ) {
 			if ( ! self::$roles_logged && $value !== $old_value ) {
 				self::$roles_logged = true;
@@ -427,7 +545,7 @@ final class CapabilityGuard {
 			}
 			return $value;
 		}
-		return self::is_protected_option( $option ) ? $old_value : $value;
+		return self::is_protected_option( $option, $level ) ? $old_value : $value;
 	}
 
 	/**
@@ -437,7 +555,8 @@ final class CapabilityGuard {
 	 * @return void
 	 */
 	public static function block_option_delete( $option ) {
-		if ( Internal::active() || ! self::is_protected_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+		$user_id = get_current_user_id();
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) || ! self::is_protected_option( $option, self::level_for( $user_id ) ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -454,7 +573,8 @@ final class CapabilityGuard {
 	 */
 	public static function keep_old_site_option( $value, $old_value = null, $option = '', $network_id = 0 ) {
 		unset( $network_id );
-		if ( Internal::active() || ! self::is_protected_site_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+		$user_id = get_current_user_id();
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) || ! self::is_protected_site_option( $option, self::level_for( $user_id ) ) ) {
 			return $value;
 		}
 		return $old_value;
@@ -469,7 +589,8 @@ final class CapabilityGuard {
 	 */
 	public static function block_site_option_delete( $option, $network_id = 0 ) {
 		unset( $network_id );
-		if ( Internal::active() || ! self::is_protected_site_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+		$user_id = get_current_user_id();
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) || ! self::is_protected_site_option( $option, self::level_for( $user_id ) ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -509,11 +630,11 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Protection level and creator of a temp user's grant. A grant that
-	 * cannot be read fails closed to the default level, which blocks installs.
+	 * Protection, access level and creator of a temp user's grant. A grant
+	 * that cannot be read fails closed to the protected level, which blocks installs.
 	 *
 	 * @param int $user_id Temp user id.
-	 * @return array protection and created_by.
+	 * @return array protection, level and created_by.
 	 */
 	private static function rules( $user_id ) {
 		$grant_id = Capabilities::grant_id( $user_id );
@@ -522,6 +643,7 @@ final class CapabilityGuard {
 			$grant               = $grant_id > 0 ? Grants::get( $grant_id ) : null;
 			self::$rules[ $key ] = array(
 				'protection' => is_array( $grant ) ? $grant['protection'] : 'protected',
+				'level'      => is_array( $grant ) && isset( $grant['level'] ) && in_array( $grant['level'], array( 'custom', 'full' ), true ) ? $grant['level'] : 'protected',
 				'created_by' => is_array( $grant ) ? (int) $grant['created_by'] : 0,
 			);
 		}
@@ -562,15 +684,20 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Whether an option is off limits to temp users.
+	 * Whether an option is off limits to temp users. Custom and full passes
+	 * are kept only from HappyAccess's own options.
 	 *
-	 * @param mixed $option Option name.
+	 * @param mixed  $option Option name.
+	 * @param string $level  Access level of the grant.
 	 * @return bool
 	 */
-	private static function is_protected_option( $option ) {
+	private static function is_protected_option( $option, $level = 'protected' ) {
 		global $wpdb;
 		if ( ! is_string( $option ) || '' === $option ) {
 			return false;
+		}
+		if ( 'protected' !== $level ) {
+			return 0 === strpos( $option, self::OPTION_PREFIX ) || in_array( $option, self::SECRET_OPTIONS, true );
 		}
 		return in_array( $option, self::PROTECTED_OPTIONS, true )
 			|| 0 === strpos( $option, self::OPTION_PREFIX )
@@ -578,14 +705,19 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Whether a network option is off limits to temp users.
+	 * Whether a network option is off limits to temp users. Custom and full
+	 * passes are kept only from HappyAccess's own network options.
 	 *
-	 * @param mixed $option Option name.
+	 * @param mixed  $option Option name.
+	 * @param string $level  Access level of the grant.
 	 * @return bool
 	 */
-	private static function is_protected_site_option( $option ) {
+	private static function is_protected_site_option( $option, $level = 'protected' ) {
 		if ( ! is_string( $option ) || '' === $option ) {
 			return false;
+		}
+		if ( 'protected' !== $level ) {
+			return 0 === strpos( $option, self::OPTION_PREFIX );
 		}
 		return in_array( $option, self::PROTECTED_SITE_OPTIONS, true ) || 0 === strpos( $option, self::OPTION_PREFIX );
 	}

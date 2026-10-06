@@ -13,8 +13,9 @@ use HappyAccess\Core\Capabilities;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * A temp admin may edit customer profiles but never change a password or
- * email, start a password reset, or mint WooCommerce API keys.
+ * On the protected level a temp admin may edit customer profiles but never
+ * change a password or email, start a password reset, or mint WooCommerce
+ * API keys. Custom and full passes are only kept away from the creator's account.
  */
 final class AccountGuard {
 
@@ -44,7 +45,37 @@ final class AccountGuard {
 	}
 
 	/**
+	 * Whether the current request runs as a temp user on the protected level.
+	 *
+	 * @return bool
+	 */
+	private static function is_protected_request() {
+		return self::is_blocked_request() && 'protected' === CapabilityGuard::level_for( get_current_user_id() );
+	}
+
+	/**
+	 * Whether the current temp user's rules cover changes to this account.
+	 * On the protected level that is every account. On custom and full it
+	 * is only the grant's creator.
+	 *
+	 * @param int $user_id Account being changed.
+	 * @return bool
+	 */
+	private static function guards_account( $user_id ) {
+		if ( ! self::is_blocked_request() ) {
+			return false;
+		}
+		$current = get_current_user_id();
+		if ( 'protected' === CapabilityGuard::level_for( $current ) ) {
+			return true;
+		}
+		$creator = CapabilityGuard::creator_for( $current );
+		return $creator > 0 && (int) $user_id === $creator;
+	}
+
+	/**
 	 * Restores the stored password hash and email when a temp user updates an existing user.
+	 * On custom and full this applies only to the grant's creator.
 	 *
 	 * @param array    $data     Data about to be saved, with the password already hashed.
 	 * @param bool     $update   Whether this is an update.
@@ -54,7 +85,7 @@ final class AccountGuard {
 	 */
 	public static function freeze_credentials( $data, $update, $user_id = null, $userdata = array() ) {
 		unset( $userdata );
-		if ( ! $update || ! is_array( $data ) || ! self::is_blocked_request() ) {
+		if ( ! $update || ! is_array( $data ) || ! self::guards_account( (int) $user_id ) ) {
 			return $data;
 		}
 		$stored = get_userdata( (int) $user_id );
@@ -69,6 +100,7 @@ final class AccountGuard {
 	/**
 	 * Skips the "password changed" and "email changed" notices when a temp user
 	 * saves a profile. The change is frozen, so the customer would get a false alarm.
+	 * On custom and full this applies only to the grant's creator.
 	 *
 	 * @param bool  $send     Whether to send the email.
 	 * @param array $user     User data before the update.
@@ -76,26 +108,28 @@ final class AccountGuard {
 	 * @return bool
 	 */
 	public static function skip_change_email( $send, $user = array(), $userdata = array() ) {
-		unset( $user, $userdata );
-		return self::is_blocked_request() ? false : $send;
+		unset( $userdata );
+		$user_id = is_array( $user ) && isset( $user['ID'] ) ? (int) $user['ID'] : 0;
+		return self::guards_account( $user_id ) ? false : $send;
 	}
 
 	/**
-	 * Stops password resets for temp users, and any reset started by a temp user.
+	 * Stops password resets for temp users, and any reset started by a temp
+	 * user. On custom and full only a reset of the creator's account is stopped.
 	 *
 	 * @param bool $allow   Whether the reset is allowed.
 	 * @param int  $user_id User the reset is for.
 	 * @return bool
 	 */
 	public static function block_reset( $allow, $user_id = 0 ) {
-		if ( Capabilities::is_temp_user( (int) $user_id ) || self::is_blocked_request() ) {
+		if ( Capabilities::is_temp_user( (int) $user_id ) || self::guards_account( (int) $user_id ) ) {
 			return false;
 		}
 		return $allow;
 	}
 
 	/**
-	 * Adds an error to the WooCommerce account details form for temp users.
+	 * Adds an error to the WooCommerce account details form for protected temp users.
 	 *
 	 * @param \WP_Error $errors Errors so far.
 	 * @param mixed     $user   User being saved.
@@ -103,19 +137,19 @@ final class AccountGuard {
 	 */
 	public static function block_wc_account( $errors, $user = null ) {
 		unset( $user );
-		if ( $errors instanceof \WP_Error && self::is_blocked_request() ) {
+		if ( $errors instanceof \WP_Error && self::is_protected_request() ) {
 			$errors->add( 'happyaccess_temp', __( "Temporary support accounts can't change account details.", 'happyaccess' ) );
 		}
 		return $errors;
 	}
 
 	/**
-	 * Stops temp users creating or editing WooCommerce API keys.
+	 * Stops protected temp users creating or editing WooCommerce API keys.
 	 *
 	 * @return void
 	 */
 	public static function block_wc_api_key() {
-		if ( ! self::is_blocked_request() ) {
+		if ( ! self::is_protected_request() ) {
 			return;
 		}
 		self::log_blocked( 'ajax' );
@@ -123,13 +157,13 @@ final class AccountGuard {
 	}
 
 	/**
-	 * Stops temp users approving WooCommerce REST API authorization requests.
+	 * Stops protected temp users approving WooCommerce REST API authorization requests.
 	 *
 	 * @param \WP $wp Request object.
 	 * @return void
 	 */
 	public static function block_wc_auth( $wp ) {
-		if ( ! $wp instanceof \WP || empty( $wp->query_vars['wc-auth-version'] ) || ! self::is_blocked_request() ) {
+		if ( ! $wp instanceof \WP || empty( $wp->query_vars['wc-auth-version'] ) || ! self::is_protected_request() ) {
 			return;
 		}
 		self::log_blocked( 'wc-auth' );
