@@ -17,8 +17,8 @@ class GrantsTest extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-		Secrets::reset_cache();
 		Installer::install();
+		Secrets::reset_cache();
 		Clock::freeze( 1790000000 );
 		$this->owner = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $this->owner );
@@ -45,6 +45,7 @@ class GrantsTest extends WP_UnitTestCase {
 		$log = AuditLog::query( array( 'event' => 'grant_created' ) );
 		$this->assertSame( 1, $log['total'] );
 		$this->assertStringNotContainsString( $made['code'], wp_json_encode( $log['items'] ) );
+		$this->assertStringNotContainsString( $made['link_key'], wp_json_encode( $log['items'] ) );
 	}
 
 	public function test_get_normalizes_and_defaults() {
@@ -61,6 +62,11 @@ class GrantsTest extends WP_UnitTestCase {
 		$this->assertSame( $this->owner, $grant['created_by'] );
 		$this->assertSame( 'active', $grant['status'] );
 		$this->assertSame( 1790000000 + 259200, $grant['expires_at'] );
+	}
+
+	public function test_ips_are_stored_in_canonical_form_without_duplicates() {
+		$made = Grants::create( array( 'label' => 'x', 'ips' => array( '::ffff:203.0.113.9', '203.0.113.9' ) ) );
+		$this->assertSame( array( '203.0.113.9' ), Grants::get( $made['id'] )['restrictions']['ips'] );
 	}
 
 	public function test_duration_is_clamped() {

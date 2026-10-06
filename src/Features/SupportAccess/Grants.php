@@ -72,8 +72,8 @@ final class Grants {
 		$ips = array();
 		if ( ! empty( $args['ips'] ) ) {
 			foreach ( (array) $args['ips'] as $ip ) {
-				$ip = is_string( $ip ) ? trim( $ip ) : '';
-				if ( '' !== $ip && ClientIp::valid( $ip ) && ! in_array( $ip, $ips, true ) ) {
+				$ip = ClientIp::canonical( is_string( $ip ) ? trim( $ip ) : '' );
+				if ( '' !== $ip && ! in_array( $ip, $ips, true ) ) {
 					$ips[] = $ip;
 				}
 			}

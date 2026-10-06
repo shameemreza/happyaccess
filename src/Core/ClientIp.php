@@ -127,6 +127,25 @@ final class ClientIp {
 	}
 
 	/**
+	 * Canonical text form of an IP, for storing and comparing allowlists:
+	 * lower-case compressed IPv6, and IPv4-mapped IPv6 unwrapped to IPv4.
+	 *
+	 * @param string $ip IP address.
+	 * @return string Empty string when the value is not a valid IP.
+	 */
+	public static function canonical( $ip ) {
+		if ( ! self::valid( $ip ) ) {
+			return '';
+		}
+		$binary = inet_pton( self::normalize( $ip ) );
+		if ( false === $binary ) {
+			return '';
+		}
+		$text = inet_ntop( $binary );
+		return false === $text ? '' : $text;
+	}
+
+	/**
 	 * Rate limit bucket: IPv6 by /64, IPv4 as is.
 	 *
 	 * @param string $ip IP address.

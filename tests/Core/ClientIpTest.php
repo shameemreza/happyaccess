@@ -149,4 +149,10 @@ class ClientIpTest extends WP_UnitTestCase {
 		$this->assertSame( '203.0.113.0', ClientIp::anonymize( '203.0.113.9' ) );
 		$this->assertSame( '2001:db8:1::', ClientIp::anonymize( '2001:db8:1:2:3:4:5:6' ) );
 	}
+
+	public function test_canonical_form() {
+		$this->assertSame( '2001:db8::1', ClientIp::canonical( '2001:DB8:0:0::1' ) );
+		$this->assertSame( '203.0.113.9', ClientIp::canonical( '::ffff:203.0.113.9' ) );
+		$this->assertSame( '', ClientIp::canonical( 'x' ) );
+	}
 }
