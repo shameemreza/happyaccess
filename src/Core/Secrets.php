@@ -92,6 +92,18 @@ final class Secrets {
 	}
 
 	/**
+	 * Whether the stored option holds the same key that key() returns. False
+	 * means this request fell back to a key held in memory only, so hashes it
+	 * makes would not match later requests.
+	 *
+	 * @return bool
+	 */
+	public static function is_persisted() {
+		$stored = self::decode_key( get_option( self::OPTION, '' ) );
+		return null !== $stored && hash_equals( $stored, self::key() );
+	}
+
+	/**
 	 * Keyed SHA-256 hash as hex.
 	 *
 	 * @param string $value Value to hash.

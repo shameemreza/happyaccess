@@ -125,4 +125,13 @@ class SecretsTest extends WP_UnitTestCase {
 		wp_cache_delete( 'alloptions', 'options' );
 		$this->assertSame( base64_encode( $winner ), get_option( Secrets::OPTION ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Comparing the stored key.
 	}
+
+	public function test_is_persisted() {
+		Secrets::reset_cache();
+		Secrets::key();
+		$this->assertTrue( Secrets::is_persisted() );
+		update_option( Secrets::OPTION, 'garbage' );
+		$this->assertFalse( Secrets::is_persisted() );
+		Secrets::reset_cache();
+	}
 }
