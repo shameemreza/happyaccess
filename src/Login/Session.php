@@ -126,6 +126,11 @@ final class Session {
 			return null;
 		}
 		if ( ! array_key_exists( $user_id, self::$cache ) ) {
+			// Fail closed while the resolver runs, so a resolver that asks for this grant again gets "revoked" instead of recursing.
+			self::$cache[ $user_id ] = array(
+				'expires_at' => 0,
+				'state'      => 'revoked',
+			);
 			$grant                   = self::$resolver ? call_user_func( self::$resolver, $user_id ) : null;
 			self::$cache[ $user_id ] = wp_parse_args(
 				is_array( $grant ) ? $grant : array(),

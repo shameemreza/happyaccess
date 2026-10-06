@@ -259,4 +259,28 @@ class SessionTest extends WP_UnitTestCase {
 		$this->assertWPError( $result );
 		$this->assertSame( 'happyaccess_temp_user', $result->get_error_code() );
 	}
+	public function test_a_resolver_that_asks_for_the_same_grant_does_not_recurse() {
+		$calls = 0;
+		$inner = null;
+		$user  = $this->temp;
+		Session::set_resolver(
+			static function () use ( &$calls, &$inner, $user ) {
+				++$calls;
+				$inner = Session::grant( $user );
+				return array(
+					'state'      => 'active',
+					'expires_at' => 1790000000 + 3600,
+				);
+			}
+		);
+
+		$outer = Session::grant( $user );
+
+		$this->assertSame( 1, $calls );
+		$this->assertSame( 'revoked', $inner['state'], 'The re-entrant call sees a fail-closed grant.' );
+		$this->assertSame( 'active', $outer['state'] );
+		$this->assertSame( 1790000000 + 3600, $outer['expires_at'] );
+		$this->assertSame( $outer, Session::grant( $user ), 'The resolver result is what stays cached.' );
+		$this->assertSame( 1, $calls );
+	}
 }
