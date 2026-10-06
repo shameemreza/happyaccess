@@ -204,15 +204,15 @@ final class Grants {
 
 	/**
 	 * Who should get a grant's emails and the content of its temp user: the
-	 * creator, or the lowest-ID administrator when the creator is gone or is
-	 * a temp user themselves.
+	 * creator, or the lowest-ID administrator when the creator is gone, can no
+	 * longer manage options, or is a temp user themselves.
 	 *
 	 * @param array $grant Grant with created_by.
 	 * @return int User id, 0 when no administrator is left.
 	 */
 	public static function owner_id( array $grant ) {
 		$creator = isset( $grant['created_by'] ) ? (int) $grant['created_by'] : 0;
-		if ( $creator > 0 && false !== get_userdata( $creator ) && ! Capabilities::is_temp_user( $creator ) ) {
+		if ( $creator > 0 && false !== get_userdata( $creator ) && ! Capabilities::is_temp_user( $creator ) && user_can( $creator, 'manage_options' ) ) {
 			return $creator;
 		}
 

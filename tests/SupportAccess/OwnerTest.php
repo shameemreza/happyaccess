@@ -74,6 +74,20 @@ class OwnerTest extends WP_UnitTestCase {
 		$this->assertSame( $this->first_admin, Grants::owner_id( $grant ) );
 	}
 
+	public function test_falls_back_when_the_creator_is_no_longer_an_admin() {
+		$this->hide_admins_before( $this->first_admin );
+		$grant = Grants::get(
+			Grants::create(
+				array(
+					'label'      => 'Acme',
+					'created_by' => $this->second_admin,
+				)
+			)['id']
+		);
+		( new WP_User( $this->second_admin ) )->set_role( 'subscriber' );
+		$this->assertSame( $this->first_admin, Grants::owner_id( $grant ) );
+	}
+
 	public function test_falls_back_when_the_creator_is_a_temp_user() {
 		$this->hide_admins_before( $this->first_admin );
 		$other_grant = Grants::get( Grants::create( array( 'label' => 'Other' ) )['id'] );
