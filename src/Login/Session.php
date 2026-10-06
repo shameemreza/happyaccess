@@ -48,10 +48,18 @@ final class Session {
 	 * Drops an ended temp user from authentication that happens after init,
 	 * such as Application Passwords over REST or XML-RPC.
 	 *
+	 * The filter only acts after init, so enforce() keeps the logout path
+	 * (wp_logout, the ended action and the redirect). The grant resolver must
+	 * never call get_current_user_id(), wp_get_current_user() or
+	 * current_user_can(), because that would re-enter user resolution.
+	 *
 	 * @param int|false $user_id User id or false.
 	 * @return int|false
 	 */
 	public static function filter_current_user( $user_id ) {
+		if ( ! did_action( 'init' ) ) {
+			return $user_id;
+		}
 		if ( empty( $user_id ) || ! Capabilities::is_temp_user( (int) $user_id ) ) {
 			return $user_id;
 		}

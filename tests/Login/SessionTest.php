@@ -95,27 +95,134 @@ class SessionTest extends WP_UnitTestCase {
 		$this->assertSame( 0, get_current_user_id() );
 	}
 
-	public function test_filter_current_user_drops_ended_temp_user() {
+	/**
+	 * Replaces core authentication with a stand-in that resolves the temp user,
+	 * like a valid cookie would, then hooks Session on top.
+	 */
+	private function simulate_cookie_auth() {
+		remove_all_filters( 'determine_current_user' );
+		$temp = $this->temp;
+		add_filter(
+			'determine_current_user',
+			function () use ( $temp ) {
+				return $temp;
+			},
+			10
+		);
+		Session::register();
+	}
+
+	private function with_init_done( $done, $callback ) {
+		$had = array_key_exists( 'init', $GLOBALS['wp_actions'] );
+		$old = $had ? $GLOBALS['wp_actions']['init'] : null;
+		try {
+			if ( $done ) {
+				$GLOBALS['wp_actions']['init'] = max( 1, (int) $old );
+			} else {
+				unset( $GLOBALS['wp_actions']['init'] );
+			}
+			return call_user_func( $callback );
+		} finally {
+			if ( $had ) {
+				$GLOBALS['wp_actions']['init'] = $old;
+			} else {
+				unset( $GLOBALS['wp_actions']['init'] );
+			}
+		}
+	}
+
+	public function test_filter_current_user_drops_ended_temp_user_after_init() {
 		$this->resolve_to( 'revoked', 1790000000 + 3600 );
-		$this->assertFalse( Session::filter_current_user( $this->temp ) );
+		$result = $this->with_init_done(
+			true,
+			function () {
+				return Session::filter_current_user( $this->temp );
+			}
+		);
+		$this->assertFalse( $result );
+	}
+
+	public function test_filter_current_user_leaves_ended_temp_user_alone_before_init() {
+		$this->resolve_to( 'revoked', 1790000000 + 3600 );
+		$result = $this->with_init_done(
+			false,
+			function () {
+				return Session::filter_current_user( $this->temp );
+			}
+		);
+		$this->assertSame( $this->temp, $result );
 	}
 
 	public function test_filter_current_user_keeps_active_temp_user() {
 		$this->resolve_to( 'active', 1790000000 + 3600 );
-		$this->assertSame( $this->temp, Session::filter_current_user( $this->temp ) );
+		$result = $this->with_init_done(
+			true,
+			function () {
+				return Session::filter_current_user( $this->temp );
+			}
+		);
+		$this->assertSame( $this->temp, $result );
 	}
 
 	public function test_filter_current_user_passes_normal_users_and_empty_through() {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		$this->assertSame( $admin, Session::filter_current_user( $admin ) );
-		$this->assertFalse( Session::filter_current_user( false ) );
-		$this->assertSame( 0, Session::filter_current_user( 0 ) );
+		$this->with_init_done(
+			true,
+			function () use ( $admin ) {
+				$this->assertSame( $admin, Session::filter_current_user( $admin ) );
+				$this->assertFalse( Session::filter_current_user( false ) );
+				$this->assertSame( 0, Session::filter_current_user( 0 ) );
+			}
+		);
 	}
 
 	public function test_registered_filter_drops_revoked_temp_user_after_init() {
 		$this->resolve_to( 'revoked', 1790000000 + 3600 );
-		Session::register();
-		$this->assertFalse( apply_filters( 'determine_current_user', $this->temp ) );
+		$this->simulate_cookie_auth();
+		$result = $this->with_init_done(
+			true,
+			function () {
+				return apply_filters( 'determine_current_user', false );
+			}
+		);
+		$this->assertFalse( $result );
+	}
+
+	public function test_enforce_still_runs_the_logout_for_a_cookie_user_resolved_before_init() {
+		$this->resolve_to( 'revoked', 1790000000 + 3600 );
+		$this->simulate_cookie_auth();
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter( 'send_auth_cookies', '__return_false' );
+
+		$ended = array();
+		add_action(
+			'happyaccess_session_ended',
+			function ( $user_id, $reason ) use ( &$ended ) {
+				$ended = array( $user_id, $reason );
+			},
+			10,
+			2
+		);
+
+		wp_set_current_user( 0 );
+		$resolved = $this->with_init_done(
+			false,
+			function () {
+				return apply_filters( 'determine_current_user', false );
+			}
+		);
+		$this->assertSame( $this->temp, $resolved );
+
+		wp_set_current_user( $this->temp );
+		$this->with_init_done(
+			true,
+			function () {
+				Session::enforce();
+			}
+		);
+
+		$this->assertSame( array( $this->temp, 'revoked' ), $ended );
+		$this->assertSame( 0, get_current_user_id() );
 	}
 
 	public function test_resolver_with_missing_keys_fails_closed_without_notice() {
