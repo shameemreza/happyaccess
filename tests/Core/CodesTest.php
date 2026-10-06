@@ -38,6 +38,7 @@ class CodesTest extends WP_UnitTestCase {
 		$this->assertFalse( Codes::verify_code( '48291376', $hash ) );
 		$this->assertFalse( Codes::verify_code( '', $hash ) );
 		$this->assertFalse( Codes::verify_code( '48291375', '' ) );
+		$this->assertFalse( Codes::verify_code( array(), $hash ) );
 	}
 
 	public function test_code_and_key_hashes_use_different_domains() {

@@ -11,27 +11,83 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * The site key lives in the database (autoload off). Every hash and cipher
- * key also mixes in a salt from wp-config.php, so a database leak alone is
- * not enough to reverse or forge anything.
+ * key also mixes in a salt from wp-config.php, so when the salts are defined
+ * there, a database leak alone is not enough to reverse or forge anything.
  */
 final class Secrets {
 
 	const OPTION = 'happyaccess_secret';
 
 	/**
-	 * Raw 32-byte site key, created on first use.
+	 * Raw site key for this request, once loaded.
+	 *
+	 * @var string|null
+	 */
+	private static $cache = null;
+
+	/**
+	 * Forgets the per-request key. For tests.
+	 *
+	 * @return void
+	 */
+	public static function reset_cache() {
+		self::$cache = null;
+	}
+
+	/**
+	 * Raw 32-byte site key, created on first use. A stored key is never
+	 * rotated because of a failed read; only a corrupt value is replaced.
 	 *
 	 * @return string
 	 */
 	public static function key() {
-		$stored = get_option( self::OPTION, '' );
-		$raw    = is_string( $stored ) ? base64_decode( $stored, true ) : false; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Stored binary key.
-		if ( false === $raw || 32 !== strlen( $raw ) ) {
-			$raw = random_bytes( 32 );
-			delete_option( self::OPTION );
-			add_option( self::OPTION, base64_encode( $raw ), '', false ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Stored binary key.
+		if ( null !== self::$cache ) {
+			return self::$cache;
 		}
+
+		$stored = get_option( self::OPTION, '' );
+		$raw    = self::decode_key( $stored );
+		if ( null !== $raw ) {
+			self::$cache = $raw;
+			return $raw;
+		}
+
+		$raw     = random_bytes( 32 );
+		$encoded = base64_encode( $raw ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Stored binary key.
+
+		if ( is_string( $stored ) && '' !== $stored ) {
+			// Corrupt value: replace it.
+			update_option( self::OPTION, $encoded, false );
+			self::$cache = $raw;
+			return $raw;
+		}
+
+		// Missing: add_option() never overwrites, so a concurrent request's key wins.
+		if ( ! add_option( self::OPTION, $encoded, '', false ) ) {
+			wp_cache_delete( self::OPTION, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+		$winner = self::decode_key( get_option( self::OPTION, '' ) );
+		if ( null !== $winner ) {
+			$raw = $winner;
+		}
+		// Otherwise keep the generated key in memory only: hashes will not match stored ones.
+		self::$cache = $raw;
 		return $raw;
+	}
+
+	/**
+	 * Decodes a stored key. Null unless it is strict base64 of 32 bytes.
+	 *
+	 * @param mixed $stored Stored option value.
+	 * @return string|null
+	 */
+	private static function decode_key( $stored ) {
+		if ( ! is_string( $stored ) || '' === $stored ) {
+			return null;
+		}
+		$raw = base64_decode( $stored, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Stored binary key.
+		return ( false !== $raw && 32 === strlen( $raw ) ) ? $raw : null;
 	}
 
 	/**
@@ -60,8 +116,13 @@ final class Secrets {
 	 * @param string $engine Engine id.
 	 * @param string $plain  Plain text.
 	 * @return string Engine-prefixed base64 payload.
+	 * @throws \InvalidArgumentException For an engine other than "s1" or "o1".
+	 * @throws \RuntimeException When openssl cannot encrypt.
 	 */
 	public static function encrypt_with( $engine, $plain ) {
+		if ( 's1' !== $engine && 'o1' !== $engine ) {
+			throw new \InvalidArgumentException( 'HappyAccess does not know that encryption engine.' );
+		}
 		$key = self::encryption_key();
 		if ( 's1' === $engine ) {
 			$nonce = random_bytes( SODIUM_CRYPTO_SECRETBOX_NONCEBYTES );
@@ -70,6 +131,9 @@ final class Secrets {
 		$iv     = random_bytes( 12 );
 		$tag    = '';
 		$cipher = openssl_encrypt( (string) $plain, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag );
+		if ( false === $cipher ) {
+			throw new \RuntimeException( 'HappyAccess could not encrypt the value.' );
+		}
 		return 'o1:' . base64_encode( $iv . $tag . $cipher ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Cipher text transport.
 	}
 

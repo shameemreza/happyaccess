@@ -52,13 +52,14 @@ final class Codes {
 	public static function backup_code() {
 		$code = '';
 		for ( $i = 0; $i < 10; $i++ ) {
-			$code .= self::BACKUP_ALPHABET[ random_int( 0, 31 ) ];
+			$code .= self::BACKUP_ALPHABET[ random_int( 0, strlen( self::BACKUP_ALPHABET ) - 1 ) ];
 		}
 		return $code;
 	}
 
 	/**
 	 * Digits only, so "4829 1375" and "4829-1375" match "48291375".
+	 * For numeric codes only; backup codes are never normalized this way.
 	 *
 	 * @param string $input Raw input.
 	 * @return string
@@ -68,7 +69,8 @@ final class Codes {
 	}
 
 	/**
-	 * Stored hash of a numeric code.
+	 * Stored hash of a numeric code. Numeric codes only: backup codes are
+	 * hashed with wp_hash_password() in Stage 4, never with hash_code().
 	 *
 	 * @param string $code Code.
 	 * @return string
@@ -88,13 +90,17 @@ final class Codes {
 	}
 
 	/**
-	 * Checks a typed code against a stored hash.
+	 * Checks a typed numeric code against a stored hash. Numeric codes only:
+	 * backup codes are checked against wp_hash_password() hashes in Stage 4.
 	 *
 	 * @param string $input       Typed code.
 	 * @param string $stored_hash Stored hash.
 	 * @return bool
 	 */
 	public static function verify_code( $input, $stored_hash ) {
+		if ( ! is_string( $input ) ) {
+			return false;
+		}
 		$code = self::normalize_code( $input );
 		if ( '' === $code || ! is_string( $stored_hash ) || '' === $stored_hash ) {
 			return false;
@@ -124,6 +130,7 @@ final class Codes {
 	 */
 	public static function format_code( $code ) {
 		$digits = self::normalize_code( $code );
-		return implode( ' ', str_split( $digits, strlen( $digits ) === 8 ? 4 : 3 ) );
+		$group  = ( 8 === strlen( $digits ) ) ? 4 : 3;
+		return implode( ' ', str_split( $digits, $group ) );
 	}
 }
