@@ -204,8 +204,8 @@ final class Grants {
 
 	/**
 	 * Who should get a grant's emails and the content of its temp user: the
-	 * creator, or the lowest-ID administrator when the creator is gone, can no
-	 * longer manage options, or is a temp user themselves.
+	 * creator, or the lowest-ID administrator when the creator is gone, lacks
+	 * manage_options, or is a temp user themselves.
 	 *
 	 * @param array $grant Grant with created_by.
 	 * @return int User id, 0 when no administrator is left.

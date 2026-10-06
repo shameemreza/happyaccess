@@ -74,7 +74,7 @@ class OwnerTest extends WP_UnitTestCase {
 		$this->assertSame( $this->first_admin, Grants::owner_id( $grant ) );
 	}
 
-	public function test_falls_back_when_the_creator_is_no_longer_an_admin() {
+	public function test_falls_back_when_the_creator_was_demoted() {
 		$this->hide_admins_before( $this->first_admin );
 		$grant = Grants::get(
 			Grants::create(
