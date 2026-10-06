@@ -33,5 +33,8 @@ class HappyAccess_Test_Reset_State_Listener implements TestListener {
 		if ( class_exists( '\HappyAccess\Features\SupportAccess\CapabilityGuard' ) ) {
 			\HappyAccess\Features\SupportAccess\CapabilityGuard::reset();
 		}
+		if ( class_exists( '\HappyAccess\Features\SupportAccess\AdminWatch' ) ) {
+			\HappyAccess\Features\SupportAccess\AdminWatch::reset();
+		}
 	}
 }

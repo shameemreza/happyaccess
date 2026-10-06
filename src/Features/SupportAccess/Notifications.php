@@ -170,6 +170,67 @@ final class Notifications {
 	}
 
 	/**
+	 * Tells the owner that a support pass made an administrator account.
+	 *
+	 * @param array    $grant Grant of the acting pass.
+	 * @param \WP_User $user  The administrator account.
+	 * @return bool Whether the email was accepted.
+	 */
+	public static function admin_created( array $grant, \WP_User $user ) {
+		return self::admin_alert( 'created', $grant, $user, array() );
+	}
+
+	/**
+	 * Tells the owner that a support pass changed an administrator's login details.
+	 *
+	 * @param array    $grant  Grant of the acting pass.
+	 * @param \WP_User $user   The administrator account.
+	 * @param string[] $fields What changed: email, password or both.
+	 * @return bool Whether the email was accepted.
+	 */
+	public static function admin_changed( array $grant, \WP_User $user, array $fields ) {
+		return self::admin_alert( 'changed', $grant, $user, $fields );
+	}
+
+	/**
+	 * Sends the administrator alert, for both variants.
+	 *
+	 * @param string   $variant created or changed.
+	 * @param array    $grant   Grant of the acting pass.
+	 * @param \WP_User $user    The administrator account.
+	 * @param string[] $fields  What changed, for the changed variant.
+	 * @return bool
+	 */
+	private static function admin_alert( $variant, array $grant, \WP_User $user, array $fields ) {
+		$to = self::owner_email( $grant );
+		if ( '' === $to ) {
+			return false;
+		}
+
+		$labels = array();
+		foreach ( $fields as $field ) {
+			$labels[] = 'password' === $field ? __( 'password', 'happyaccess' ) : __( 'email address', 'happyaccess' );
+		}
+
+		return Mailer::send(
+			$to,
+			'changed' === $variant
+				? __( "A support pass changed an administrator's login details", 'happyaccess' )
+				: __( 'A support pass made an administrator account', 'happyaccess' ),
+			'admin-created',
+			array(
+				'variant'    => $variant,
+				'label'      => isset( $grant['label'] ) ? (string) $grant['label'] : '',
+				'login'      => $user->user_login,
+				'user_email' => $user->user_email,
+				'changed'    => $labels,
+				'time'       => self::format_time( Clock::now() ),
+				'users_url'  => admin_url( 'users.php' ),
+			)
+		);
+	}
+
+	/**
 	 * Alerts the site admin that code logins are locked for the whole site.
 	 * Sends once per lock.
 	 *

@@ -41,6 +41,7 @@ final class Feature {
 		AccountGuard::register();
 		MenuGuard::register();
 		ActivityTracker::register();
+		AdminWatch::register();
 		AdminBar::register();
 		Notifications::register();
 

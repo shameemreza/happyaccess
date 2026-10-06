@@ -67,6 +67,8 @@ final class Privacy {
 		'privacy_erased',
 		'wc_webhook_created',
 		'wc_key_blocked',
+		'admin_account_created',
+		'admin_account_changed',
 	);
 
 	/**

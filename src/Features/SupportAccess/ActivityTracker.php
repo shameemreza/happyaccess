@@ -584,6 +584,16 @@ final class ActivityTracker {
 	}
 
 	/**
+	 * Whether the current change is a temp user's own, and so worth logging.
+	 * Other watchers, such as AdminWatch, use the same rule.
+	 *
+	 * @return bool
+	 */
+	public static function tracking() {
+		return self::is_tracking();
+	}
+
+	/**
 	 * Whether the current user is a temp user, so their changes are logged.
 	 * HappyAccess's own writes, run under Internal or quietly(), are never theirs.
 	 *
