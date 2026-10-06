@@ -279,7 +279,7 @@ final class GrantsController {
 	public static function get_item( \WP_REST_Request $request ) {
 		$grant = Grants::get( (int) $request->get_param( 'id' ) );
 		if ( null === $grant ) {
-			return new \WP_Error( 'happyaccess_not_found', __( 'This support pass does not exist.', 'happyaccess' ), array( 'status' => 404 ) );
+			return self::not_found();
 		}
 		return rest_ensure_response( self::present( $grant ) );
 	}
@@ -292,6 +292,9 @@ final class GrantsController {
 	 */
 	public static function extend_item( \WP_REST_Request $request ) {
 		$id = (int) $request->get_param( 'id' );
+		if ( null === Grants::get( $id ) ) {
+			return self::not_found();
+		}
 		if ( ! Grants::extend( $id, (int) $request->get_param( 'seconds' ) ) ) {
 			return self::conflict();
 		}
@@ -306,6 +309,9 @@ final class GrantsController {
 	 */
 	public static function suspend_item( \WP_REST_Request $request ) {
 		$id = (int) $request->get_param( 'id' );
+		if ( null === Grants::get( $id ) ) {
+			return self::not_found();
+		}
 		if ( ! Grants::suspend( $id ) ) {
 			return self::conflict();
 		}
@@ -320,6 +326,9 @@ final class GrantsController {
 	 */
 	public static function resume_item( \WP_REST_Request $request ) {
 		$id = (int) $request->get_param( 'id' );
+		if ( null === Grants::get( $id ) ) {
+			return self::not_found();
+		}
 		if ( ! Grants::resume( $id ) ) {
 			return self::conflict();
 		}
@@ -334,6 +343,9 @@ final class GrantsController {
 	 */
 	public static function regenerate_item( \WP_REST_Request $request ) {
 		$id = (int) $request->get_param( 'id' );
+		if ( null === Grants::get( $id ) ) {
+			return self::not_found();
+		}
 		try {
 			$fresh = Grants::regenerate( $id );
 		} catch ( \RuntimeException $e ) {
@@ -357,7 +369,11 @@ final class GrantsController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function revoke_item( \WP_REST_Request $request ) {
-		if ( ! Grants::revoke( (int) $request->get_param( 'id' ), 'revoked' ) ) {
+		$id = (int) $request->get_param( 'id' );
+		if ( null === Grants::get( $id ) ) {
+			return self::not_found();
+		}
+		if ( ! Grants::revoke( $id, 'revoked' ) ) {
 			return self::conflict();
 		}
 		return rest_ensure_response( array( 'revoked' => true ) );
@@ -468,6 +484,19 @@ final class GrantsController {
 			return self::conflict();
 		}
 		return rest_ensure_response( self::present( $grant ) );
+	}
+
+	/**
+	 * Error for a pass that doesn't exist.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function not_found() {
+		return new \WP_Error(
+			'happyaccess_not_found',
+			__( 'This support pass does not exist.', 'happyaccess' ),
+			array( 'status' => 404 )
+		);
 	}
 
 	/**

@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\Grants;
 
 require_once __DIR__ . '/RestTestCase.php';
@@ -38,10 +39,14 @@ class GrantsControllerTest extends RestTestCase {
 		$id = Grants::create( array( 'label' => 'Target' ) )['id'];
 		wp_set_current_user( 0 );
 
+		$before   = $this->grant_count();
 		$response = $this->request( $method, str_replace( '{id}', (string) $id, $path ), $params );
 
 		$this->assertSame( 401, $response->get_status() );
 		$this->assertSame( 'active', Grants::get( $id )['status'] );
+		if ( 'POST' === $method && '/grants' === $path ) {
+			$this->assertSame( $before, $this->grant_count() );
+		}
 	}
 
 	/**
@@ -51,10 +56,14 @@ class GrantsControllerTest extends RestTestCase {
 		$id = Grants::create( array( 'label' => 'Target' ) )['id'];
 		$this->as_temp_user();
 
+		$before   = $this->grant_count();
 		$response = $this->request( $method, str_replace( '{id}', (string) $id, $path ), $params );
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'active', Grants::get( $id )['status'] );
+		if ( 'POST' === $method && '/grants' === $path ) {
+			$this->assertSame( $before, $this->grant_count() );
+		}
 	}
 
 	/**
@@ -69,10 +78,14 @@ class GrantsControllerTest extends RestTestCase {
 			)
 		);
 
+		$before   = $this->grant_count();
 		$response = $this->request( $method, str_replace( '{id}', (string) $id, $path ), $params );
 
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'active', Grants::get( $id )['status'] );
+		if ( 'POST' === $method && '/grants' === $path ) {
+			$this->assertSame( $before, $this->grant_count() );
+		}
 	}
 
 	public function test_create_returns_secrets_once_with_no_store() {
@@ -324,6 +337,63 @@ class GrantsControllerTest extends RestTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( array( 'count' => 2 ), $response->get_data() );
 		$this->assertFalse( Grants::has_current() );
+	}
+
+	public function test_mutations_on_an_unknown_pass_are_404() {
+		$routes = array(
+			array( 'POST', '/grants/999999/extend', array( 'seconds' => DAY_IN_SECONDS ) ),
+			array( 'POST', '/grants/999999/suspend', array() ),
+			array( 'POST', '/grants/999999/resume', array() ),
+			array( 'POST', '/grants/999999/regenerate', array() ),
+			array( 'DELETE', '/grants/999999', array() ),
+		);
+		foreach ( $routes as $route ) {
+			$response = $this->request( $route[0], $route[1], $route[2] );
+			$this->assertSame( 404, $response->get_status(), $route[0] . ' ' . $route[1] );
+			$this->assertSame( 'happyaccess_not_found', $response->get_data()['code'] );
+		}
+	}
+
+	public function test_regenerate_keeps_a_suspended_pass_suspended() {
+		$id = $this->request( 'POST', '/grants', array( 'label' => 'Acme' ) )->get_data()['id'];
+		$this->request( 'POST', '/grants/' . $id . '/suspend' );
+
+		$response = $this->request( 'POST', '/grants/' . $id . '/regenerate' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'suspended', $response->get_data()['status'] );
+		$this->assertSame( 'suspended', Grants::get( $id )['status'] );
+	}
+
+	public function test_create_error_message_is_translatable() {
+		add_filter( 'gettext_happyaccess', array( $this, 'mark_translated' ) );
+
+		$response = $this->request(
+			'POST',
+			'/grants',
+			array(
+				'label' => 'Acme',
+				'role'  => 'no_such_role',
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_invalid', $response->get_data()['code'] );
+		$this->assertSame( '[t] The role does not exist.', $response->get_data()['message'] );
+	}
+
+	public function mark_translated( $text ) {
+		return '[t] ' . $text;
+	}
+
+	/**
+	 * Number of rows in the grants table.
+	 *
+	 * @return int
+	 */
+	private function grant_count() {
+		global $wpdb;
+		return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . Installer::table( 'tokens' ) );
 	}
 
 	/**

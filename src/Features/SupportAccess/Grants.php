@@ -70,7 +70,8 @@ final class Grants {
 
 		$label = trim( sanitize_text_field( isset( $args['label'] ) ? (string) $args['label'] : '' ) );
 		if ( '' === $label ) {
-			throw new \InvalidArgumentException( 'A label is required.' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+			throw new \InvalidArgumentException( __( 'A label is required.', 'happyaccess' ) );
 		}
 		$label = mb_substr( $label, 0, 190 );
 
@@ -78,7 +79,8 @@ final class Grants {
 		if ( isset( $args['email'] ) && '' !== trim( (string) $args['email'] ) ) {
 			$email = sanitize_email( (string) $args['email'] );
 			if ( '' === $email ) {
-				throw new \InvalidArgumentException( 'The email address is not valid.' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+				throw new \InvalidArgumentException( __( 'The email address is not valid.', 'happyaccess' ) );
 			}
 		}
 
@@ -91,7 +93,8 @@ final class Grants {
 		$role = isset( $args['role'] ) && '' !== (string) $args['role'] ? (string) $args['role'] : 'administrator';
 		if ( 'protected' === $level ) {
 			if ( ! array_key_exists( $role, wp_roles()->roles ) ) {
-				throw new \InvalidArgumentException( 'The role does not exist.' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+				throw new \InvalidArgumentException( __( 'The role does not exist.', 'happyaccess' ) );
 			}
 		} else {
 			$role = 'administrator';
@@ -123,7 +126,8 @@ final class Grants {
 				}
 			}
 			if ( empty( $ips ) ) {
-				throw new \InvalidArgumentException( 'None of the IP addresses is valid.' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+				throw new \InvalidArgumentException( __( 'None of the IP addresses is valid.', 'happyaccess' ) );
 			}
 		}
 
