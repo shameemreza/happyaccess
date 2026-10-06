@@ -443,4 +443,27 @@ class MigrationTest extends WP_UnitTestCase {
 		Installer::maybe_upgrade();
 		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
 	}
+	public function test_migration_stops_when_the_new_columns_did_not_get_created() {
+		global $wpdb;
+		$skip_alter = static function ( $query ) {
+			return 0 === stripos( ltrim( $query ), 'ALTER TABLE' ) ? 'SELECT 1' : $query;
+		};
+		add_filter( 'query', $skip_alter );
+
+		Installer::migrate();
+
+		remove_filter( 'query', $skip_alter );
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertTrue( Installer::table_exists( 'magic_links' ), 'Legacy tables stay until the schema is complete.' );
+		$this->assertSame( '123456', $this->token( 'a' )['otp_code'], 'No data step runs on an incomplete schema.' );
+		$this->assertStringStartsWith( 'missing_column:', (string) get_transient( Installer::FAILED_TRANSIENT ) );
+		$this->assertNull( $this->lock_value() );
+
+		delete_transient( Installer::FAILED_TRANSIENT );
+		Installer::migrate();
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertFalse( Installer::table_exists( 'magic_links' ) );
+		$columns = wp_list_pluck( $wpdb->get_results( 'SHOW COLUMNS FROM ' . Installer::table( 'attempts' ) ), 'Field' );
+		$this->assertContains( 'scope', $columns );
+	}
 }

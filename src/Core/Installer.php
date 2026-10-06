@@ -22,6 +22,17 @@ final class Installer {
 
 	const LOCK_TTL = 300;
 
+	/**
+	 * Columns 1.1.0 needs that 1.0.6 didn't have, by short table name. A table
+	 * with an empty list only has to exist.
+	 */
+	const REQUIRED_COLUMNS = array(
+		'tokens'     => array( 'code_hash', 'link_hash', 'label', 'protection', 'restrictions', 'suspended_at', 'last_login_at', 'login_count' ),
+		'logs'       => array( 'feature', 'summary' ),
+		'attempts'   => array( 'scope' ),
+		'challenges' => array(),
+	);
+
 	const LEGACY_TABLES = array( 'magic_links', 'otp_shares' );
 
 	const LEGACY_OPTIONS = array(
@@ -130,6 +141,13 @@ final class Installer {
 		$is_upgrade = ( '0.0.0' !== $previous && version_compare( $previous, self::DB_VERSION, '<' ) ) || false !== get_option( 'happyaccess_version', false );
 
 		self::install();
+
+		// dbDelta reports nothing when an ALTER fails, so look at the tables before any data step relies on the new columns.
+		$missing = self::missing_schema();
+		if ( '' !== $missing ) {
+			return $missing;
+		}
+
 		$result = self::hash_legacy_codes();
 		if ( self::carry_legacy_grant_state() ) {
 			$result['failed'] = true;
@@ -138,11 +156,6 @@ final class Installer {
 
 		if ( $result['failed'] ) {
 			return 'write_failed';
-		}
-		foreach ( array( 'tokens', 'logs', 'attempts', 'challenges' ) as $name ) {
-			if ( ! self::table_exists( $name ) ) {
-				return 'missing_table:' . $name;
-			}
 		}
 
 		self::drop_legacy_tables();
@@ -160,6 +173,29 @@ final class Installer {
 			);
 		}
 
+		return '';
+	}
+
+	/**
+	 * The first table or column from REQUIRED_COLUMNS that doesn't exist.
+	 *
+	 * @return string Empty when the schema is complete, otherwise "missing_table:x" or "missing_column:x.y".
+	 */
+	private static function missing_schema() {
+		global $wpdb;
+		foreach ( self::REQUIRED_COLUMNS as $name => $columns ) {
+			$suppress = $wpdb->suppress_errors( true );
+			$found    = $wpdb->get_col( 'SHOW COLUMNS FROM ' . self::table( $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Table name from $wpdb->prefix.
+			$wpdb->suppress_errors( $suppress );
+			if ( empty( $found ) ) {
+				return 'missing_table:' . $name;
+			}
+			foreach ( $columns as $column ) {
+				if ( ! in_array( $column, $found, true ) ) {
+					return 'missing_column:' . $name . '.' . $column;
+				}
+			}
+		}
 		return '';
 	}
 
