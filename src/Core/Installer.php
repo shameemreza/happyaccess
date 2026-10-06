@@ -16,6 +16,12 @@ final class Installer {
 
 	const DB_VERSION = '1.1.0';
 
+	const LOCK_OPTION = 'happyaccess_migration_lock';
+
+	const FAILED_TRANSIENT = 'happyaccess_migration_failed';
+
+	const LOCK_TTL = 300;
+
 	const LEGACY_TABLES = array( 'magic_links', 'otp_shares' );
 
 	const LEGACY_OPTIONS = array(
@@ -82,17 +88,44 @@ final class Installer {
 	 * @return void
 	 */
 	public static function maybe_upgrade() {
+		// A failed run backs off for 15 minutes so every request doesn't retry it.
+		if ( false !== get_transient( self::FAILED_TRANSIENT ) ) {
+			return;
+		}
 		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
 			self::migrate();
 		}
 	}
 
 	/**
-	 * Brings the current site to DB_VERSION. Safe to run more than once.
+	 * Brings the current site to DB_VERSION. Safe to run more than once. Only
+	 * one request runs it at a time; the others return without doing anything.
 	 *
 	 * @return void
 	 */
 	public static function migrate() {
+		if ( ! self::acquire_lock() ) {
+			return;
+		}
+		try {
+			$failure = self::run_migration();
+			if ( '' === $failure ) {
+				delete_transient( self::FAILED_TRANSIENT );
+			} else {
+				set_transient( self::FAILED_TRANSIENT, $failure, 15 * MINUTE_IN_SECONDS );
+			}
+		} finally {
+			self::release_lock();
+		}
+	}
+
+	/**
+	 * The migration steps. Leaves the version and the legacy tables alone when
+	 * anything failed, so a later maybe_upgrade() retries.
+	 *
+	 * @return string Empty on success, otherwise why it stopped.
+	 */
+	private static function run_migration() {
 		$previous   = (string) get_option( 'happyaccess_db_version', '0.0.0' );
 		$is_upgrade = ( '0.0.0' !== $previous && version_compare( $previous, self::DB_VERSION, '<' ) ) || false !== get_option( 'happyaccess_version', false );
 
@@ -103,13 +136,12 @@ final class Installer {
 		}
 		self::migrate_options( $is_upgrade );
 
-		// Leave the version and the legacy tables alone when anything failed, so the next maybe_upgrade() retries.
 		if ( $result['failed'] ) {
-			return;
+			return 'write_failed';
 		}
 		foreach ( array( 'tokens', 'logs', 'attempts', 'challenges' ) as $name ) {
 			if ( ! self::table_exists( $name ) ) {
-				return;
+				return 'missing_table:' . $name;
 			}
 		}
 
@@ -127,6 +159,83 @@ final class Installer {
 				)
 			);
 		}
+
+		return '';
+	}
+
+	/**
+	 * Takes the migration lock: an options row holding the time it was taken.
+	 * A lock younger than LOCK_TTL seconds belongs to a running request. An
+	 * older one is left over from a crash and is taken over.
+	 *
+	 * @return bool Whether this request now holds the lock.
+	 */
+	private static function acquire_lock() {
+		global $wpdb;
+		$now   = Clock::now();
+		$added = self::insert_option_once( self::LOCK_OPTION, (string) $now );
+		if ( 1 === $added ) {
+			return true;
+		}
+		if ( false === $added ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Read past the options cache.
+		$held = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::LOCK_OPTION ) );
+		if ( null !== $held ) {
+			$age = $now - (int) $held;
+			if ( $age >= 0 && $age < self::LOCK_TTL ) {
+				return false;
+			}
+			// Remove only the stale row we read, never a lock another request just took over.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Lock row.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::LOCK_OPTION, $held ) );
+			self::forget_option( self::LOCK_OPTION );
+		}
+
+		return 1 === self::insert_option_once( self::LOCK_OPTION, (string) $now );
+	}
+
+	/**
+	 * Releases the migration lock.
+	 *
+	 * @return void
+	 */
+	private static function release_lock() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Lock row.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s", self::LOCK_OPTION ) );
+		self::forget_option( self::LOCK_OPTION );
+	}
+
+	/**
+	 * Adds an option row only when it doesn't exist yet, in one statement, so
+	 * two requests can't both create it. The row is not autoloaded.
+	 *
+	 * @param string $name  Option name.
+	 * @param string $value Option value.
+	 * @return int|false 1 when created, 0 when it already existed, false on a database error.
+	 */
+	public static function insert_option_once( $name, $value ) {
+		global $wpdb;
+		$autoload = function_exists( 'wp_autoload_values_to_autoload' ) ? 'off' : 'no';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- INSERT IGNORE has no Options API equivalent.
+		$rows = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)", $name, $value, $autoload ) );
+		self::forget_option( $name );
+		return false === $rows ? false : (int) $rows;
+	}
+
+	/**
+	 * Drops cached copies of an option after a raw write.
+	 *
+	 * @param string $name Option name.
+	 * @return void
+	 */
+	public static function forget_option( $name ) {
+		wp_cache_delete( $name, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
 	}
 
 	/**

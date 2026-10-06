@@ -59,17 +59,15 @@ final class Secrets {
 		$encoded = base64_encode( $raw ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Stored binary key.
 
 		if ( $stored === $missing ) {
-			// Missing. Drop the stale "missing" cache from the read above so add_option() re-checks the database and backs off if another request already created the key.
-			wp_cache_delete( 'notoptions', 'options' );
-			add_option( self::OPTION, $encoded, '', false );
+			// Missing. INSERT IGNORE creates the row in one statement, so a request that lost the race leaves the winner's key alone.
+			Installer::insert_option_once( self::OPTION, $encoded );
 		} else {
 			// Exists but unusable (empty, array, bad base64): repair it.
 			update_option( self::OPTION, $encoded, false );
 		}
 
 		// Always re-read from the database and adopt what is stored, so a concurrent request's key wins.
-		wp_cache_delete( self::OPTION, 'options' );
-		wp_cache_delete( 'notoptions', 'options' );
+		Installer::forget_option( self::OPTION );
 		$current = self::decode_key( get_option( self::OPTION, '' ) );
 		if ( null !== $current ) {
 			$raw = $current;

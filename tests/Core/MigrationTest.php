@@ -13,8 +13,19 @@ use HappyAccess\Core\Settings;
 
 class MigrationTest extends WP_UnitTestCase {
 
+	/**
+	 * dbDelta's ALTER TABLE commits the test transaction, so rows written
+	 * before it, such as the migration lock, survive the rollback. Clear them.
+	 */
+	private function clear_migration_state() {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name IN (%s, %s, %s)", Installer::LOCK_OPTION, '_transient_' . Installer::FAILED_TRANSIENT, '_transient_timeout_' . Installer::FAILED_TRANSIENT ) );
+		wp_cache_flush();
+	}
+
 	public function set_up() {
 		parent::set_up();
+		$this->clear_migration_state();
 		Clock::freeze( 1790000000 );
 		delete_option( Settings::OPTION );
 		delete_option( 'happyaccess_db_version' );
@@ -27,6 +38,9 @@ class MigrationTest extends WP_UnitTestCase {
 		Clock::freeze( null );
 		HappyAccess_Test_Legacy_Schema::drop_all();
 		parent::tear_down();
+		global $wpdb;
+		$this->clear_migration_state();
+		$wpdb->query( 'COMMIT' );
 	}
 
 	private function seed_legacy_data() {
@@ -189,7 +203,10 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertTrue( $already, 'The UPDATE was not intercepted.' );
 		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
 		$this->assertTrue( Installer::table_exists( 'magic_links' ) );
+		$this->assertNotFalse( get_transient( Installer::FAILED_TRANSIENT ), 'A failed run must leave the back-off marker.' );
 
+		// The marker lasts 15 minutes; clear it to retry now.
+		delete_transient( Installer::FAILED_TRANSIENT );
 		Installer::maybe_upgrade();
 
 		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
@@ -359,5 +376,71 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( 'Twice', $first['label'] );
 		$this->assertNotEmpty( $first['suspended_at'] );
 		$this->assertNotEmpty( $first['restrictions'] );
+	}
+	private function lock_value() {
+		global $wpdb;
+		return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", Installer::LOCK_OPTION ) );
+	}
+
+	private function set_lock( $timestamp ) {
+		global $wpdb;
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off')", Installer::LOCK_OPTION, (string) $timestamp ) );
+	}
+
+	public function test_a_fresh_lock_makes_migrate_a_no_op() {
+		$this->set_lock( 1790000000 - 60 );
+
+		Installer::migrate();
+
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertTrue( Installer::table_exists( 'magic_links' ) );
+		$this->assertSame( '123456', $this->token( 'a' )['otp_code'] );
+		$this->assertSame( (string) ( 1790000000 - 60 ), $this->lock_value(), 'The holder keeps its lock.' );
+	}
+
+	public function test_a_stale_lock_is_taken_over() {
+		$this->set_lock( 1790000000 - 301 );
+
+		Installer::migrate();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertNull( $this->lock_value() );
+	}
+
+	public function test_the_lock_is_released_after_success_and_after_failure() {
+		Installer::migrate();
+		$this->assertNull( $this->lock_value() );
+
+		global $wpdb;
+		HappyAccess_Test_Legacy_Schema::drop_all();
+		HappyAccess_Test_Legacy_Schema::create();
+		delete_option( 'happyaccess_db_version' );
+		$this->seed_legacy_data();
+		$tokens = $wpdb->prefix . 'happyaccess_tokens';
+		$break  = static function ( $query ) use ( $tokens ) {
+			return 0 === strpos( $query, "UPDATE `{$tokens}`" ) ? 'UPDATE this is not valid sql' : $query;
+		};
+		add_filter( 'query', $break );
+		$suppress = $wpdb->suppress_errors( true );
+
+		Installer::migrate();
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $break );
+		$this->assertNull( $this->lock_value() );
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+	}
+
+	public function test_maybe_upgrade_is_skipped_while_the_failure_marker_exists() {
+		set_transient( Installer::FAILED_TRANSIENT, 'write_failed', 15 * MINUTE_IN_SECONDS );
+
+		Installer::maybe_upgrade();
+
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertTrue( Installer::table_exists( 'magic_links' ) );
+
+		delete_transient( Installer::FAILED_TRANSIENT );
+		Installer::maybe_upgrade();
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
 	}
 }
