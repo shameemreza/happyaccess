@@ -314,20 +314,50 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		);
 	}
 
-	public function test_full_cannot_reach_options_through_other_letter_cases() {
+	public function test_full_cannot_reach_options_through_look_alike_names() {
 		$secret = get_option( 'happyaccess_secret' );
 		$this->assertNotEmpty( $secret );
+		update_option( 'happyaccess_settings', array( 'marker' => 'kept' ) );
+		$settings = get_option( 'happyaccess_settings' );
 		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
 		$this->full();
 
 		update_option( 'HAPPYACCESS_SECRET', 'x' );
+		update_option( "h\u{00e1}ppyaccess_secret", 'y' );
+		update_option( 'HappyAccess_Settings', array() );
 		update_option( 'Active_Plugins', array() );
 		wp_cache_delete( 'happyaccess_secret', 'options' );
+		wp_cache_delete( 'happyaccess_settings', 'options' );
 		wp_cache_delete( 'alloptions', 'options' );
 
 		$this->assertSame( $secret, get_option( 'happyaccess_secret' ) );
+		$this->assertSame( $settings, get_option( 'happyaccess_settings' ) );
 		$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
-		$this->assertSame( 'old', CapabilityGuard::keep_old_site_option( 'new', 'old', 'Site_Admins', 1 ) );
+		$old = array( HAPPYACCESS_PLUGIN_BASENAME => 1 );
+		$this->assertSame( $old, CapabilityGuard::keep_old_site_option( array(), $old, 'Active_Sitewide_Plugins', 1 ) );
+	}
+
+	public function test_full_writes_other_mixed_case_options() {
+		add_filter( 'get_available_languages', array( $this, 'add_german' ) );
+		$this->full();
+		update_option( 'WPLANG', 'de_DE' );
+		update_option( 'My_Plugin_Option', 1 );
+		$this->assertSame( 'de_DE', get_option( 'WPLANG' ) );
+		$this->assertEquals( 1, get_option( 'My_Plugin_Option' ) );
+	}
+
+	public function test_protected_writes_other_mixed_case_options() {
+		$this->become();
+		update_option( 'My_Plugin_Option', 1 );
+		$this->assertEquals( 1, get_option( 'My_Plugin_Option' ) );
+		update_option( 'Admin_Email', 'x@example.com' );
+		wp_cache_delete( 'alloptions', 'options' );
+		$this->assertNotSame( 'x@example.com', get_option( 'admin_email' ) );
+	}
+
+	public function add_german( $languages ) {
+		$languages[] = 'de_DE';
+		return $languages;
 	}
 
 	public function test_full_cannot_delete_an_option_through_another_letter_case() {

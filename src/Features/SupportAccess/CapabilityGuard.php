@@ -94,13 +94,6 @@ final class CapabilityGuard {
 	const NETWORK_PLUGINS_OPTION = 'active_sitewide_plugins';
 
 	/**
-	 * Characters allowed in an option name a temp user writes. The options
-	 * table ignores case and accents, so any other name could reach a
-	 * protected option.
-	 */
-	const OPTION_NAME_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789_-';
-
-	/**
 	 * Every option starting with this is protected too.
 	 */
 	const OPTION_PREFIX = 'happyaccess_';
@@ -512,7 +505,7 @@ final class CapabilityGuard {
 					array_filter(
 						$options,
 						static function ( $option ) use ( $level ) {
-							return ! self::is_protected_option( $option, $level );
+							return ! self::is_guarded_option( $option, $level );
 						}
 					)
 				);
@@ -523,8 +516,7 @@ final class CapabilityGuard {
 
 	/**
 	 * Keeps the old value of a protected option when a temp user writes it.
-	 * The active plugins list may change but always keeps HappyAccess. A name
-	 * outside lowercase letters, digits, underscores and hyphens is refused.
+	 * The active plugins list may change but always keeps HappyAccess.
 	 *
 	 * @param mixed  $value     New value.
 	 * @param string $option    Option name.
@@ -539,9 +531,6 @@ final class CapabilityGuard {
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
 		}
-		if ( ! self::is_plain_option_name( $option ) ) {
-			return $old_value;
-		}
 		if ( 'active_plugins' === $option ) {
 			return self::keep_plugin_active( $value, $old_value );
 		}
@@ -550,7 +539,7 @@ final class CapabilityGuard {
 			if ( self::is_roles_option( $option ) ) {
 				self::log_open_role_change( $user_id, $value, $old_value );
 			}
-			return self::is_protected_option( $option, $level ) ? $old_value : $value;
+			return self::is_guarded_option( $option, $level ) ? $old_value : $value;
 		}
 		if ( self::plugin_work_active() && self::is_roles_option( $option ) ) {
 			if ( ! self::$roles_logged && $value !== $old_value ) {
@@ -567,7 +556,7 @@ final class CapabilityGuard {
 			}
 			return $value;
 		}
-		return self::is_protected_option( $option, $level ) ? $old_value : $value;
+		return self::is_guarded_option( $option, $level ) ? $old_value : $value;
 	}
 
 	/**
@@ -595,8 +584,7 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Stops a temp user deleting a protected option, or any option whose name
-	 * isn't plain lowercase.
+	 * Stops a temp user deleting a protected option or the active plugins list.
 	 *
 	 * @param string $option Option name.
 	 * @return void
@@ -606,7 +594,7 @@ final class CapabilityGuard {
 		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
 		}
-		if ( self::is_plain_option_name( $option ) && ! self::is_protected_option( $option, self::level_for( $user_id ) ) ) {
+		if ( 'active_plugins' !== $option && ! self::is_guarded_option( $option, self::level_for( $user_id ) ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -627,18 +615,15 @@ final class CapabilityGuard {
 		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
 		}
-		if ( ! self::is_plain_option_name( $option ) ) {
-			return $old_value;
-		}
 		if ( self::NETWORK_PLUGINS_OPTION === $option ) {
 			return self::keep_network_plugin_active( $value, $old_value );
 		}
-		return self::is_protected_site_option( $option, self::level_for( $user_id ) ) ? $old_value : $value;
+		return self::is_guarded_option( $option, self::level_for( $user_id ), true ) ? $old_value : $value;
 	}
 
 	/**
-	 * Stops a temp user deleting a protected network option, the network
-	 * active plugins list, or any network option whose name isn't plain lowercase.
+	 * Stops a temp user deleting a protected network option or the network
+	 * active plugins list.
 	 *
 	 * @param string $option     Option name.
 	 * @param int    $network_id Network id.
@@ -650,10 +635,7 @@ final class CapabilityGuard {
 		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
 		}
-		$protected = ! self::is_plain_option_name( $option )
-			|| self::NETWORK_PLUGINS_OPTION === $option
-			|| self::is_protected_site_option( $option, self::level_for( $user_id ) );
-		if ( ! $protected ) {
+		if ( self::NETWORK_PLUGINS_OPTION !== $option && ! self::is_guarded_option( $option, self::level_for( $user_id ), true ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -702,14 +684,35 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Whether an option name uses only lowercase letters, digits, underscores
-	 * and hyphens.
+	 * Whether a temp user's write or delete of this option name must be
+	 * refused. The options tables ignore case and accents, so the name is
+	 * folded first: a protected name is refused in any spelling, and a
+	 * spelling of a plugin list other than the real name is refused too.
 	 *
-	 * @param mixed $option Option name.
+	 * @param mixed  $option  Option name.
+	 * @param string $level   Access level of the grant.
+	 * @param bool   $network Whether this is a network option.
 	 * @return bool
 	 */
-	private static function is_plain_option_name( $option ) {
-		return is_string( $option ) && '' !== $option && strlen( $option ) === strspn( $option, self::OPTION_NAME_CHARS );
+	private static function is_guarded_option( $option, $level, $network = false ) {
+		if ( ! is_string( $option ) || '' === $option ) {
+			return false;
+		}
+		$folded = self::fold_option_name( $option );
+		if ( $network ? self::is_protected_site_option( $folded, $level ) : self::is_protected_option( $folded, $level ) ) {
+			return true;
+		}
+		return $folded !== $option && in_array( $folded, array( 'active_plugins', self::NETWORK_PLUGINS_OPTION ), true );
+	}
+
+	/**
+	 * Option name the way the options tables compare it: lowercase, no accents.
+	 *
+	 * @param string $option Option name.
+	 * @return string
+	 */
+	private static function fold_option_name( $option ) {
+		return strtolower( remove_accents( $option ) );
 	}
 
 	/**
@@ -796,19 +799,19 @@ final class CapabilityGuard {
 	 */
 	private static function is_roles_option( $option ) {
 		global $wpdb;
-		return is_string( $option ) && $wpdb->prefix . 'user_roles' === $option;
+		return is_string( $option ) && self::fold_option_name( $wpdb->prefix . 'user_roles' ) === self::fold_option_name( $option );
 	}
 
 	/**
 	 * Whether an option is off limits to temp users. Custom and full passes
-	 * are kept only from HappyAccess's own options.
+	 * are kept only from HappyAccess's own options. Call it through
+	 * is_guarded_option(), which folds the name first.
 	 *
-	 * @param mixed  $option Option name.
+	 * @param mixed  $option Folded option name.
 	 * @param string $level  Access level of the grant.
 	 * @return bool
 	 */
 	private static function is_protected_option( $option, $level = 'protected' ) {
-		global $wpdb;
 		if ( ! is_string( $option ) || '' === $option ) {
 			return false;
 		}
@@ -817,14 +820,15 @@ final class CapabilityGuard {
 		}
 		return in_array( $option, self::PROTECTED_OPTIONS, true )
 			|| 0 === strpos( $option, self::OPTION_PREFIX )
-			|| $wpdb->prefix . 'user_roles' === $option;
+			|| self::is_roles_option( $option );
 	}
 
 	/**
 	 * Whether a network option is off limits to temp users. Custom and full
-	 * passes are kept only from HappyAccess's own network options.
+	 * passes are kept only from HappyAccess's own network options. Call it
+	 * through is_guarded_option(), which folds the name first.
 	 *
-	 * @param mixed  $option Option name.
+	 * @param mixed  $option Folded option name.
 	 * @param string $level  Access level of the grant.
 	 * @return bool
 	 */
