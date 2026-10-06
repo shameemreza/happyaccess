@@ -35,6 +35,11 @@ final class Grants {
 	const CODE_ATTEMPTS = 5;
 
 	/**
+	 * Access levels a grant can have.
+	 */
+	const LEVELS = array( 'protected', 'custom', 'full' );
+
+	/**
 	 * Per-request cache of resolver results, keyed by user id.
 	 *
 	 * @var array
@@ -51,7 +56,7 @@ final class Grants {
 	/**
 	 * Creates a grant.
 	 *
-	 * @param array $args label, email, role, duration, one_time, ips, menus, hide_admin_bar, redirect_to, allow_installs, notify, created_by.
+	 * @param array $args label, email, role, duration, one_time, ips, menus, hide_admin_bar, redirect_to, allow_installs, notify, created_by, level, caps, confirm_full.
 	 * @return array id, code, link_key, expires_at.
 	 * @throws \InvalidArgumentException When an argument is not valid.
 	 * @throws \RuntimeException         When the site key is not stored or no free code was found.
@@ -77,9 +82,33 @@ final class Grants {
 			}
 		}
 
+		$level = isset( $args['level'] ) && '' !== (string) $args['level'] ? (string) $args['level'] : 'protected';
+		if ( ! in_array( $level, self::LEVELS, true ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+			throw new \InvalidArgumentException( __( 'The access level is not valid.', 'happyaccess' ) );
+		}
+
 		$role = isset( $args['role'] ) && '' !== (string) $args['role'] ? (string) $args['role'] : 'administrator';
-		if ( ! array_key_exists( $role, wp_roles()->roles ) ) {
-			throw new \InvalidArgumentException( 'The role does not exist.' );
+		if ( 'protected' === $level ) {
+			if ( ! array_key_exists( $role, wp_roles()->roles ) ) {
+				throw new \InvalidArgumentException( 'The role does not exist.' );
+			}
+		} else {
+			$role = 'administrator';
+		}
+
+		$caps = array();
+		if ( 'full' === $level && true !== ( isset( $args['confirm_full'] ) ? $args['confirm_full'] : null ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+			throw new \InvalidArgumentException( __( 'Confirm that you trust this person with full access.', 'happyaccess' ) );
+		}
+		if ( 'custom' === $level ) {
+			$caps = self::clean_caps( isset( $args['caps'] ) ? $args['caps'] : array() );
+		}
+
+		$protection = $level;
+		if ( 'protected' === $level ) {
+			$protection = empty( $args['allow_installs'] ) ? 'protected' : 'protected_allow_installs';
 		}
 
 		$duration = isset( $args['duration'] ) ? (int) $args['duration'] : (int) Settings::get( 'support.default_duration' );
@@ -124,6 +153,15 @@ final class Grants {
 		$now        = Clock::now();
 		$table      = Installer::table( 'tokens' );
 
+		$restrictions = array(
+			'ips'            => $ips,
+			'menus'          => $menus,
+			'hide_admin_bar' => ! empty( $args['hide_admin_bar'] ),
+		);
+		if ( 'custom' === $level ) {
+			$restrictions['caps'] = $caps;
+		}
+
 		list( $code, $code_hash ) = self::unused_code();
 
 		$link_key  = Codes::link_key();
@@ -140,14 +178,8 @@ final class Grants {
 				'label'           => $label,
 				'recipient_email' => $email,
 				'role'            => $role,
-				'protection'      => empty( $args['allow_installs'] ) ? 'protected' : 'protected_allow_installs',
-				'restrictions'    => wp_json_encode(
-					array(
-						'ips'            => $ips,
-						'menus'          => $menus,
-						'hide_admin_bar' => ! empty( $args['hide_admin_bar'] ),
-					)
-				),
+				'protection'      => $protection,
+				'restrictions'    => wp_json_encode( $restrictions ),
 				'redirect_to'     => $redirect_to,
 				'notify'          => $notify,
 				'created_by'      => $created_by,
@@ -164,6 +196,16 @@ final class Grants {
 		}
 		$id = (int) $wpdb->insert_id;
 
+		$log_meta = array(
+			'role'     => $role,
+			'duration' => $duration,
+			'one_time' => $one_time,
+			'level'    => $level,
+		);
+		if ( 'custom' === $level ) {
+			$log_meta['caps_count'] = count( $caps );
+		}
+
 		AuditLog::add(
 			'grant_created',
 			array(
@@ -171,11 +213,7 @@ final class Grants {
 				'token_id' => $id,
 				/* translators: %s: label of the support grant. */
 				'summary'  => sprintf( __( 'Support access granted to %s', 'happyaccess' ), $label ),
-				'meta'     => array(
-					'role'     => $role,
-					'duration' => $duration,
-					'one_time' => $one_time,
-				),
+				'meta'     => $log_meta,
 			)
 		);
 
@@ -185,6 +223,48 @@ final class Grants {
 			'link_key'   => $link_key,
 			'expires_at' => $expires,
 		);
+	}
+
+	/**
+	 * Cleans and checks the permissions of a custom pass. "read" is dropped
+	 * before the checks and added back, so it is neither required nor rejected.
+	 *
+	 * @param mixed $input Requested capabilities.
+	 * @return array Sorted capability names, including "read".
+	 * @throws \InvalidArgumentException When the list is empty or holds a capability that can't be given.
+	 */
+	private static function clean_caps( $input ) {
+		$caps = array();
+		foreach ( (array) $input as $cap ) {
+			$cap = is_scalar( $cap ) ? sanitize_key( (string) $cap ) : '';
+			if ( '' !== $cap && 'read' !== $cap && ! in_array( $cap, $caps, true ) ) {
+				$caps[] = $cap;
+			}
+		}
+		if ( empty( $caps ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+			throw new \InvalidArgumentException( __( 'Pick at least one permission.', 'happyaccess' ) );
+		}
+
+		$grantable = Catalog::grantable();
+		foreach ( $caps as $cap ) {
+			if ( ! in_array( $cap, $grantable, true ) ) {
+				/* translators: %s: capability name. */
+				$message = sprintf( __( "This permission can't be given: %s", 'happyaccess' ), $cap );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+				throw new \InvalidArgumentException( $message );
+			}
+			if ( ! current_user_can( $cap ) ) {
+				/* translators: %s: capability name. */
+				$message = sprintf( __( "You can't give a permission you don't have: %s", 'happyaccess' ), $cap );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+				throw new \InvalidArgumentException( $message );
+			}
+		}
+
+		$caps[] = 'read';
+		sort( $caps );
+		return $caps;
 	}
 
 	/**
@@ -756,12 +836,26 @@ final class Grants {
 		$metadata     = ! empty( $row['metadata'] ) ? json_decode( (string) $row['metadata'], true ) : null;
 		$metadata     = is_array( $metadata ) ? $metadata : array();
 
+		$protection = (string) $row['protection'];
+		$level      = in_array( $protection, array( 'custom', 'full' ), true ) ? $protection : 'protected';
+		$caps       = array();
+		if ( 'custom' === $level && isset( $restrictions['caps'] ) ) {
+			foreach ( (array) $restrictions['caps'] as $cap ) {
+				if ( is_string( $cap ) && '' !== $cap ) {
+					$caps[] = $cap;
+				}
+			}
+		}
+
 		$grant = array(
 			'id'              => (int) $row['id'],
 			'label'           => (string) $row['label'],
 			'recipient_email' => (string) $row['recipient_email'],
 			'role'            => (string) $row['role'],
-			'protection'      => (string) $row['protection'],
+			'protection'      => $protection,
+			'level'           => $level,
+			'caps'            => $caps,
+			'allow_installs'  => 'protected_allow_installs' === $protection,
 			'restrictions'    => array(
 				'ips'            => isset( $restrictions['ips'] ) ? array_values( (array) $restrictions['ips'] ) : array(),
 				'menus'          => isset( $restrictions['menus'] ) ? array_values( (array) $restrictions['menus'] ) : array(),
