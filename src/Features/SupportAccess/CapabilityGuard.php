@@ -79,6 +79,16 @@ final class CapabilityGuard {
 	);
 
 	/**
+	 * Network options a temp user cannot change. Core has no generic hook for
+	 * network option writes, so each name is hooked on its own.
+	 */
+	const PROTECTED_SITE_OPTIONS = array(
+		'site_admins',
+		'admin_email',
+		'registration',
+	);
+
+	/**
 	 * Every option starting with this is protected too.
 	 */
 	const OPTION_PREFIX = 'happyaccess_';
@@ -145,6 +155,10 @@ final class CapabilityGuard {
 		add_filter( 'allowed_options', array( __CLASS__, 'filter_allowed_options' ) );
 		add_filter( 'pre_update_option', array( __CLASS__, 'keep_old_option' ), 10, 3 );
 		add_action( 'delete_option', array( __CLASS__, 'block_option_delete' ) );
+		foreach ( self::PROTECTED_SITE_OPTIONS as $site_option ) {
+			add_filter( 'pre_update_site_option_' . $site_option, array( __CLASS__, 'keep_old_site_option' ), 10, 4 );
+			add_action( 'pre_delete_site_option_' . $site_option, array( __CLASS__, 'block_site_option_delete' ), 10, 2 );
+		}
 		add_filter( 'all_plugins', array( __CLASS__, 'hide_plugin' ) );
 		add_filter( 'users_list_table_query_args', array( __CLASS__, 'hide_owner' ) );
 		add_action( 'activate_plugin', array( __CLASS__, 'plugin_work_started' ), 10, 2 );
@@ -406,6 +420,38 @@ final class CapabilityGuard {
 	}
 
 	/**
+	 * Keeps the old value when a temp user writes a protected network option.
+	 *
+	 * @param mixed  $value      New value.
+	 * @param mixed  $old_value  Current value.
+	 * @param string $option     Option name.
+	 * @param int    $network_id Network id.
+	 * @return mixed
+	 */
+	public static function keep_old_site_option( $value, $old_value = null, $option = '', $network_id = 0 ) {
+		unset( $network_id );
+		if ( Internal::active() || ! self::is_protected_site_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+			return $value;
+		}
+		return $old_value;
+	}
+
+	/**
+	 * Stops a temp user deleting a protected network option.
+	 *
+	 * @param string $option     Option name.
+	 * @param int    $network_id Network id.
+	 * @return void
+	 */
+	public static function block_site_option_delete( $option, $network_id = 0 ) {
+		unset( $network_id );
+		if ( Internal::active() || ! self::is_protected_site_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+			return;
+		}
+		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
+	}
+
+	/**
 	 * Hides HappyAccess from the plugins list for temp users.
 	 *
 	 * @param array $plugins All plugins.
@@ -505,5 +551,18 @@ final class CapabilityGuard {
 		return in_array( $option, self::PROTECTED_OPTIONS, true )
 			|| 0 === strpos( $option, self::OPTION_PREFIX )
 			|| $wpdb->prefix . 'user_roles' === $option;
+	}
+
+	/**
+	 * Whether a network option is off limits to temp users.
+	 *
+	 * @param mixed $option Option name.
+	 * @return bool
+	 */
+	private static function is_protected_site_option( $option ) {
+		if ( ! is_string( $option ) || '' === $option ) {
+			return false;
+		}
+		return in_array( $option, self::PROTECTED_SITE_OPTIONS, true ) || 0 === strpos( $option, self::OPTION_PREFIX );
 	}
 }

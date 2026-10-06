@@ -159,6 +159,7 @@ final class Installer {
 			$result['failed'] = true;
 		}
 		self::migrate_options( $is_upgrade );
+		self::backfill_blog_ids();
 
 		if ( $result['failed'] ) {
 			return 'write_failed';
@@ -410,6 +411,29 @@ final class Installer {
 		}
 
 		return $failed;
+	}
+
+	/**
+	 * Gives 1.0.6 temp users of this site the happyaccess_blog_id meta that
+	 * 1.1.0 reads. Skips users that no longer exist and users that have it.
+	 * Safe to run more than once.
+	 *
+	 * @return void
+	 */
+	public static function backfill_blog_ids() {
+		global $wpdb;
+		$table = self::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$user_ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$table} WHERE user_id > %d", 0 ) );
+		$blog_id  = get_current_blog_id();
+
+		foreach ( (array) $user_ids as $user_id ) {
+			$user_id = (int) $user_id;
+			if ( ! get_userdata( $user_id ) || ! get_user_meta( $user_id, 'happyaccess_temp_user', true ) || '' !== (string) get_user_meta( $user_id, 'happyaccess_blog_id', true ) ) {
+				continue;
+			}
+			update_user_meta( $user_id, 'happyaccess_blog_id', $blog_id );
+		}
 	}
 
 	/**

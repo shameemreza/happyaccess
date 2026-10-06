@@ -271,6 +271,38 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertTrue( (bool) get_user_meta( $deactivated, 'happyaccess_deactivated', true ), 'The migration leaves the old flag alone.' );
 	}
 
+	public function test_migration_backfills_the_blog_id_of_legacy_temp_users() {
+		global $wpdb;
+		$legacy = $this->insert_legacy_token( 'blog-legacy' );
+		$set    = $this->insert_legacy_token( 'blog-set' );
+		$plain  = $this->insert_legacy_token( 'blog-plain' );
+		$gone   = $this->insert_legacy_token( 'blog-gone' );
+
+		$legacy_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $legacy_user, 'happyaccess_temp_user', 1 );
+		$set_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $set_user, 'happyaccess_temp_user', 1 );
+		update_user_meta( $set_user, 'happyaccess_blog_id', 99 );
+		$plain_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+
+		$table = $wpdb->prefix . 'happyaccess_tokens';
+		$wpdb->update( $table, array( 'user_id' => $legacy_user ), array( 'id' => $legacy ) );
+		$wpdb->update( $table, array( 'user_id' => $set_user ), array( 'id' => $set ) );
+		$wpdb->update( $table, array( 'user_id' => $plain_user ), array( 'id' => $plain ) );
+		$wpdb->update( $table, array( 'user_id' => 987654 ), array( 'id' => $gone ) );
+
+		Installer::migrate();
+
+		$this->assertSame( (string) get_current_blog_id(), get_user_meta( $legacy_user, 'happyaccess_blog_id', true ) );
+		$this->assertSame( '99', get_user_meta( $set_user, 'happyaccess_blog_id', true ), 'An existing blog id is kept.' );
+		$this->assertSame( '', get_user_meta( $plain_user, 'happyaccess_blog_id', true ), 'Only temp users get a blog id.' );
+		$this->assertFalse( get_userdata( 987654 ) );
+
+		$before = get_user_meta( $legacy_user, 'happyaccess_blog_id' );
+		Installer::backfill_blog_ids();
+		$this->assertSame( $before, get_user_meta( $legacy_user, 'happyaccess_blog_id' ), 'Running it again adds no second row.' );
+	}
+
 	public function test_a_deactivated_user_that_is_not_in_the_token_user_id_column_does_not_suspend_it() {
 		$id = $this->insert_legacy_token( 'sus-foreign' );
 

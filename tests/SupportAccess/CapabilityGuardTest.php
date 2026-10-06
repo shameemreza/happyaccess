@@ -302,6 +302,58 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		delete_option( 'admin_email' );
 	}
 
+	public function test_temp_user_site_option_writes_keep_the_old_value() {
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+		foreach ( array( 'site_admins', 'admin_email', 'registration', 'happyaccess_network_flag' ) as $option ) {
+			$this->assertSame( 'old', CapabilityGuard::keep_old_site_option( 'new', 'old', $option, 1 ), $option );
+		}
+		$this->assertSame( 'new', CapabilityGuard::keep_old_site_option( 'new', 'old', 'blog_upload_space_check_disabled', 1 ) );
+	}
+
+	public function test_admin_site_option_writes_go_through() {
+		wp_set_current_user( $this->owner );
+		$this->assertSame( 'new', CapabilityGuard::keep_old_site_option( 'new', 'old', 'site_admins', 1 ) );
+	}
+
+	public function test_internal_writes_to_site_options_go_through_for_a_temp_user() {
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+		$this->assertSame( 'new', \HappyAccess\Core\Internal::run(
+				static function () {
+					return CapabilityGuard::keep_old_site_option( 'new', 'old', 'site_admins', 1 );
+				}
+			) );
+	}
+
+	public function test_site_option_hooks_are_registered_once_per_named_option() {
+		CapabilityGuard::register();
+		foreach ( array( 'site_admins', 'admin_email', 'registration' ) as $option ) {
+			$this->assertSame( 10, has_filter( 'pre_update_site_option_' . $option, array( CapabilityGuard::class, 'keep_old_site_option' ) ), $option );
+			$this->assertSame( 10, has_action( 'pre_delete_site_option_' . $option, array( CapabilityGuard::class, 'block_site_option_delete' ) ), $option );
+		}
+	}
+
+	public function test_temp_user_cannot_delete_network_options() {
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+		$this->expectException( 'WPDieException' );
+		CapabilityGuard::block_site_option_delete( 'site_admins', 1 );
+	}
+
+	public function test_admin_can_delete_network_options_and_internal_deletes_pass() {
+		wp_set_current_user( $this->owner );
+		CapabilityGuard::block_site_option_delete( 'site_admins', 1 );
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+		\HappyAccess\Core\Internal::run(
+			static function () {
+				CapabilityGuard::block_site_option_delete( 'site_admins', 1 );
+			}
+		);
+		$this->assertTrue( true );
+	}
+
 	public function test_normal_admin_can_delete_and_write_protected_options() {
 		update_option( 'happyaccess_anything', 'a' );
 		update_option( 'happyaccess_anything', 'b' );
