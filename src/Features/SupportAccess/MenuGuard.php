@@ -125,8 +125,9 @@ final class MenuGuard {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read only check of the requested screen.
 		$query = array();
 		foreach ( $_GET as $key => $value ) {
-			if ( is_string( $value ) ) {
-				$query[ sanitize_key( $key ) ] = sanitize_text_field( wp_unslash( $value ) );
+			// Exact keys only: "PAGE" must not overwrite or stand in for "page".
+			if ( is_string( $key ) && is_string( $value ) && sanitize_key( $key ) === $key ) {
+				$query[ $key ] = sanitize_text_field( wp_unslash( $value ) );
 			}
 		}
 		$post_type = isset( $_REQUEST['post_type'] ) && is_string( $_REQUEST['post_type'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['post_type'] ) ) : '';
@@ -155,6 +156,14 @@ final class MenuGuard {
 				unset( $list_query['post_type'] );
 			}
 			$hit = self::is_blocked( $blocked, 'edit.php', '', 'post' === $post_type ? '' : $post_type, $list_query );
+		}
+		if ( ! $hit && 'term.php' === $pagenow && isset( $query['taxonomy'] ) ) {
+			// A term edit screen belongs to its taxonomy list page.
+			$list_query = $query;
+			if ( '' === $post_type || 'post' === $post_type ) {
+				unset( $list_query['post_type'] );
+			}
+			$hit = self::is_blocked( $blocked, 'edit-tags.php', '', isset( $list_query['post_type'] ) ? $post_type : '', $list_query );
 		}
 		if ( ! $hit ) {
 			return;
@@ -338,8 +347,8 @@ final class MenuGuard {
 			}
 		}
 
-		if ( ! $is_file && ! isset( $args['path'] ) && ! empty( $query['path'] ) ) {
-			// A bare page slug such as wc-admin is the home screen, not its path based sub pages.
+		if ( 'wc-admin' === $base && ! $is_file && ! isset( $args['path'] ) && ! empty( $query['path'] ) ) {
+			// A bare wc-admin slug is the WooCommerce home screen, not its path based sub pages.
 			return false;
 		}
 

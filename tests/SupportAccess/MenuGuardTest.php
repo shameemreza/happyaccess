@@ -144,6 +144,40 @@ class MenuGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( MenuGuard::is_blocked( $blocked, 'admin.php', 'wc-admin', '', array( 'path' => '/customers' ) ) );
 	}
 
+	public function test_matcher_path_arg_only_matters_for_wc_admin() {
+		$this->assertTrue( MenuGuard::is_blocked( array( 'wc-settings' ), 'admin.php', 'wc-settings', '', array( 'path' => '1' ) ) );
+		$this->assertTrue( MenuGuard::is_blocked( array( 'tools.php' ), 'tools.php', '', '', array( 'path' => '1' ) ) );
+	}
+
+	public function test_block_screen_ignores_mixed_case_query_keys() {
+		$temp = $this->temp_user_with_menus( array( 'wc-settings' ) );
+		wp_set_current_user( $temp );
+		$GLOBALS['pagenow'] = 'admin.php';
+		$_GET['page']       = 'wc-settings';
+		$_GET['PAGE']       = 'x';
+		$this->expectException( WPDieException::class );
+		MenuGuard::block_screen();
+	}
+
+	public function test_block_screen_maps_term_edit_to_the_taxonomy_list() {
+		$temp = $this->temp_user_with_menus( array( 'edit-tags.php?taxonomy=product_cat&post_type=product' ) );
+		wp_set_current_user( $temp );
+		$GLOBALS['pagenow'] = 'term.php';
+		MenuGuard::block_screen( (object) array( 'post_type' => 'product', 'taxonomy' => 'product_tag' ) );
+		$this->assertSame( 0, $this->blocked_log_count() );
+
+		$this->expectException( WPDieException::class );
+		MenuGuard::block_screen( (object) array( 'post_type' => 'product', 'taxonomy' => 'product_cat' ) );
+	}
+
+	public function test_block_screen_maps_term_edit_for_post_taxonomies() {
+		$temp = $this->temp_user_with_menus( array( 'edit-tags.php?taxonomy=category' ) );
+		wp_set_current_user( $temp );
+		$GLOBALS['pagenow'] = 'term.php';
+		$this->expectException( WPDieException::class );
+		MenuGuard::block_screen( (object) array( 'post_type' => 'post', 'taxonomy' => 'category' ) );
+	}
+
 	public function test_matcher_taxonomy_slugs() {
 		$product = array( 'edit-tags.php?taxonomy=product_cat&post_type=product' );
 		$this->assertTrue( MenuGuard::is_blocked( $product, 'edit-tags.php', '', 'product', array( 'taxonomy' => 'product_cat' ) ) );
