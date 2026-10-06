@@ -21,3 +21,5 @@ tests_add_filter(
 );
 
 require $happyaccess_tests_dir . '/includes/bootstrap.php';
+
+require __DIR__ . '/Support/LegacySchema.php';

@@ -16,6 +16,26 @@ final class Installer {
 
 	const DB_VERSION = '1.1.0';
 
+	const LEGACY_TABLES = array( 'magic_links', 'otp_shares' );
+
+	const LEGACY_OPTIONS = array(
+		'happyaccess_max_attempts',
+		'happyaccess_lockout_duration',
+		'happyaccess_token_expiry',
+		'happyaccess_cleanup_days',
+		'happyaccess_enable_logging',
+		'happyaccess_delete_on_uninstall',
+		'happyaccess_recaptcha_enabled',
+		'happyaccess_recaptcha_site_key',
+		'happyaccess_recaptcha_threshold',
+		'happyaccess_magic_link_expiry',
+		'happyaccess_share_link_expiry',
+		'happyaccess_otp_shares_db',
+		'happyaccess_enable_email',
+		'happyaccess_gdpr_consent_text',
+		'happyaccess_version',
+	);
+
 	/**
 	 * Full table name.
 	 *
@@ -54,6 +74,178 @@ final class Installer {
 			dbDelta( $sql );
 		}
 		Secrets::key();
+	}
+
+	/**
+	 * Runs the migration when the stored DB version is behind.
+	 *
+	 * @return void
+	 */
+	public static function maybe_upgrade() {
+		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
+			self::migrate();
+		}
+	}
+
+	/**
+	 * Brings the current site to DB_VERSION. Safe to run more than once.
+	 *
+	 * @return void
+	 */
+	public static function migrate() {
+		$previous   = (string) get_option( 'happyaccess_db_version', '0.0.0' );
+		$is_upgrade = '0.0.0' !== $previous || false !== get_option( 'happyaccess_version', false );
+
+		self::install();
+		$hashed = self::hash_legacy_codes();
+		self::migrate_options( $is_upgrade );
+		self::drop_legacy_tables();
+
+		update_option( 'happyaccess_db_version', self::DB_VERSION );
+
+		if ( $is_upgrade && version_compare( $previous, self::DB_VERSION, '<' ) ) {
+			AuditLog::add(
+				'plugin_upgraded',
+				array(
+					'feature' => 'core',
+					'user_id' => 0,
+					'summary' => sprintf( 'Upgraded from %1$s to %2$s', $previous, self::DB_VERSION ),
+					'meta'    => array( 'codes_hashed' => $hashed ),
+				)
+			);
+		}
+	}
+
+	/**
+	 * Activation entry point, including network activation.
+	 *
+	 * @param bool $network_wide Whether the plugin is network activated.
+	 * @return void
+	 */
+	public static function activate( $network_wide ) {
+		if ( is_multisite() && $network_wide ) {
+			foreach ( get_sites(
+				array(
+					'fields' => 'ids',
+					'number' => 0,
+				)
+			) as $site_id ) {
+				switch_to_blog( (int) $site_id );
+				self::migrate();
+				restore_current_blog();
+			}
+			return;
+		}
+		self::migrate();
+	}
+
+	/**
+	 * Sets up tables on a new site when the plugin is network active.
+	 *
+	 * @param \WP_Site $site New site.
+	 * @return void
+	 */
+	public static function on_new_site( $site ) {
+		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		if ( ! is_plugin_active_for_network( HAPPYACCESS_PLUGIN_BASENAME ) ) {
+			return;
+		}
+		switch_to_blog( (int) $site->blog_id );
+		self::migrate();
+		restore_current_blog();
+	}
+
+	/**
+	 * Hashes 1.0.x plain codes that are still active and removes every plain code.
+	 *
+	 * @return int Number of codes hashed.
+	 */
+	private static function hash_legacy_codes() {
+		global $wpdb;
+		$table = self::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, no input.
+		$rows   = $wpdb->get_results( "SELECT id, otp_code, expires_at, revoked_at FROM {$table} WHERE otp_code IS NOT NULL AND otp_code <> ''", ARRAY_A );
+		$hashed = 0;
+
+		foreach ( (array) $rows as $row ) {
+			$data = array( 'otp_code' => null );
+			if ( empty( $row['revoked_at'] ) && Clock::from_mysql( $row['expires_at'] ) > Clock::now() ) {
+				$data['code_hash'] = Codes::hash_code( $row['otp_code'] );
+				++$hashed;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+			$wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) );
+		}
+
+		return $hashed;
+	}
+
+	/**
+	 * Moves 1.0.x options into happyaccess_settings.
+	 *
+	 * @param bool $is_upgrade Whether this site ran 1.0.x before.
+	 * @return void
+	 */
+	private static function migrate_options( $is_upgrade ) {
+		$map = array(
+			'happyaccess_max_attempts'        => array( 'security', 'max_attempts' ),
+			'happyaccess_lockout_duration'    => array( 'security', 'lockout_duration' ),
+			'happyaccess_cleanup_days'        => array( 'privacy', 'retention_days' ),
+			'happyaccess_enable_logging'      => array( 'privacy', 'logging' ),
+			'happyaccess_delete_on_uninstall' => array( 'privacy', 'delete_on_uninstall' ),
+			'happyaccess_recaptcha_enabled'   => array( 'security', 'recaptcha_enabled' ),
+			'happyaccess_recaptcha_site_key'  => array( 'security', 'recaptcha_site_key' ),
+			'happyaccess_recaptcha_threshold' => array( 'security', 'recaptcha_threshold' ),
+		);
+
+		$changes = array();
+		foreach ( $map as $option => $path ) {
+			$value = get_option( $option, null );
+			if ( null !== $value ) {
+				$changes[ $path[0] ][ $path[1] ] = $value;
+			}
+		}
+
+		// 604800 was the untouched 1.0.x default; keep a custom choice only.
+		$expiry = get_option( 'happyaccess_token_expiry', null );
+		if ( null !== $expiry && 604800 !== (int) $expiry ) {
+			$changes['support']['default_duration'] = (int) $expiry;
+		}
+
+		if ( $is_upgrade && '' === Settings::get( 'support.consent_given_at', '' ) ) {
+			$changes['support']['consent_given_at'] = Clock::mysql();
+			$changes['support']['consent_user_id']  = 0;
+		}
+
+		if ( ! empty( $changes ) ) {
+			Settings::update( $changes );
+		}
+
+		$secret = get_option( 'happyaccess_recaptcha_secret_key', null );
+		if ( null !== $secret ) {
+			delete_option( 'happyaccess_recaptcha_secret_key' );
+			add_option( 'happyaccess_recaptcha_secret_key', $secret, '', false );
+		}
+
+		foreach ( self::LEGACY_OPTIONS as $option ) {
+			delete_option( $option );
+		}
+	}
+
+	/**
+	 * Drops tables that 1.1.0 doesn't use.
+	 *
+	 * @return void
+	 */
+	private static function drop_legacy_tables() {
+		global $wpdb;
+		foreach ( self::LEGACY_TABLES as $name ) {
+			$table = self::table( $name );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed table names.
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+		}
 	}
 
 	/**
