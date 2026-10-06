@@ -35,6 +35,7 @@ final class Routes {
 	 */
 	public static function routes() {
 		GrantsController::routes();
+		ActivityController::routes();
 	}
 
 	/**

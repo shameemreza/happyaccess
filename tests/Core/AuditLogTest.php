@@ -35,7 +35,13 @@ class AuditLogTest extends WP_UnitTestCase {
 				'meta'     => array( 'method' => 'link' ),
 			)
 		);
-		AuditLog::add( 'plugin_upgraded', array( 'feature' => 'core', 'user_id' => 0 ) );
+		AuditLog::add(
+			'plugin_upgraded',
+			array(
+				'feature' => 'core',
+				'user_id' => 0,
+			)
+		);
 
 		$this->assertGreaterThan( 0, $id );
 
@@ -54,7 +60,12 @@ class AuditLogTest extends WP_UnitTestCase {
 		for ( $i = 0; $i < 30; $i++ ) {
 			AuditLog::add( 'login', array( 'user_id' => 1 ) );
 		}
-		$page = AuditLog::query( array( 'page' => 2, 'per_page' => 25 ) );
+		$page = AuditLog::query(
+			array(
+				'page'     => 2,
+				'per_page' => 25,
+			)
+		);
 		$this->assertSame( 30, $page['total'] );
 		$this->assertCount( 5, $page['items'] );
 	}
@@ -153,5 +164,15 @@ class AuditLogTest extends WP_UnitTestCase {
 		$this->assertSame( 1, AuditLog::query( array( 'features' => array( 'extra' ) ) )['total'] );
 		$this->assertSame( 3, AuditLog::query( array( 'features' => array() ) )['total'] );
 		$this->assertCount( 0, AuditLog::query( array( 'features' => array( '!!' ) ) )['items'] );
+	}
+
+	public function test_event_in_filter_matches_any_listed_event() {
+		AuditLog::add( 'grant_created' );
+		AuditLog::add( 'emergency_lock' );
+		AuditLog::add( 'login_success' );
+
+		$this->assertSame( 2, AuditLog::query( array( 'event_in' => array( 'grant_created', 'emergency_lock' ) ) )['total'] );
+		$this->assertSame( 3, AuditLog::query( array( 'event_in' => array() ) )['total'] );
+		$this->assertSame( 0, AuditLog::query( array( 'event_in' => array( '!!' ) ) )['total'] );
 	}
 }
