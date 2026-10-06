@@ -232,6 +232,18 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertSame( array(), get_userdata( $user_id )->roles );
 	}
 
+	public function test_failed_delete_clears_the_direct_caps_of_a_custom_pass() {
+		list( $id, $user_id ) = $this->grant_with_user( array( 'level' => 'custom', 'caps' => array( 'edit_posts' ) ) );
+		$this->assertTrue( user_can( $user_id, 'edit_posts' ) );
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+
+		$this->assertTrue( Grants::revoke( $id ) );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertFalse( user_can( $user_id, 'edit_posts' ) );
+		$this->assertFalse( user_can( $user_id, 'read' ) );
+	}
+
 	private function api_keys_table() {
 		global $wpdb;
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_api_keys ( key_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, description VARCHAR(200) NULL )" );

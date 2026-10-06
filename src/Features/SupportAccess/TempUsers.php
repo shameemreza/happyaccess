@@ -21,7 +21,9 @@ final class TempUsers {
 	/**
 	 * Creates the temp user for a grant and links it on the grant row.
 	 *
-	 * @param array $grant Grant with id, role, label and created_by.
+	 * A custom pass gets no role, only its chosen capabilities.
+	 *
+	 * @param array $grant Grant with id, role, level, caps, label and created_by.
 	 * @return int New user id.
 	 * @throws \RuntimeException When WordPress cannot create the user.
 	 */
@@ -44,6 +46,9 @@ final class TempUsers {
 			/* translators: %s: label of the support grant. */
 			: sprintf( __( 'Support access: %s', 'happyaccess' ), $label );
 
+		$custom = isset( $grant['level'] ) && 'custom' === $grant['level'];
+		$role   = $custom ? '' : sanitize_key( $grant['role'] );
+
 		$user_id = wp_insert_user(
 			array(
 				'user_login'   => $username,
@@ -51,7 +56,7 @@ final class TempUsers {
 				'user_pass'    => wp_generate_password( 32, true, true ),
 				'display_name' => $name,
 				'nickname'     => $name,
-				'role'         => sanitize_key( $grant['role'] ),
+				'role'         => $role,
 				'meta_input'   => array(
 					'happyaccess_temp_user' => 1,
 					'happyaccess_token_id'  => (int) $grant['id'],
@@ -64,7 +69,39 @@ final class TempUsers {
 		}
 		$user_id = (int) $user_id;
 
+		if ( $custom ) {
+			self::give_caps( $user_id, isset( $grant['caps'] ) ? (array) $grant['caps'] : array() );
+		}
+
 		return self::link_or_yield( $grant, $user_id );
+	}
+
+	/**
+	 * Gives a custom pass's user its capabilities and nothing else.
+	 *
+	 * The stored list is cut down to what the catalog allows, in case it was
+	 * edited in the database. An empty result leaves the user with read only.
+	 * WordPress treats an empty role string as "no role", not the default role.
+	 *
+	 * @param int   $user_id User id.
+	 * @param array $caps    Capabilities stored on the grant.
+	 * @return void
+	 */
+	private static function give_caps( $user_id, array $caps ) {
+		$allowed = array_merge( Catalog::grantable(), Catalog::ALWAYS );
+		$caps    = array_values( array_unique( array_intersect( array_map( 'strval', $caps ), $allowed ) ) );
+		if ( ! in_array( 'read', $caps, true ) ) {
+			$caps[] = 'read';
+		}
+
+		ActivityTracker::quietly(
+			static function () use ( $user_id, $caps ) {
+				$user = new \WP_User( $user_id );
+				foreach ( $caps as $cap ) {
+					$user->add_cap( $cap );
+				}
+			}
+		);
 	}
 
 	/**

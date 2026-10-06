@@ -55,6 +55,56 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertSame( (string) $user_id, $wpdb->get_var( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = 7' ) );
 	}
 
+	public function test_custom_grant_user_has_no_role_and_exactly_the_chosen_caps() {
+		$grant = array_merge( $this->grant(), array( 'level' => 'custom', 'role' => 'administrator', 'caps' => array( 'edit_posts', 'read', 'upload_files' ) ) );
+		$id    = TempUsers::get_or_create( $grant );
+		$user  = get_userdata( $id );
+
+		$this->assertSame( array(), $user->roles );
+		$this->assertTrue( user_can( $id, 'edit_posts' ) );
+		$this->assertTrue( user_can( $id, 'upload_files' ) );
+		$this->assertTrue( user_can( $id, 'read' ) );
+		$this->assertFalse( user_can( $id, 'manage_options' ) );
+		$this->assertFalse( user_can( $id, 'publish_posts' ) );
+	}
+
+	public function test_custom_grant_ignores_caps_outside_the_catalog() {
+		$grant = array_merge( $this->grant(), array( 'level' => 'custom', 'caps' => array( 'edit_posts', 'read', 'edit_plugins', 'happyaccess_manage', 'not_a_real_cap' ) ) );
+		$id    = TempUsers::create( $grant );
+
+		$this->assertTrue( user_can( $id, 'edit_posts' ) );
+		$this->assertArrayNotHasKey( 'edit_plugins', get_userdata( $id )->caps );
+		$this->assertArrayNotHasKey( 'happyaccess_manage', get_userdata( $id )->caps );
+		$this->assertArrayNotHasKey( 'not_a_real_cap', get_userdata( $id )->caps );
+	}
+
+	public function test_custom_grant_with_nothing_valid_still_gets_read_only_and_never_the_role() {
+		$grant = array_merge( $this->grant(), array( 'level' => 'custom', 'role' => 'administrator', 'caps' => array( 'edit_plugins' ) ) );
+		$id    = TempUsers::create( $grant );
+
+		$this->assertSame( array(), get_userdata( $id )->roles );
+		$this->assertSame( array( 'read' => true ), get_userdata( $id )->caps );
+		$this->assertFalse( user_can( $id, 'edit_posts' ) );
+	}
+
+	public function test_protected_grant_still_gets_its_role() {
+		$grant = array_merge( $this->grant(), array( 'level' => 'protected', 'role' => 'administrator', 'caps' => array() ) );
+		$id    = TempUsers::create( $grant );
+
+		$this->assertSame( array( 'administrator' ), get_userdata( $id )->roles );
+	}
+
+	public function test_reusing_a_custom_user_keeps_its_caps_without_adding_more() {
+		$grant            = array_merge( $this->grant(), array( 'level' => 'custom', 'caps' => array( 'edit_posts', 'read' ) ) );
+		$id               = TempUsers::get_or_create( $grant );
+		$grant['user_id'] = $id;
+		$grant['caps']    = array( 'edit_posts', 'upload_files', 'read' );
+
+		$this->assertSame( $id, TempUsers::get_or_create( $grant ) );
+		$this->assertTrue( user_can( $id, 'edit_posts' ) );
+		$this->assertFalse( user_can( $id, 'upload_files' ) );
+	}
+
 	public function test_losing_a_parallel_create_keeps_one_temp_user_and_returns_the_winner() {
 		global $wpdb;
 		$stale  = $this->grant();
