@@ -183,4 +183,17 @@ class CatalogTest extends WP_UnitTestCase {
 		add_role( 'seo', 'SEO', array( 'wpseo_manage_options' => true ) );
 		$this->assertContains( 'wpseo_manage_options', $this->group_caps( 'other' ) );
 	}
+
+	public function test_create_customers_routes_to_store() {
+		add_role( 'merch', 'Merch', array( 'create_customers' => true ) );
+		$this->assertContains( 'create_customers', $this->group_caps( 'store' ) );
+		$this->assertNotContains( 'create_customers', $this->group_caps( 'other' ) );
+	}
+
+	public function test_unfiltered_upload_is_a_tools_choice() {
+		$found = wp_list_filter( $this->group( 'tools' )['caps'], array( 'cap' => 'unfiltered_upload' ) );
+		$this->assertSame( 'Upload any file type', reset( $found )['label'] );
+		$this->assertContains( 'unfiltered_upload', Catalog::grantable() );
+		$this->assertNotContains( 'unfiltered_upload', Catalog::NEVER );
+	}
 }

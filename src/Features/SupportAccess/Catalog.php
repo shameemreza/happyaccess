@@ -91,6 +91,7 @@ final class Catalog {
 			'edit_dashboard',
 			'customize',
 			'unfiltered_html',
+			'unfiltered_upload',
 		),
 	);
 
@@ -102,7 +103,7 @@ final class Catalog {
 	/**
 	 * Pattern for unlisted capabilities that belong to the store group.
 	 */
-	const STORE_PATTERN = '/^(manage_woocommerce|view_woocommerce_reports)$|_(product|products|product_terms|shop_order|shop_orders|shop_order_terms|shop_coupon|shop_coupons|shop_coupon_terms|shop_webhook|shop_webhooks)$/';
+	const STORE_PATTERN = '/^(manage_woocommerce|view_woocommerce_reports|create_customers)$|_(product|products|product_terms|shop_order|shop_orders|shop_order_terms|shop_coupon|shop_coupons|shop_coupon_terms|shop_webhook|shop_webhooks)$/';
 
 	/**
 	 * Pattern for unlisted capabilities that belong to the content group.
@@ -272,6 +273,7 @@ final class Catalog {
 			'edit_dashboard'           => __( 'Change the dashboard', 'happyaccess' ),
 			'customize'                => __( 'Use the Customizer', 'happyaccess' ),
 			'unfiltered_html'          => __( 'Post unfiltered HTML', 'happyaccess' ),
+			'unfiltered_upload'        => __( 'Upload any file type', 'happyaccess' ),
 		);
 	}
 
