@@ -145,15 +145,12 @@ final class Privacy {
 		$tokens  = Installer::table( 'tokens' );
 		$items   = array();
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom tables; the IN list has one placeholder per ADMIN_EVENTS value.
+		$events     = self::admin_event_placeholders();
 		$log_rows   = (array) $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$logs} WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND " . self::agent_rows_sql() . ' ) ) ORDER BY id ASC LIMIT %d OFFSET %d',
-				$user_id,
-				$user_id,
-				$email,
-				self::PER_PAGE,
-				$offset
+				"SELECT * FROM {$logs} WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND event_type NOT IN ( {$events} ) ) ) ORDER BY id ASC LIMIT %d OFFSET %d",
+				array_merge( array( $user_id, $user_id, $email ), self::ADMIN_EVENTS, array( self::PER_PAGE, $offset ) )
 			),
 			ARRAY_A
 		);
@@ -297,18 +294,12 @@ final class Privacy {
 
 		$scrubbed = self::end_and_scrub_grants( $email );
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom tables; the IN list has one placeholder per ADMIN_EVENTS value.
+		$events    = self::admin_event_placeholders();
 		$log_count = (int) $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$logs} SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND " . self::agent_rows_sql() . " AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
-				$user_id,
-				'0.0.0.0',
-				'',
-				$user_id,
-				$user_id,
-				$email,
-				'0.0.0.0',
-				self::PER_PAGE
+				"UPDATE {$logs} SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND event_type NOT IN ( {$events} ) AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
+				array_merge( array( $user_id, '0.0.0.0', '', $user_id, $user_id, $email ), self::ADMIN_EVENTS, array( '0.0.0.0', self::PER_PAGE ) )
 			)
 		);
 		// phpcs:enable
@@ -386,16 +377,14 @@ final class Privacy {
 	}
 
 	/**
-	 * SQL condition for log rows that belong to the support agent: every event
-	 * that the site owner's own actions did not write.
+	 * Placeholders for the admin events, to sit inside an IN list. A token
+	 * matched log row is the agent's data when its event is not one of these.
+	 * The caller passes self::ADMIN_EVENTS as the values.
 	 *
-	 * @return string Condition on the event_type column, already prepared.
+	 * @return string One %s per admin event, comma separated.
 	 */
-	private static function agent_rows_sql() {
-		global $wpdb;
-		$placeholders = implode( ', ', array_fill( 0, count( self::ADMIN_EVENTS ), '%s' ) );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- One placeholder per event, built from a constant.
-		return $wpdb->prepare( "event_type NOT IN ( {$placeholders} )", self::ADMIN_EVENTS );
+	private static function admin_event_placeholders() {
+		return implode( ', ', array_fill( 0, count( self::ADMIN_EVENTS ), '%s' ) );
 	}
 
 	/**
