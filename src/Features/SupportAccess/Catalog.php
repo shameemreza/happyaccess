@@ -91,7 +91,6 @@ final class Catalog {
 			'edit_dashboard',
 			'customize',
 			'unfiltered_html',
-			'unfiltered_upload',
 		),
 	);
 
@@ -129,6 +128,7 @@ final class Catalog {
 		'edit_plugins',
 		'edit_themes',
 		'edit_files',
+		'unfiltered_upload',
 		'do_not_allow',
 		'happyaccess_manage',
 		'exist',
@@ -273,7 +273,6 @@ final class Catalog {
 			'edit_dashboard'           => __( 'Change the dashboard', 'happyaccess' ),
 			'customize'                => __( 'Use the Customizer', 'happyaccess' ),
 			'unfiltered_html'          => __( 'Post unfiltered HTML', 'happyaccess' ),
-			'unfiltered_upload'        => __( 'Upload any file type', 'happyaccess' ),
 		);
 	}
 

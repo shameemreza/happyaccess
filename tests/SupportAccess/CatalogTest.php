@@ -10,7 +10,7 @@ use HappyAccess\Features\SupportAccess\Catalog;
 class CatalogTest extends WP_UnitTestCase {
 
 	public function tear_down() {
-		foreach ( array( 'shop_manager', 'seo', 'netty', 'merch' ) as $role ) {
+		foreach ( array( 'shop_manager', 'seo', 'netty', 'merch', 'wc_product' ) as $role ) {
 			remove_role( $role );
 		}
 		parent::tear_down();
@@ -75,9 +75,9 @@ class CatalogTest extends WP_UnitTestCase {
 			'seo',
 			'SEO',
 			array(
-				'zeta_cap'  => true,
-				'alpha_cap' => true,
-				'seo'       => true,
+				'zeta_cap'   => true,
+				'alpha_cap'  => true,
+				'seo'        => true,
 				'edit_posts' => true,
 			)
 		);
@@ -94,11 +94,11 @@ class CatalogTest extends WP_UnitTestCase {
 			'netty',
 			'Netty',
 			array(
-				'manage_network'    => true,
-				'edit_plugins'      => true,
+				'manage_network'     => true,
+				'edit_plugins'       => true,
 				'happyaccess_manage' => true,
-				'level_10'          => true,
-				'exist'             => true,
+				'level_10'           => true,
+				'exist'              => true,
 			)
 		);
 		$grantable = Catalog::grantable();
@@ -190,10 +190,22 @@ class CatalogTest extends WP_UnitTestCase {
 		$this->assertNotContains( 'create_customers', $this->group_caps( 'other' ) );
 	}
 
-	public function test_unfiltered_upload_is_a_tools_choice() {
-		$found = wp_list_filter( $this->group( 'tools' )['caps'], array( 'cap' => 'unfiltered_upload' ) );
-		$this->assertSame( 'Upload any file type', reset( $found )['label'] );
-		$this->assertContains( 'unfiltered_upload', Catalog::grantable() );
-		$this->assertNotContains( 'unfiltered_upload', Catalog::NEVER );
+	public function test_unfiltered_upload_is_never_offered() {
+		add_role( 'merch', 'Merch', array( 'unfiltered_upload' => true ) );
+		$this->assertContains( 'unfiltered_upload', Catalog::NEVER );
+		$this->assertNotContains( 'unfiltered_upload', Catalog::grantable() );
+	}
+
+	public function test_role_slugs_are_not_treated_as_caps() {
+		add_role(
+			'wc_product',
+			'WC product',
+			array(
+				'wc_product' => true,
+				'wc_things'  => true,
+			)
+		);
+		$this->assertNotContains( 'wc_product', Catalog::grantable() );
+		$this->assertContains( 'wc_things', $this->group_caps( 'other' ) );
 	}
 }
