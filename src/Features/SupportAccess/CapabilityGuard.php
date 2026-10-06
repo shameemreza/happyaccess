@@ -99,6 +99,12 @@ final class CapabilityGuard {
 	const OPTION_PREFIX = 'happyaccess_';
 
 	/**
+	 * Prefixes WordPress adds to a transient's stored option name. Longest
+	 * first, so a timeout prefix is not mistaken for the shorter one.
+	 */
+	const TRANSIENT_PREFIXES = array( '_site_transient_timeout_', '_transient_timeout_', '_site_transient_', '_transient_' );
+
+	/**
 	 * Application password caps, denied for every target.
 	 */
 	const APP_PASSWORD_CAPS = array(
@@ -215,6 +221,7 @@ final class CapabilityGuard {
 		add_filter( 'allowed_options', array( __CLASS__, 'filter_allowed_options' ) );
 		add_filter( 'pre_update_option', array( __CLASS__, 'keep_old_option' ), 10, 3 );
 		add_action( 'delete_option', array( __CLASS__, 'block_option_delete' ) );
+		add_action( 'add_option', array( __CLASS__, 'block_option_add' ) );
 		foreach ( array_merge( self::PROTECTED_SITE_OPTIONS, array( self::NETWORK_PLUGINS_OPTION ) ) as $site_option ) {
 			add_filter( 'pre_update_site_option_' . $site_option, array( __CLASS__, 'keep_old_site_option' ), 10, 4 );
 			add_action( 'pre_delete_site_option_' . $site_option, array( __CLASS__, 'block_site_option_delete' ), 10, 2 );
@@ -612,6 +619,24 @@ final class CapabilityGuard {
 	}
 
 	/**
+	 * Stops a temp user creating a protected option, such as a new HappyAccess
+	 * transient, before it exists to be kept by the update guard.
+	 *
+	 * @param string $option Option name.
+	 * @return void
+	 */
+	public static function block_option_add( $option ) {
+		$user_id = get_current_user_id();
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
+			return;
+		}
+		if ( ! self::is_guarded_option( $option, self::level_for( $user_id ) ) ) {
+			return;
+		}
+		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
+	}
+
+	/**
 	 * Keeps the old value when a temp user writes a protected network option.
 	 *
 	 * @param mixed  $value      New value.
@@ -877,10 +902,10 @@ final class CapabilityGuard {
 			return false;
 		}
 		if ( 'protected' !== $level ) {
-			return 0 === strpos( $option, self::OPTION_PREFIX ) || in_array( $option, self::SECRET_OPTIONS, true );
+			return self::is_own_name( $option ) || in_array( $option, self::SECRET_OPTIONS, true );
 		}
 		return in_array( $option, self::PROTECTED_OPTIONS, true )
-			|| 0 === strpos( $option, self::OPTION_PREFIX )
+			|| self::is_own_name( $option )
 			|| self::is_roles_option( $option );
 	}
 
@@ -898,8 +923,26 @@ final class CapabilityGuard {
 			return false;
 		}
 		if ( 'protected' !== $level ) {
-			return 0 === strpos( $option, self::OPTION_PREFIX );
+			return self::is_own_name( $option );
 		}
-		return in_array( $option, self::PROTECTED_SITE_OPTIONS, true ) || 0 === strpos( $option, self::OPTION_PREFIX );
+		return in_array( $option, self::PROTECTED_SITE_OPTIONS, true ) || self::is_own_name( $option );
+	}
+
+	/**
+	 * Whether a lowercased option name is HappyAccess's own: it starts with
+	 * the plugin prefix, once one transient prefix is taken off. That covers
+	 * every HappyAccess transient, now and later.
+	 *
+	 * @param string $option Lowercased option name.
+	 * @return bool
+	 */
+	private static function is_own_name( $option ) {
+		foreach ( self::TRANSIENT_PREFIXES as $prefix ) {
+			if ( 0 === strpos( $option, $prefix ) ) {
+				$option = substr( $option, strlen( $prefix ) );
+				break;
+			}
+		}
+		return 0 === strpos( $option, self::OPTION_PREFIX );
 	}
 }

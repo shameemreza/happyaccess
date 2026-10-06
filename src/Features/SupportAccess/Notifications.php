@@ -11,6 +11,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
+use HappyAccess\Core\Internal;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Router;
@@ -200,26 +201,29 @@ final class Notifications {
 	 * @return bool Whether the email was accepted.
 	 */
 	public static function admin_changed( array $grant, \WP_User $user, array $fields, $old_email = '' ) {
-		$to = '';
-		if ( Grants::owner_id( $grant ) === (int) $user->ID && is_email( $old_email ) ) {
-			$to = (string) $old_email;
+		if ( Grants::owner_id( $grant ) === (int) $user->ID ) {
+			// The owner's own account is never held back by the cap.
+			$to = is_email( $old_email ) ? (string) $old_email : '';
+			return self::admin_alert( 'changed', $grant, $user, $fields, $to, false );
 		}
-		return self::admin_alert( 'changed', $grant, $user, $fields, $to );
+		return self::admin_alert( 'changed', $grant, $user, $fields );
 	}
 
 	/**
 	 * Sends the administrator alert, for both variants. At most ALERT_LIMIT
-	 * emails go out per grant in each ALERT_WINDOW. The last one says more
-	 * may follow. Every event is still logged by the caller.
+	 * emails go out per grant in each ALERT_WINDOW, and only a sent email is
+	 * counted. The last one says more may follow. Every event is still logged
+	 * by the caller.
 	 *
 	 * @param string   $variant created or changed.
 	 * @param array    $grant   Grant of the acting pass.
 	 * @param \WP_User $user    The administrator account.
 	 * @param string[] $fields  What changed, for the changed variant.
 	 * @param string   $to      Recipient override. Empty means the owner.
+	 * @param bool     $capped  Whether the cap applies.
 	 * @return bool
 	 */
-	private static function admin_alert( $variant, array $grant, \WP_User $user, array $fields, $to = '' ) {
+	private static function admin_alert( $variant, array $grant, \WP_User $user, array $fields, $to = '', $capped = true ) {
 		if ( '' === $to ) {
 			$to = self::owner_email( $grant );
 		}
@@ -227,27 +231,37 @@ final class Notifications {
 			return false;
 		}
 
+		// HappyAccess's own transient: the option guard lets it through here only.
 		$key   = self::ALERT_TRANSIENT . (int) $grant['id'];
-		$state = get_transient( $key );
 		$now   = time();
-		if ( ! is_array( $state ) || empty( $state['until'] ) || (int) $state['until'] <= $now ) {
-			$state = array(
-				'count' => 0,
-				'until' => $now + self::ALERT_WINDOW,
+		$state = array(
+			'count' => 0,
+			'until' => $now + self::ALERT_WINDOW,
+		);
+		if ( $capped ) {
+			$stored = Internal::run(
+				static function () use ( $key ) {
+					return get_transient( $key );
+				}
 			);
+			if ( is_array( $stored ) && ! empty( $stored['until'] ) && (int) $stored['until'] > $now ) {
+				$state = array(
+					'count' => (int) ( isset( $stored['count'] ) ? $stored['count'] : 0 ),
+					'until' => (int) $stored['until'],
+				);
+			}
+			if ( $state['count'] >= self::ALERT_LIMIT ) {
+				return false;
+			}
 		}
-		if ( (int) $state['count'] >= self::ALERT_LIMIT ) {
-			return false;
-		}
-		++$state['count'];
-		set_transient( $key, $state, max( 1, (int) $state['until'] - $now ) );
+		$is_last = $capped && self::ALERT_LIMIT === $state['count'] + 1;
 
 		$labels = array();
 		foreach ( $fields as $field ) {
 			$labels[] = 'password' === $field ? __( 'password', 'happyaccess' ) : __( 'email address', 'happyaccess' );
 		}
 
-		return Mailer::send(
+		$sent = Mailer::send(
 			$to,
 			'changed' === $variant
 				? __( "A support pass changed an administrator's login details", 'happyaccess' )
@@ -261,10 +275,20 @@ final class Notifications {
 				'changed'    => $labels,
 				'time'       => self::format_time( Clock::now() ),
 				'users_url'  => admin_url( 'users.php' ),
-				'more'       => self::ALERT_LIMIT === (int) $state['count'],
+				'more'       => $is_last,
 				'log_url'    => admin_url( 'users.php?page=happyaccess' ),
 			)
 		);
+
+		if ( $sent && $capped ) {
+			++$state['count'];
+			Internal::run(
+				static function () use ( $key, $state, $now ) {
+					set_transient( $key, $state, max( 1, $state['until'] - $now ) );
+				}
+			);
+		}
+		return $sent;
 	}
 
 	/**

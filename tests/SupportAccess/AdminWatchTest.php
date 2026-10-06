@@ -225,4 +225,80 @@ class AdminWatchTest extends WP_UnitTestCase {
 
 		$this->assertCount( 0, $this->rows( 'admin_account_created' ) );
 	}
+
+	private function counter() {
+		return get_transient( 'happyaccess_admin_alerts_' . $this->grant_id );
+	}
+
+	public function test_the_alert_counter_cannot_be_deleted_by_the_pass() {
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'firstadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+		$this->assertSame( 1, $this->counter()['count'] );
+
+		try {
+			delete_transient( 'happyaccess_admin_alerts_' . $this->grant_id );
+		} catch ( WPDieException $e ) {
+			unset( $e );
+		}
+		$this->assertSame( 1, $this->counter()['count'] );
+	}
+
+	public function test_the_alert_counter_cannot_be_overwritten_by_the_pass() {
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'firstadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+
+		set_transient( 'happyaccess_admin_alerts_' . $this->grant_id, array( 'count' => 5, 'until' => time() + 3600 ), 3600 );
+		$this->assertSame( 1, $this->counter()['count'] );
+
+		wp_insert_user( array( 'user_login' => 'secondadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+		$this->assertCount( 2, $this->sent() );
+	}
+
+	public function test_the_alert_counter_cannot_be_pre_filled_by_the_pass() {
+		wp_set_current_user( $this->temp );
+		$this->assertFalse( $this->counter() );
+
+		try {
+			set_transient( 'happyaccess_admin_alerts_' . $this->grant_id, array( 'count' => 5, 'until' => time() + 3600 ), 3600 );
+		} catch ( WPDieException $e ) {
+			unset( $e );
+		}
+		$this->assertFalse( $this->counter() );
+
+		wp_insert_user( array( 'user_login' => 'firstadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+		$this->assertCount( 1, $this->sent() );
+	}
+
+	public function test_an_owner_account_change_still_sends_after_the_cap_is_used_up() {
+		// The creator's account is protected, so the owner here is the fallback administrator.
+		$admins   = get_users( array( 'role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1 ) );
+		$fallback = $admins[0];
+		wp_update_user( array( 'ID' => $fallback->ID, 'user_email' => 'real-owner@example.org' ) );
+		$made = Grants::create( array( 'label' => 'Orphan', 'level' => 'full', 'confirm_full' => true, 'created_by' => 0 ) );
+		$temp = TempUsers::get_or_create( Grants::get( $made['id'] ) );
+		$this->assertSame( $fallback->ID, Grants::owner_id( Grants::get( $made['id'] ) ) );
+		reset_phpmailer_instance();
+
+		wp_set_current_user( $temp );
+		for ( $i = 1; $i <= 6; $i++ ) {
+			wp_insert_user( array( 'user_login' => 'bulkadmin' . $i, 'user_pass' => 'x', 'role' => 'administrator' ) );
+		}
+		$this->assertCount( 5, $this->sent() );
+
+		wp_update_user( array( 'ID' => $fallback->ID, 'user_email' => 'evil@example.com' ) );
+
+		$this->assertCount( 6, $this->sent() );
+		$this->assertSame( 'real-owner@example.org', $this->sent()[5]['to'][0][0] );
+		$this->assertSame( 5, get_transient( 'happyaccess_admin_alerts_' . $made['id'] )['count'] );
+	}
+
+	public function test_a_failed_send_is_not_counted() {
+		add_filter( 'pre_wp_mail', '__return_false' );
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'firstadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+		remove_filter( 'pre_wp_mail', '__return_false' );
+
+		$this->assertCount( 1, $this->rows( 'admin_account_created' ) );
+		$this->assertFalse( $this->counter() );
+	}
 }
