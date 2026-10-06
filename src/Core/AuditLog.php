@@ -34,26 +34,28 @@ final class AuditLog {
 			array(
 				'feature'  => 'support',
 				'token_id' => 0,
-				'user_id'  => get_current_user_id(),
 				'summary'  => '',
 				'meta'     => array(),
 			)
 		);
+		if ( ! array_key_exists( 'user_id', $args ) ) {
+			$args['user_id'] = get_current_user_id();
+		}
 
 		$ip = ClientIp::get();
 		if ( Settings::get( 'privacy.anonymize_ip', false ) ) {
 			$ip = ClientIp::anonymize( $ip );
 		}
 
-		$agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 255 ) : '';
+		$agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? self::clip_bytes( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 255 ) : '';
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Custom table.
 		$ok = $wpdb->insert(
 			Installer::table( 'logs' ),
 			array(
 				'token_id'   => absint( $args['token_id'] ),
-				'feature'    => sanitize_key( $args['feature'] ),
-				'event_type' => sanitize_key( $event ),
+				'feature'    => substr( sanitize_key( $args['feature'] ), 0, 20 ),
+				'event_type' => substr( sanitize_key( $event ), 0, 50 ),
 				'user_id'    => absint( $args['user_id'] ),
 				'ip_address' => $ip,
 				'user_agent' => $agent,
@@ -65,6 +67,21 @@ final class AuditLog {
 		);
 
 		return $ok ? (int) $wpdb->insert_id : 0;
+	}
+
+	/**
+	 * Cuts a string to a byte length without splitting a multibyte character,
+	 * because $wpdb rejects the whole row when a value ends in a broken one.
+	 *
+	 * @param string $value Text.
+	 * @param int    $bytes Maximum bytes.
+	 * @return string
+	 */
+	private static function clip_bytes( $value, $bytes ) {
+		if ( function_exists( 'mb_strcut' ) ) {
+			return mb_strcut( $value, 0, $bytes, 'UTF-8' );
+		}
+		return wp_check_invalid_utf8( substr( $value, 0, $bytes ), true );
 	}
 
 	/**

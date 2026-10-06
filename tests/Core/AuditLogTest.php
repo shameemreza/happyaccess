@@ -77,4 +77,48 @@ class AuditLogTest extends WP_UnitTestCase {
 		$this->assertSame( 1, AuditLog::purge( 30 ) );
 		$this->assertSame( 'new', AuditLog::query()['items'][0]['event_type'] );
 	}
+
+	public function test_long_multibyte_user_agent_is_cut_on_a_character_boundary() {
+		$_SERVER['HTTP_USER_AGENT'] = str_repeat( 'a', 254 ) . 'é';
+
+		$id = AuditLog::add( 'login', array( 'user_id' => 1 ) );
+
+		unset( $_SERVER['HTTP_USER_AGENT'] );
+		$this->assertGreaterThan( 0, $id );
+		$this->assertSame( str_repeat( 'a', 254 ), AuditLog::query()['items'][0]['user_agent'] );
+	}
+
+	public function test_over_long_keys_still_insert() {
+		$id = AuditLog::add(
+			str_repeat( 'e', 80 ),
+			array(
+				'feature' => str_repeat( 'f', 40 ),
+				'user_id' => 1,
+			)
+		);
+
+		$this->assertGreaterThan( 0, $id );
+		$item = AuditLog::query()['items'][0];
+		$this->assertSame( str_repeat( 'e', 50 ), $item['event_type'] );
+		$this->assertSame( str_repeat( 'f', 20 ), $item['feature'] );
+	}
+
+	public function test_a_given_user_id_does_not_resolve_the_current_user() {
+		$resolved = 0;
+		$count    = static function ( $user_id ) use ( &$resolved ) {
+			++$resolved;
+			return $user_id;
+		};
+		add_filter( 'determine_current_user', $count, 1 );
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Force a fresh user lookup.
+		AuditLog::add( 'login', array( 'user_id' => 7 ) );
+		$this->assertSame( 0, $resolved, 'A given user_id must not resolve the current user.' );
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Force a fresh user lookup.
+		AuditLog::add( 'login' );
+		$this->assertSame( 1, $resolved, 'Control: without a user_id the current user is resolved.' );
+
+		remove_filter( 'determine_current_user', $count, 1 );
+	}
 }
