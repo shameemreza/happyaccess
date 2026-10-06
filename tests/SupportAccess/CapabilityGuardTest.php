@@ -243,18 +243,46 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		do_action( 'activated_plugin', 'x/x.php', false );
 	}
 
-	public function test_a_plugin_update_opens_the_role_window_until_it_finishes() {
+	public function test_a_plugin_update_opens_the_role_window_until_it_completes() {
 		global $wpdb;
 		$temp    = $this->temp();
 		$key     = $wpdb->prefix . 'user_roles';
 		$changed = get_option( $key );
 		$changed['administrator']['name'] = 'Updated';
 		wp_set_current_user( $temp );
+		$this->only_guard_closes_updates();
 
 		$this->assertSame( 'kept', apply_filters( 'upgrader_pre_install', 'kept', array() ) );
 		update_option( $key, $changed );
 		$this->assertSame( 'Updated', get_option( $key )['administrator']['name'] );
-		CapabilityGuard::plugin_work_finished();
+		do_action( 'upgrader_process_complete', null, array() );
+	}
+
+	public function test_a_bulk_update_closes_the_role_window_with_one_complete() {
+		global $wpdb;
+		$temp    = $this->temp();
+		$key     = $wpdb->prefix . 'user_roles';
+		$changed = get_option( $key );
+		$changed['administrator']['name'] = 'After bulk';
+		wp_set_current_user( $temp );
+		$this->only_guard_closes_updates();
+
+		apply_filters( 'upgrader_pre_install', true, array() );
+		apply_filters( 'upgrader_pre_install', true, array() );
+		do_action( 'upgrader_process_complete', null, array() );
+		update_option( $key, $changed );
+		$this->assertNotSame( 'After bulk', get_option( $key )['administrator']['name'] );
+	}
+
+	/**
+	 * Core listens to the complete hook and calls the network. Drop those
+	 * listeners for the test and keep only this guard's.
+	 *
+	 * @return void
+	 */
+	private function only_guard_closes_updates() {
+		remove_all_actions( 'upgrader_process_complete' );
+		CapabilityGuard::register();
 	}
 
 	public function test_an_unchanged_role_table_write_during_activation_is_not_logged() {

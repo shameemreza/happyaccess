@@ -117,12 +117,20 @@ final class CapabilityGuard {
 	private static $rules = array();
 
 	/**
-	 * How many plugin activations or updates are running in this request.
-	 * While it is above zero, a temp user's role table writes are allowed.
+	 * How many plugin activations are running in this request.
 	 *
 	 * @var int
 	 */
-	private static $plugin_writes = 0;
+	private static $activation_writes = 0;
+
+	/**
+	 * How many plugin update packages started in this request. A bulk update
+	 * fires the start hook once per package but the complete hook once, so
+	 * the complete hook sets this back to zero.
+	 *
+	 * @var int
+	 */
+	private static $upgrade_writes = 0;
 
 	/**
 	 * Hooks everything the guard needs.
@@ -142,7 +150,7 @@ final class CapabilityGuard {
 		add_action( 'activate_plugin', array( __CLASS__, 'plugin_work_started' ), 10, 2 );
 		add_filter( 'upgrader_pre_install', array( __CLASS__, 'upgrade_work_started' ) );
 		add_action( 'activated_plugin', array( __CLASS__, 'plugin_work_finished' ) );
-		add_action( 'upgrader_process_complete', array( __CLASS__, 'plugin_work_finished' ) );
+		add_action( 'upgrader_process_complete', array( __CLASS__, 'upgrade_work_finished' ) );
 	}
 
 	/**
@@ -151,7 +159,7 @@ final class CapabilityGuard {
 	 * @return void
 	 */
 	public static function plugin_work_started() {
-		++self::$plugin_writes;
+		++self::$activation_writes;
 	}
 
 	/**
@@ -161,27 +169,55 @@ final class CapabilityGuard {
 	 * @return mixed
 	 */
 	public static function upgrade_work_started( $response = null ) {
-		++self::$plugin_writes;
+		++self::$upgrade_writes;
 		return $response;
 	}
 
 	/**
-	 * Counts a plugin activation or update as finished.
+	 * Counts a plugin activation as finished.
 	 *
 	 * @return void
 	 */
 	public static function plugin_work_finished() {
-		self::$plugin_writes = max( 0, self::$plugin_writes - 1 );
+		self::$activation_writes = max( 0, self::$activation_writes - 1 );
 	}
 
 	/**
-	 * Clears the per request rules cache and the plugin work counter.
+	 * Closes the update window, however many packages started.
+	 *
+	 * @return void
+	 */
+	public static function upgrade_work_finished() {
+		self::$upgrade_writes = 0;
+	}
+
+	/**
+	 * Whether a plugin activation or update is running.
+	 *
+	 * @return bool
+	 */
+	private static function plugin_work_active() {
+		return self::$activation_writes > 0 || self::$upgrade_writes > 0;
+	}
+
+	/**
+	 * Clears the per request rules cache.
 	 *
 	 * @return void
 	 */
 	public static function flush_cache() {
-		self::$rules         = array();
-		self::$plugin_writes = 0;
+		self::$rules = array();
+	}
+
+	/**
+	 * Clears the cache and both plugin work counters. For tests.
+	 *
+	 * @return void
+	 */
+	public static function reset() {
+		self::flush_cache();
+		self::$activation_writes = 0;
+		self::$upgrade_writes    = 0;
 	}
 
 	/**
@@ -339,7 +375,7 @@ final class CapabilityGuard {
 			}
 			return $value;
 		}
-		if ( self::$plugin_writes > 0 && self::is_roles_option( $option ) ) {
+		if ( self::plugin_work_active() && self::is_roles_option( $option ) ) {
 			if ( $value !== $old_value ) {
 				AuditLog::add(
 					'roles_changed',

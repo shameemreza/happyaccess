@@ -31,7 +31,7 @@ class HappyAccess_Test_Reset_State_Listener implements TestListener {
 			\HappyAccess\Features\SupportAccess\Grants::flush_cache();
 		}
 		if ( class_exists( '\HappyAccess\Features\SupportAccess\CapabilityGuard' ) ) {
-			\HappyAccess\Features\SupportAccess\CapabilityGuard::flush_cache();
+			\HappyAccess\Features\SupportAccess\CapabilityGuard::reset();
 		}
 	}
 }
