@@ -82,4 +82,44 @@ class SecretsTest extends WP_UnitTestCase {
 		$this->assertSame( $first, Secrets::key() );
 		$this->assertSame( $stored, get_option( Secrets::OPTION ) );
 	}
+
+	public function test_empty_stored_key_is_repaired() {
+		update_option( Secrets::OPTION, '' );
+		Secrets::reset_cache();
+
+		$key = Secrets::key();
+
+		$this->assertSame( 32, strlen( $key ) );
+		$this->assertSame( base64_encode( $key ), get_option( Secrets::OPTION ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Comparing the stored key.
+	}
+
+	public function test_array_stored_key_is_repaired() {
+		update_option( Secrets::OPTION, array( 'junk' ) );
+		Secrets::reset_cache();
+
+		$key = Secrets::key();
+
+		$this->assertSame( 32, strlen( $key ) );
+		$this->assertSame( base64_encode( $key ), get_option( Secrets::OPTION ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Comparing the stored key.
+	}
+
+	public function test_concurrent_creation_adopts_the_winners_key() {
+		global $wpdb;
+		delete_option( Secrets::OPTION );
+		Secrets::reset_cache();
+
+		// Prime the "option is missing" cache, then insert the row behind WordPress's back.
+		get_option( Secrets::OPTION, 'x' );
+		$winner = str_repeat( 'W', 32 );
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => Secrets::OPTION,
+				'option_value' => base64_encode( $winner ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Test fixture.
+				'autoload'     => 'no',
+			)
+		);
+
+		$this->assertSame( $winner, Secrets::key() );
+	}
 }

@@ -19,60 +19,63 @@ final class Secrets {
 	const OPTION = 'happyaccess_secret';
 
 	/**
-	 * Raw site key for this request, once loaded.
+	 * Raw site keys for this request, by blog ID.
 	 *
-	 * @var string|null
+	 * @var array<int, string>
 	 */
-	private static $cache = null;
+	private static $cache = array();
 
 	/**
-	 * Forgets the per-request key. For tests.
+	 * Forgets the per-request keys. For tests.
 	 *
 	 * @return void
 	 */
 	public static function reset_cache() {
-		self::$cache = null;
+		self::$cache = array();
 	}
 
 	/**
 	 * Raw 32-byte site key, created on first use. A stored key is never
-	 * rotated because of a failed read; only a corrupt value is replaced.
+	 * rotated because of a failed read; only a value that exists but does
+	 * not decode to 32 bytes is repaired.
 	 *
 	 * @return string
 	 */
 	public static function key() {
-		if ( null !== self::$cache ) {
-			return self::$cache;
+		$blog_id = get_current_blog_id();
+		if ( isset( self::$cache[ $blog_id ] ) ) {
+			return self::$cache[ $blog_id ];
 		}
 
-		$stored = get_option( self::OPTION, '' );
-		$raw    = self::decode_key( $stored );
+		$missing = new \stdClass();
+		$stored  = get_option( self::OPTION, $missing );
+		$raw     = self::decode_key( $stored );
 		if ( null !== $raw ) {
-			self::$cache = $raw;
+			self::$cache[ $blog_id ] = $raw;
 			return $raw;
 		}
 
 		$raw     = random_bytes( 32 );
 		$encoded = base64_encode( $raw ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Stored binary key.
 
-		if ( is_string( $stored ) && '' !== $stored ) {
-			// Corrupt value: replace it.
+		if ( $stored === $missing ) {
+			// Missing. Drop the stale "missing" cache from the read above so add_option() re-checks the database and backs off if another request already created the key.
+			wp_cache_delete( 'notoptions', 'options' );
+			add_option( self::OPTION, $encoded, '', false );
+		} else {
+			// Exists but unusable (empty, array, bad base64): repair it.
 			update_option( self::OPTION, $encoded, false );
-			self::$cache = $raw;
-			return $raw;
 		}
 
-		// Missing: add_option() never overwrites, so a concurrent request's key wins.
-		if ( ! add_option( self::OPTION, $encoded, '', false ) ) {
-			wp_cache_delete( self::OPTION, 'options' );
-			wp_cache_delete( 'notoptions', 'options' );
-		}
-		$winner = self::decode_key( get_option( self::OPTION, '' ) );
-		if ( null !== $winner ) {
-			$raw = $winner;
+		// Always re-read from the database and adopt what is stored, so a concurrent request's key wins.
+		wp_cache_delete( self::OPTION, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		$current = self::decode_key( get_option( self::OPTION, '' ) );
+		if ( null !== $current ) {
+			$raw = $current;
 		}
 		// Otherwise keep the generated key in memory only: hashes will not match stored ones.
-		self::$cache = $raw;
+		self::$cache[ $blog_id ] = $raw;
 		return $raw;
 	}
 
