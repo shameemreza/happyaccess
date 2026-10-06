@@ -9,6 +9,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Privacy;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\TempUsers;
 
 class PrivacyTest extends WP_UnitTestCase {
 
@@ -17,11 +18,21 @@ class PrivacyTest extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		Installer::install();
-		$this->user = self::factory()->user->create( array( 'role' => 'administrator', 'user_email' => 'me@example.org' ) );
+		$this->user = self::factory()->user->create(
+			array(
+				'role'       => 'administrator',
+				'user_email' => 'me@example.org',
+			)
+		);
 		wp_set_current_user( $this->user );
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 		AuditLog::add( 'login', array( 'user_id' => $this->user ) );
-		Grants::create( array( 'label' => 'Acme', 'email' => 'agent@example.org' ) );
+		Grants::create(
+			array(
+				'label' => 'Acme',
+				'email' => 'agent@example.org',
+			)
+		);
 		Privacy::register();
 	}
 
@@ -84,9 +95,15 @@ class PrivacyTest extends WP_UnitTestCase {
 	}
 
 	public function test_export_by_recipient_email_has_agent_logs_but_not_the_admins_ip() {
-		$grant = $this->grant_by_label( 'Acme' );
+		$grant                  = $this->grant_by_label( 'Acme' );
 		$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
-		AuditLog::add( 'login', array( 'token_id' => $grant['id'], 'user_id' => 0 ) );
+		AuditLog::add(
+			'login',
+			array(
+				'token_id' => $grant['id'],
+				'user_id'  => 0,
+			)
+		);
 
 		$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
 		$result    = call_user_func( $exporters['happyaccess']['callback'], 'agent@example.org', 1 );
@@ -120,10 +137,21 @@ class PrivacyTest extends WP_UnitTestCase {
 	public function test_erase_by_recipient_email_anonymizes_agent_logs_and_leaves_the_admins() {
 		global $wpdb;
 		$_SERVER['HTTP_USER_AGENT'] = 'Admin Browser';
-		$created = Grants::create( array( 'label' => 'Agent job', 'email' => 'outside@example.net' ) );
+		$created                    = Grants::create(
+			array(
+				'label' => 'Agent job',
+				'email' => 'outside@example.net',
+			)
+		);
 		$_SERVER['REMOTE_ADDR']     = '198.51.100.7';
 		$_SERVER['HTTP_USER_AGENT'] = 'Agent Browser';
-		AuditLog::add( 'login', array( 'token_id' => $created['id'], 'user_id' => 0 ) );
+		AuditLog::add(
+			'login',
+			array(
+				'token_id' => $created['id'],
+				'user_id'  => 0,
+			)
+		);
 		$logs = Installer::table( 'logs' );
 
 		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
@@ -146,13 +174,31 @@ class PrivacyTest extends WP_UnitTestCase {
 	public function test_label_scrub_only_replaces_the_trailing_label() {
 		global $wpdb;
 		$logs    = Installer::table( 'logs' );
-		$created = Grants::create( array( 'label' => 'Acme', 'email' => 'acme@example.net' ) );
-		$short   = Grants::create( array( 'label' => 'ti', 'email' => 'short@example.net' ) );
-		AuditLog::add( 'note', array( 'token_id' => $short['id'], 'summary' => 'Saved settings: 3 options' ) );
+		$created = Grants::create(
+			array(
+				'label' => 'Acme',
+				'email' => 'acme@example.net',
+			)
+		);
+		$short   = Grants::create(
+			array(
+				'label' => 'ti',
+				'email' => 'short@example.net',
+			)
+		);
+		AuditLog::add(
+			'note',
+			array(
+				'token_id' => $short['id'],
+				'summary'  => 'Saved settings: 3 options',
+			)
+		);
 
 		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
-		call_user_func( $erasers['happyaccess']['callback'], 'acme@example.net', 1 );
-		call_user_func( $erasers['happyaccess']['callback'], 'short@example.net', 1 );
+		$full    = call_user_func( $erasers['happyaccess']['callback'], 'acme@example.net', 1 );
+		$result  = call_user_func( $erasers['happyaccess']['callback'], 'short@example.net', 1 );
+		$this->assertNotContains( 'Some log summaries may still contain the grant label.', $full['messages'] );
+		$this->assertContains( 'Some log summaries may still contain the grant label.', $result['messages'] );
 
 		$this->assertSame( 'Support access granted to [removed]', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ) ) );
 		$this->assertSame( 'Saved settings: 3 options', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $short['id'], 'note' ) ) );
@@ -169,9 +215,15 @@ class PrivacyTest extends WP_UnitTestCase {
 				'hide_admin_bar' => true,
 			)
 		);
-		$logs = Installer::table( 'logs' );
+		$logs    = Installer::table( 'logs' );
 		// Make sure at least one summary carries the label.
-		AuditLog::add( 'note', array( 'token_id' => $created['id'], 'summary' => 'Opened by Zetacorp' ) );
+		AuditLog::add(
+			'note',
+			array(
+				'token_id' => $created['id'],
+				'summary'  => 'Opened by Zetacorp',
+			)
+		);
 
 		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
 		call_user_func( $erasers['happyaccess']['callback'], 'zeta@example.net', 1 );
@@ -187,6 +239,72 @@ class PrivacyTest extends WP_UnitTestCase {
 		$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SELECT ip_restrictions FROM ' . Installer::table( 'tokens' ) . ' WHERE id = %d', $created['id'] ) ) );
 		$this->assertSame( '0', $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND summary LIKE %s", $created['id'], '%Zetacorp%' ) ) );
 		$this->assertGreaterThan( 0, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND summary LIKE %s", $created['id'], '%[removed]%' ) ) );
+	}
+
+	/**
+	 * Admin creates a grant, the agent logs in, the admin revokes it.
+	 *
+	 * @return array Grant id and temp user id.
+	 */
+	private function run_grant_lifecycle() {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		$created                = Grants::create(
+			array(
+				'label' => 'Orbit',
+				'email' => 'orbit@example.net',
+			)
+		);
+		$temp                   = TempUsers::get_or_create( Grants::get( $created['id'] ) );
+
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+		AuditLog::add(
+			'login_success',
+			array(
+				'token_id' => $created['id'],
+				'user_id'  => $temp,
+				'summary'  => 'Support access used: Orbit',
+			)
+		);
+
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		wp_set_current_user( $this->user );
+		Grants::revoke( $created['id'] );
+
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		return array( $created['id'], $temp );
+	}
+
+	public function test_export_after_a_revoke_has_the_agent_login_and_no_admin_ip() {
+		global $wpdb;
+		list( $id ) = $this->run_grant_lifecycle();
+		$logs       = Installer::table( 'logs' );
+		$this->assertSame( '203.0.113.9', $wpdb->get_var( $wpdb->prepare( "SELECT ip_address FROM {$logs} WHERE token_id = %d AND event_type = %s", $id, 'temp_user_deleted' ) ) );
+
+		$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
+		$result    = call_user_func( $exporters['happyaccess']['callback'], 'orbit@example.net', 1 );
+		$values    = array();
+		foreach ( $result['data'] as $item ) {
+			if ( 'happyaccess_logs' === $item['group_id'] ) {
+				$values = array_merge( $values, wp_list_pluck( $item['data'], 'value' ) );
+			}
+		}
+		$this->assertContains( 'login_success', $values );
+		$this->assertContains( '198.51.100.7', $values );
+		$this->assertNotContains( '203.0.113.9', $values );
+	}
+
+	public function test_erase_after_a_revoke_leaves_the_admins_rows_alone() {
+		global $wpdb;
+		list( $id ) = $this->run_grant_lifecycle();
+		$logs       = Installer::table( 'logs' );
+
+		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
+		call_user_func( $erasers['happyaccess']['callback'], 'orbit@example.net', 1 );
+
+		foreach ( array( 'grant_created', 'temp_user_deleted', 'grant_ended' ) as $event ) {
+			$this->assertSame( '203.0.113.9', $wpdb->get_var( $wpdb->prepare( "SELECT ip_address FROM {$logs} WHERE token_id = %d AND event_type = %s", $id, $event ) ), $event );
+		}
+		$this->assertSame( '0.0.0.0', $wpdb->get_var( $wpdb->prepare( "SELECT ip_address FROM {$logs} WHERE token_id = %d AND event_type = %s", $id, 'login_success' ) ) );
 	}
 
 	private function grant_by_label( $label ) {

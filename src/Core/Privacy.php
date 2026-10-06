@@ -22,6 +22,24 @@ final class Privacy {
 	const PER_PAGE = 50;
 
 	/**
+	 * Log events written because the site owner acted, not the support agent.
+	 * Rows with these events stay out of an agent's export and erase, even
+	 * when they carry the grant's token id.
+	 */
+	const ADMIN_EVENTS = array(
+		'grant_created',
+		'grant_extended',
+		'grant_suspended',
+		'grant_resumed',
+		'grant_regenerated',
+		'grant_ended',
+		'temp_user_deleted',
+		'temp_user_delete_failed',
+		'bundle_emailed',
+		'emergency_lock',
+	);
+
+	/**
 	 * Adds the policy text, the exporter and the eraser.
 	 *
 	 * @return void
@@ -277,7 +295,7 @@ final class Privacy {
 		$logs    = Installer::table( 'logs' );
 		$tokens  = Installer::table( 'tokens' );
 
-		self::end_and_scrub_grants( $email );
+		$scrubbed = self::end_and_scrub_grants( $email );
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom tables.
 		$log_count = (int) $wpdb->query(
@@ -311,6 +329,10 @@ final class Privacy {
 			$messages[] = __( 'Log entries were kept without IP address or browser details until the retention period ends.', 'happyaccess' );
 		}
 
+		if ( ! $scrubbed ) {
+			$messages[] = __( 'Some log summaries may still contain the grant label.', 'happyaccess' );
+		}
+
 		return array(
 			'items_removed'  => ( $log_count + $grant_count + $created_count ) > 0,
 			'items_retained' => $log_count > 0,
@@ -325,7 +347,7 @@ final class Privacy {
 	 * is harmless.
 	 *
 	 * @param string $email Recipient email.
-	 * @return void
+	 * @return bool False when a label may still appear in a log summary.
 	 */
 	private static function end_and_scrub_grants( $email ) {
 		global $wpdb;
@@ -336,6 +358,7 @@ final class Privacy {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
 		$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$tokens} WHERE recipient_email = %s AND ( revoked_at IS NULL OR label <> %s ) ORDER BY id ASC LIMIT %d", $email, '', self::PER_PAGE ) );
 
+		$complete = true;
 		foreach ( $ids as $id ) {
 			$grant = Grants::get( (int) $id );
 			if ( null === $grant ) {
@@ -350,20 +373,29 @@ final class Privacy {
 				$suffix = ' ' . $grant['label'];
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
 				$wpdb->query( $wpdb->prepare( "UPDATE {$logs} SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND RIGHT( summary, CHAR_LENGTH( %s ) ) = %s", $suffix, ' [removed]', $grant['id'], $suffix, $suffix ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+				$left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND summary LIKE %s", $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%' ) );
+				if ( $left > 0 ) {
+					$complete = false;
+				}
+			} elseif ( '' !== $grant['label'] ) {
+				$complete = false;
 			}
 		}
+		return $complete;
 	}
 
 	/**
-	 * SQL condition for log rows that belong to the support agent: no user,
-	 * a user that is gone, or a temporary user. It keeps out rows of the
-	 * administrators who created or ended the grant.
+	 * SQL condition for log rows that belong to the support agent: every event
+	 * that the site owner's own actions did not write.
 	 *
-	 * @return string Condition on the user_id column. No placeholders.
+	 * @return string Condition on the event_type column, already prepared.
 	 */
 	private static function agent_rows_sql() {
 		global $wpdb;
-		return "( COALESCE( user_id, 0 ) = 0 OR user_id NOT IN ( SELECT ID FROM {$wpdb->users} ) OR user_id IN ( SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = 'happyaccess_temp_user' ) )";
+		$placeholders = implode( ', ', array_fill( 0, count( self::ADMIN_EVENTS ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- One placeholder per event, built from a constant.
+		return $wpdb->prepare( "event_type NOT IN ( {$placeholders} )", self::ADMIN_EVENTS );
 	}
 
 	/**
