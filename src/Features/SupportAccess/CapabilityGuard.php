@@ -196,6 +196,13 @@ final class CapabilityGuard {
 	private static $open_roles_logged = false;
 
 	/**
+	 * Per request cache of the stored row name an option name resolves to.
+	 *
+	 * @var array
+	 */
+	private static $stored_names = array();
+
+	/**
 	 * Hooks everything the guard needs.
 	 *
 	 * @return void
@@ -286,7 +293,8 @@ final class CapabilityGuard {
 	 * @return void
 	 */
 	public static function flush_cache() {
-		self::$rules = array();
+		self::$rules        = array();
+		self::$stored_names = array();
 	}
 
 	/**
@@ -505,7 +513,7 @@ final class CapabilityGuard {
 					array_filter(
 						$options,
 						static function ( $option ) use ( $level ) {
-							return ! self::is_guarded_option( $option, $level );
+							return self::is_ascii_name( $option ) && ! self::is_guarded_name( $option, $level );
 						}
 					)
 				);
@@ -536,10 +544,13 @@ final class CapabilityGuard {
 		}
 		$level = self::level_for( $user_id );
 		if ( 'protected' !== $level ) {
-			if ( self::is_roles_option( $option ) ) {
+			if ( self::is_guarded_option( $option, $level ) ) {
+				return $old_value;
+			}
+			if ( self::is_roles_option( $option ) || self::is_roles_option( self::stored_option_name( $option ) ) ) {
 				self::log_open_role_change( $user_id, $value, $old_value );
 			}
-			return self::is_guarded_option( $option, $level ) ? $old_value : $value;
+			return $value;
 		}
 		if ( self::plugin_work_active() && self::is_roles_option( $option ) ) {
 			if ( ! self::$roles_logged && $value !== $old_value ) {
@@ -610,7 +621,6 @@ final class CapabilityGuard {
 	 * @return mixed
 	 */
 	public static function keep_old_site_option( $value, $old_value = null, $option = '', $network_id = 0 ) {
-		unset( $network_id );
 		$user_id = get_current_user_id();
 		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
@@ -618,7 +628,7 @@ final class CapabilityGuard {
 		if ( self::NETWORK_PLUGINS_OPTION === $option ) {
 			return self::keep_network_plugin_active( $value, $old_value );
 		}
-		return self::is_guarded_option( $option, self::level_for( $user_id ), true ) ? $old_value : $value;
+		return self::is_guarded_option( $option, self::level_for( $user_id ), true, $network_id ) ? $old_value : $value;
 	}
 
 	/**
@@ -630,12 +640,11 @@ final class CapabilityGuard {
 	 * @return void
 	 */
 	public static function block_site_option_delete( $option, $network_id = 0 ) {
-		unset( $network_id );
 		$user_id = get_current_user_id();
 		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
 		}
-		if ( self::NETWORK_PLUGINS_OPTION !== $option && ! self::is_guarded_option( $option, self::level_for( $user_id ), true ) ) {
+		if ( self::NETWORK_PLUGINS_OPTION !== $option && ! self::is_guarded_option( $option, self::level_for( $user_id ), true, $network_id ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -684,35 +693,87 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Whether a temp user's write or delete of this option name must be
-	 * refused. The options tables ignore case and accents, so the name is
-	 * folded first: a protected name is refused in any spelling, and a
-	 * spelling of a plugin list other than the real name is refused too.
+	 * Whether a temp user's write or delete of this option must be refused.
+	 * The options tables compare names loosely (case, accents, full width,
+	 * ignorable characters, trailing spaces), so two layers decide: a name
+	 * that isn't printable ASCII is refused, and an ASCII name is checked
+	 * both as given and as the stored row it would hit.
 	 *
-	 * @param mixed  $option  Option name.
+	 * @param mixed  $option     Option name.
+	 * @param string $level      Access level of the grant.
+	 * @param bool   $network    Whether this is a network option.
+	 * @param int    $network_id Network id, for network options.
+	 * @return bool
+	 */
+	private static function is_guarded_option( $option, $level, $network = false, $network_id = 0 ) {
+		if ( ! self::is_ascii_name( $option ) ) {
+			return true;
+		}
+		if ( self::is_guarded_name( $option, $level, $network ) ) {
+			return true;
+		}
+		$stored = self::stored_option_name( $option, $network, $network_id );
+		if ( '' === $stored || $stored === $option ) {
+			return false;
+		}
+		return self::is_guarded_name( $stored, $level, $network )
+			|| in_array( strtolower( $stored ), array( 'active_plugins', self::NETWORK_PLUGINS_OPTION ), true );
+	}
+
+	/**
+	 * Whether an option name, compared in lowercase, is protected on this
+	 * level, or is another spelling of a plugin list.
+	 *
+	 * @param string $option  Option name.
 	 * @param string $level   Access level of the grant.
 	 * @param bool   $network Whether this is a network option.
 	 * @return bool
 	 */
-	private static function is_guarded_option( $option, $level, $network = false ) {
-		if ( ! is_string( $option ) || '' === $option ) {
-			return false;
-		}
-		$folded = self::fold_option_name( $option );
-		if ( $network ? self::is_protected_site_option( $folded, $level ) : self::is_protected_option( $folded, $level ) ) {
+	private static function is_guarded_name( $option, $level, $network = false ) {
+		$lower = strtolower( $option );
+		if ( $network ? self::is_protected_site_option( $lower, $level ) : self::is_protected_option( $lower, $level ) ) {
 			return true;
 		}
-		return $folded !== $option && in_array( $folded, array( 'active_plugins', self::NETWORK_PLUGINS_OPTION ), true );
+		return $lower !== $option && in_array( $lower, array( 'active_plugins', self::NETWORK_PLUGINS_OPTION ), true );
 	}
 
 	/**
-	 * Option name the way the options tables compare it: lowercase, no accents.
+	 * Whether an option name is all printable ASCII, with no spaces.
 	 *
-	 * @param string $option Option name.
+	 * @param mixed $option Option name.
+	 * @return bool
+	 */
+	private static function is_ascii_name( $option ) {
+		return is_string( $option ) && 1 === preg_match( '/^[\x21-\x7E]+\z/', $option );
+	}
+
+	/**
+	 * Name of the stored row an option name resolves to under the table's
+	 * collation, or an empty string when there is none. Cached per request.
+	 *
+	 * @param string $option     Option name.
+	 * @param bool   $network    Whether this is a network option.
+	 * @param int    $network_id Network id, for network options.
 	 * @return string
 	 */
-	private static function fold_option_name( $option ) {
-		return strtolower( remove_accents( $option ) );
+	private static function stored_option_name( $option, $network = false, $network_id = 0 ) {
+		global $wpdb;
+		$sitemeta = $network && is_multisite();
+		if ( $sitemeta ) {
+			$network_id = (int) $network_id > 0 ? (int) $network_id : (int) get_current_network_id();
+		}
+		$key = ( $sitemeta ? 'network:' . $network_id : 'blog:' . get_current_blog_id() ) . ':' . $option;
+		if ( ! array_key_exists( $key, self::$stored_names ) ) {
+			if ( $sitemeta ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Must see the row the table itself matches; cached per request above.
+				$name = $wpdb->get_var( $wpdb->prepare( "SELECT meta_key FROM {$wpdb->sitemeta} WHERE meta_key = %s AND site_id = %d LIMIT 1", $option, $network_id ) );
+			} else {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Must see the row the table itself matches; cached per request above.
+				$name = $wpdb->get_var( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $option ) );
+			}
+			self::$stored_names[ $key ] = is_string( $name ) ? $name : '';
+		}
+		return self::$stored_names[ $key ];
 	}
 
 	/**
@@ -799,15 +860,15 @@ final class CapabilityGuard {
 	 */
 	private static function is_roles_option( $option ) {
 		global $wpdb;
-		return is_string( $option ) && self::fold_option_name( $wpdb->prefix . 'user_roles' ) === self::fold_option_name( $option );
+		return is_string( $option ) && strtolower( $wpdb->prefix . 'user_roles' ) === strtolower( $option );
 	}
 
 	/**
 	 * Whether an option is off limits to temp users. Custom and full passes
 	 * are kept only from HappyAccess's own options. Call it through
-	 * is_guarded_option(), which folds the name first.
+	 * is_guarded_option(), which lowercases the name first.
 	 *
-	 * @param mixed  $option Folded option name.
+	 * @param mixed  $option Lowercased option name.
 	 * @param string $level  Access level of the grant.
 	 * @return bool
 	 */
@@ -826,9 +887,9 @@ final class CapabilityGuard {
 	/**
 	 * Whether a network option is off limits to temp users. Custom and full
 	 * passes are kept only from HappyAccess's own network options. Call it
-	 * through is_guarded_option(), which folds the name first.
+	 * through is_guarded_option(), which lowercases the name first.
 	 *
-	 * @param mixed  $option Folded option name.
+	 * @param mixed  $option Lowercased option name.
 	 * @param string $level  Access level of the grant.
 	 * @return bool
 	 */

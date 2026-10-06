@@ -18,6 +18,7 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 
 	private $owner;
 	private $other_admin;
+	private $die_code = 0;
 
 	public function set_up() {
 		parent::set_up();
@@ -25,6 +26,7 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		Capabilities::register();
 		CapabilityGuard::register();
 		AccountGuard::register();
+		add_filter( 'wp_die_handler', array( $this, 'capture_die_handler' ), 20 );
 		$this->owner       = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$this->other_admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $this->owner );
@@ -335,6 +337,49 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
 		$old = array( HAPPYACCESS_PLUGIN_BASENAME => 1 );
 		$this->assertSame( $old, CapabilityGuard::keep_old_site_option( array(), $old, 'Active_Sitewide_Plugins', 1 ) );
+	}
+
+	public function test_full_cannot_reach_options_through_names_the_table_folds() {
+		$secret = get_option( 'happyaccess_secret' );
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
+		$this->full();
+
+		$names = array(
+			"\u{FF41}\u{FF43}\u{FF54}\u{FF49}\u{FF56}\u{FF45}_plugins",
+			"happyacce\u{00DF}_secret",
+			'happyaccess_secret ',
+			"happy\u{200B}access_secret",
+		);
+		foreach ( $names as $name ) {
+			update_option( $name, array() );
+		}
+		wp_cache_delete( 'happyaccess_secret', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+
+		$this->assertSame( $secret, get_option( 'happyaccess_secret' ) );
+		$this->assertSame( array( HAPPYACCESS_PLUGIN_BASENAME ), get_option( 'active_plugins' ) );
+		foreach ( $names as $name ) {
+			$this->assertSame( 'old', CapabilityGuard::keep_old_option( 'new', $name, 'old' ), $name );
+		}
+	}
+
+	public function test_full_cannot_delete_a_full_width_look_alike() {
+		$this->full();
+		try {
+			CapabilityGuard::block_option_delete( "\u{FF41}\u{FF43}\u{FF54}\u{FF49}\u{FF56}\u{FF45}_plugins" );
+			$this->fail( 'Expected wp_die.' );
+		} catch ( WPDieException $e ) {
+			$this->assertSame( 403, $this->die_code );
+		}
+	}
+
+	public function capture_die_handler() {
+		return array( $this, 'record_die' );
+	}
+
+	public function record_die( $message, $title = '', $args = array() ) {
+		$this->die_code = isset( $args['response'] ) ? (int) $args['response'] : 0;
+		throw new WPDieException( is_string( $message ) ? esc_html( $message ) : '' );
 	}
 
 	public function test_full_writes_other_mixed_case_options() {
