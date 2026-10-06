@@ -158,6 +158,16 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertSame( 0, Grants::retry_orphans() );
 	}
 
+	public function test_failed_delete_leaves_the_user_with_no_role() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		$this->assertNotSame( array(), get_userdata( $user_id )->roles );
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+
+		$this->assertTrue( Grants::revoke( $id ) );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+	}
+
 	public function test_retry_orphans_counts_deleted_users() {
 		list( $id, $user_id ) = $this->grant_with_user();
 		delete_user_meta( $user_id, 'happyaccess_temp_user' );

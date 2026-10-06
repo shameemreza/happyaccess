@@ -199,4 +199,42 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertFalse( TempUsers::delete( $grant ) );
 		$this->assertSame( '0', (string) $wpdb->get_var( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = 7' ) );
 	}
+
+	private function ensure_api_keys_table() {
+		global $wpdb;
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_api_keys ( key_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, description VARCHAR(200) NULL )" );
+	}
+
+	public function test_delete_wc_api_keys_returns_zero_without_the_woocommerce_table() {
+		global $wpdb;
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}woocommerce_api_keys" );
+		$this->assertSame( 0, TempUsers::delete_wc_api_keys( 123 ) );
+	}
+
+	public function test_delete_removes_the_temp_users_wc_api_keys_and_keeps_other_keys() {
+		global $wpdb;
+		$this->ensure_api_keys_table();
+		$grant            = $this->grant();
+		$user_id          = TempUsers::create( $grant );
+		$grant['user_id'] = $user_id;
+		$table            = $wpdb->prefix . 'woocommerce_api_keys';
+		$wpdb->insert( $table, array( 'user_id' => $user_id, 'description' => 'temp' ) );
+		$wpdb->insert( $table, array( 'user_id' => $user_id, 'description' => 'temp two' ) );
+		$wpdb->insert( $table, array( 'user_id' => $this->owner, 'description' => 'owner' ) );
+
+		$this->assertSame( 2, TempUsers::delete_wc_api_keys( $user_id ) );
+		$wpdb->insert( $table, array( 'user_id' => $user_id, 'description' => 'late' ) );
+
+		$this->assertTrue( TempUsers::delete( $grant ) );
+		$this->assertSame( 0, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE user_id = %d", $user_id ) ) );
+		$this->assertSame( 1, (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE user_id = %d", $this->owner ) ) );
+	}
+
+	public function test_any_exist_sees_a_marked_user() {
+		$this->assertFalse( TempUsers::any_exist() );
+		$user_id = TempUsers::create( $this->grant() );
+		$this->assertTrue( TempUsers::any_exist() );
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		$this->assertFalse( TempUsers::any_exist() );
+	}
 }

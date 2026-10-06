@@ -22,15 +22,16 @@ final class Feature {
 	/**
 	 * Registers the guards and, when the feature is on, the login entry points.
 	 *
-	 * The guards keep running while any grant exists, even after the feature
-	 * is switched off, so a live temp user never loses its limits.
+	 * The guards keep running while any grant or temp user exists, even after
+	 * the feature is switched off, so a live or leftover temp user never loses
+	 * its limits.
 	 *
 	 * @return void
 	 */
 	public static function register() {
 		$enabled = Features::is_enabled( 'support_access' );
 
-		if ( ! $enabled && ! Grants::has_current() ) {
+		if ( ! $enabled && ! Grants::has_current() && ! TempUsers::any_exist() ) {
 			return;
 		}
 

@@ -475,6 +475,10 @@ final class Grants {
 			return false;
 		}
 
+		if ( $grant['user_id'] > 0 && TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) {
+			// If the delete below fails, the account stays but can do nothing.
+			( new \WP_User( $grant['user_id'] ) )->set_role( '' );
+		}
 		TempUsers::destroy_sessions( $grant['user_id'] );
 		$deleted = TempUsers::delete( $grant );
 		self::flush_cache();

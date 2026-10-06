@@ -160,6 +160,7 @@ final class TempUsers {
 		}
 
 		self::destroy_sessions( $user_id );
+		self::delete_wc_api_keys( $user_id );
 
 		$owner_id = Grants::owner_id( $grant );
 		$reassign = $owner_id > 0 ? $owner_id : null;
@@ -225,6 +226,60 @@ final class TempUsers {
 		if ( $user_id > 0 ) {
 			\WP_Session_Tokens::get_instance( $user_id )->destroy_all();
 		}
+	}
+
+	/**
+	 * Deletes the WooCommerce REST API keys of a user. Does nothing when
+	 * WooCommerce is not installed.
+	 *
+	 * @param int $user_id User id.
+	 * @return int How many keys were deleted.
+	 */
+	public static function delete_wc_api_keys( $user_id ) {
+		global $wpdb;
+		$user_id = (int) $user_id;
+		$table   = $wpdb->prefix . 'woocommerce_api_keys';
+		if ( $user_id < 1 ) {
+			return 0;
+		}
+
+		// SHOW TABLES does not list temporary tables, so probe the table with a query that reads no rows.
+		$suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table probe, name from the prefix.
+		$probe = $wpdb->query( "SELECT 1 FROM {$table} LIMIT 0" );
+		$wpdb->suppress_errors( $suppress );
+		if ( false === $probe ) {
+			return 0;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WooCommerce table.
+		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE user_id = %d", $user_id ) );
+		return is_int( $deleted ) ? $deleted : 0;
+	}
+
+	/**
+	 * Whether any temp user is left on this install.
+	 *
+	 * @return bool
+	 */
+	public static function any_exist() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Indexed lookup, one row.
+		$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = %s LIMIT 1", 'happyaccess_temp_user' ) );
+		return null !== $found;
+	}
+
+	/**
+	 * Whether a user carries the grant's id as its temp user link, whether or
+	 * not the temp marker is still there.
+	 *
+	 * @param int   $user_id User id.
+	 * @param array $grant   Grant with id.
+	 * @return bool
+	 */
+	public static function owned_by_grant( $user_id, array $grant ) {
+		return (int) get_user_meta( (int) $user_id, 'happyaccess_token_id', true ) === (int) $grant['id']
+			&& false !== get_userdata( (int) $user_id );
 	}
 
 	/**

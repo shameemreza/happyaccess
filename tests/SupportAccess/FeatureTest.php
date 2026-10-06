@@ -44,6 +44,17 @@ class FeatureTest extends WP_UnitTestCase {
 		$this->assertNull( Router::resolve( 'code' ) );
 	}
 
+	public function test_disabled_with_a_leftover_temp_user_and_no_grant_keeps_the_guards() {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		$this->assertFalse( Grants::has_current() );
+		Features::set( 'support_access', false );
+		remove_all_filters( 'wp_is_application_passwords_available_for_user' );
+		Feature::register();
+		$this->assertNotFalse( has_filter( 'wp_is_application_passwords_available_for_user' ) );
+		$this->assertNull( Router::resolve( 'code' ) );
+	}
+
 	public function test_on_disable_revokes_all() {
 		Grants::create( array( 'label' => 'a' ) );
 		Feature::on_disable();
