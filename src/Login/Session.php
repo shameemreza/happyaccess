@@ -174,7 +174,9 @@ final class Session {
 	}
 
 	/**
-	 * Limits the auth cookie to the time left on the grant.
+	 * Sets the auth cookie length of a temp user to the time left on the
+	 * grant, even when that is longer than the default. enforce() still checks
+	 * the grant on every request. Other users keep the length they asked for.
 	 *
 	 * @param int  $length   Cookie length in seconds.
 	 * @param int  $user_id  User id.
@@ -190,7 +192,7 @@ final class Session {
 		if ( 'active' !== $grant['state'] ) {
 			return 1;
 		}
-		return max( 1, min( (int) $length, (int) $grant['expires_at'] - Clock::now() ) );
+		return max( 1, (int) $grant['expires_at'] - Clock::now() );
 	}
 
 	/**

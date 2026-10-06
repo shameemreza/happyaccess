@@ -75,7 +75,43 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertNull( Grants::find_by_link( $made['link_key'] ) );
 		$this->assertSame( $made['id'], Grants::find_by_code( $new['code'] )['id'] );
 		$this->assertSame( $made['id'], Grants::find_by_link( $new['link_key'] )['id'] );
-		$this->assertSame( 1, Grants::get( $made['id'] )['use_count'] );
+		$this->assertSame( 0, Grants::get( $made['id'] )['use_count'] );
+	}
+
+	public function test_regenerate_reopens_a_used_one_time_grant_and_destroys_sessions() {
+		list( $id, $user_id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$this->assertSame( 'used', Grants::get( $id )['status'] );
+		$this->assertFalse( Grants::record_login( $id ) );
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $user_id )->get_all() );
+
+		$new = Grants::regenerate( $id );
+		$this->assertNotNull( $new );
+		$this->assertSame( 0, Grants::get( $id )['use_count'] );
+		$this->assertSame( 'active', Grants::get( $id )['status'] );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		$this->assertSame( $id, Grants::find_by_code( $new['code'] )['id'] );
+		$this->assertTrue( Grants::record_login( $id ) );
+	}
+
+	public function test_regenerate_works_for_a_grant_without_a_temp_user() {
+		$made = Grants::create( array( 'label' => 'Fresh', 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $made['id'] ) );
+		$this->assertNotNull( Grants::regenerate( $made['id'] ) );
+		$this->assertTrue( Grants::record_login( $made['id'] ) );
+	}
+
+	public function test_extend_and_resume_keep_working_on_a_used_grant() {
+		list( $id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$this->assertSame( 'used', Grants::get( $id )['status'] );
+		$this->assertTrue( Grants::extend( $id, HOUR_IN_SECONDS ) );
+		$this->assertSame( 'used', Grants::get( $id )['status'] );
+		Session::set_resolver( array( Grants::class, 'resolve_user' ) );
+		$this->assertNull( Session::end_reason( Grants::get( $id )['user_id'] ) );
+		$this->assertTrue( Grants::suspend( $id ) );
+		$this->assertTrue( Grants::resume( $id ) );
+		$this->assertSame( 'used', Grants::get( $id )['status'] );
 	}
 
 	public function test_regenerate_returns_null_for_a_revoked_grant() {

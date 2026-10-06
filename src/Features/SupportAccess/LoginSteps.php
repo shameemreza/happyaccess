@@ -253,7 +253,7 @@ final class LoginSteps {
 			return self::setup_failed( $grant, $reason );
 		}
 
-		wp_set_auth_cookie( $user_id, false );
+		wp_set_auth_cookie( $user_id, true );
 		wp_set_current_user( $user_id );
 
 		$action = 'link' === $method ? self::LINK_ACTION : self::CODE_ACTION;

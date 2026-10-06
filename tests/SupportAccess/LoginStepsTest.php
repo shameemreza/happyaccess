@@ -65,6 +65,24 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 1, Grants::get( $made['id'] )['login_count'] );
 	}
 
+	public function test_login_sets_a_remembered_auth_cookie() {
+		$seen = array();
+		$spy  = function ( $length, $user_id, $remember ) use ( &$seen ) {
+			$seen[] = $remember;
+			return $length;
+		};
+		add_filter( 'auth_cookie_expiration', $spy, 100, 3 );
+
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+		$res = $this->post_code( $made['code'] );
+		remove_filter( 'auth_cookie_expiration', $spy, 100 );
+
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertNotEmpty( $seen );
+		$this->assertSame( array( true ), array_values( array_unique( $seen ) ) );
+	}
+
 	public function test_wrong_code_shows_one_generic_error() {
 		$made = Grants::create( array( 'label' => 'Acme' ) );
 		wp_set_current_user( 0 );

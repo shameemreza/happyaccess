@@ -423,11 +423,13 @@ final class Grants {
 		$link_hash                = Codes::hash_key( $link_key );
 		$table                    = Installer::table( 'tokens' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET code_hash = %s, link_hash = %s, token_hash = %s WHERE id = %d AND revoked_at IS NULL", $code_hash, $link_hash, $link_hash, $grant['id'] ) );
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET code_hash = %s, link_hash = %s, token_hash = %s, use_count = 0 WHERE id = %d AND revoked_at IS NULL", $code_hash, $link_hash, $link_hash, $grant['id'] ) );
 		self::flush_cache();
 		if ( 1 !== $changed ) {
 			return null;
 		}
+
+		TempUsers::destroy_sessions( $grant['user_id'] );
 
 		/* translators: %s: label of the support grant. */
 		self::log( 'grant_regenerated', $grant, sprintf( __( 'Support access code and link replaced for %s', 'happyaccess' ), $grant['label'] ) );

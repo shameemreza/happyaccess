@@ -47,7 +47,21 @@ class SessionTest extends WP_UnitTestCase {
 		$this->resolve_to( 'active', 1790000000 + 3600 );
 		$this->assertNull( Session::end_reason( $this->temp ) );
 		$this->assertSame( 3600, Session::cap_cookie( 1209600, $this->temp, true ) );
-		$this->assertSame( 600, Session::cap_cookie( 600, $this->temp, false ) );
+		$this->assertSame( 3600, Session::cap_cookie( 600, $this->temp, false ) );
+	}
+
+	public function test_cookie_lasts_as_long_as_the_grant_even_when_longer_than_the_default() {
+		$this->resolve_to( 'active', 1790000000 + 7 * DAY_IN_SECONDS );
+		$this->assertEqualsWithDelta( 7 * DAY_IN_SECONDS, Session::cap_cookie( 172800, $this->temp, true ), 2 );
+	}
+
+	public function test_cookie_length_is_never_below_one_second() {
+		$this->resolve_to( 'active', 1790000000 );
+		$this->assertSame( 1, Session::cap_cookie( 172800, $this->temp, true ) );
+		$this->resolve_to( 'active', 1790000000 - 500 );
+		$this->assertSame( 1, Session::cap_cookie( 172800, $this->temp, true ) );
+		$this->resolve_to( 'suspended', 1790000000 + 3600 );
+		$this->assertSame( 1, Session::cap_cookie( 172800, $this->temp, true ) );
 	}
 
 	public function test_expired_revoked_suspended_end_the_session() {
