@@ -12,6 +12,8 @@
  * @var string[] $changed    What changed, for the changed variant.
  * @var string   $time       Time in the site timezone.
  * @var string   $users_url  Address of the Users screen.
+ * @var bool     $more       Whether this is the last email before the cap.
+ * @var string   $log_url    Address of the activity log.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -57,4 +59,7 @@ printf(
 </tr>
 </table>
 <p style="margin:0 0 16px;"><a href="<?php echo esc_url( $users_url ); ?>"><?php esc_html_e( 'Review the users on your site', 'happyaccess' ); ?></a></p>
+<?php if ( ! empty( $more ) ) : ?>
+<p style="margin:0 0 16px;"><?php esc_html_e( 'More changes like this may follow. See the activity log for the full list.', 'happyaccess' ); ?> <a href="<?php echo esc_url( $log_url ); ?>"><?php esc_html_e( 'Open the activity log', 'happyaccess' ); ?></a></p>
+<?php endif; ?>
 <p style="margin:0;color:#646970;"><?php esc_html_e( 'Full and custom support access can do this by design. If you did not expect it, revoke the access from the HappyAccess screen.', 'happyaccess' ); ?></p>

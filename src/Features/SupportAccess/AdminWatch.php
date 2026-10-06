@@ -34,6 +34,7 @@ final class AdminWatch {
 	public static function register() {
 		add_action( 'user_register', array( __CLASS__, 'check' ), 20, 2 );
 		add_action( 'set_user_role', array( __CLASS__, 'check' ), 20, 3 );
+		add_action( 'add_user_role', array( __CLASS__, 'check_added_role' ), 20, 2 );
 		add_action( 'profile_update', array( __CLASS__, 'check_changed' ), 20, 2 );
 	}
 
@@ -70,6 +71,20 @@ final class AdminWatch {
 			)
 		);
 		Notifications::admin_created( $grant, $user );
+	}
+
+	/**
+	 * Flags a user who was given the administrator role as an extra role.
+	 *
+	 * @param int    $user_id Id of the user.
+	 * @param string $role    Role added.
+	 * @return void
+	 */
+	public static function check_added_role( $user_id, $role = '' ) {
+		if ( 'administrator' !== $role ) {
+			return;
+		}
+		self::check( $user_id );
 	}
 
 	/**
@@ -122,7 +137,7 @@ final class AdminWatch {
 				),
 			)
 		);
-		Notifications::admin_changed( $grant, $user, $fields );
+		Notifications::admin_changed( $grant, $user, $fields, (string) $old_user_data->user_email );
 	}
 
 	/**

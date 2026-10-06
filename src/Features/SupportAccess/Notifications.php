@@ -26,6 +26,14 @@ final class Notifications {
 	const LOCK_TRANSIENT = 'happyaccess_site_lock_alerted';
 
 	/**
+	 * Prefix of the per-grant counter for administrator alerts, the most
+	 * emails per grant in one window, and the window in seconds.
+	 */
+	const ALERT_TRANSIENT = 'happyaccess_admin_alerts_';
+	const ALERT_LIMIT     = 5;
+	const ALERT_WINDOW    = HOUR_IN_SECONDS;
+
+	/**
 	 * Hooks the grant lifecycle.
 	 *
 	 * @return void
@@ -182,30 +190,57 @@ final class Notifications {
 
 	/**
 	 * Tells the owner that a support pass changed an administrator's login details.
+	 * When the changed account is the owner's own, the alert goes to the
+	 * address from before the change, because the new one may not be theirs.
 	 *
-	 * @param array    $grant  Grant of the acting pass.
-	 * @param \WP_User $user   The administrator account.
-	 * @param string[] $fields What changed: email, password or both.
+	 * @param array    $grant     Grant of the acting pass.
+	 * @param \WP_User $user      The administrator account.
+	 * @param string[] $fields    What changed: email, password or both.
+	 * @param string   $old_email Address of the account before the change.
 	 * @return bool Whether the email was accepted.
 	 */
-	public static function admin_changed( array $grant, \WP_User $user, array $fields ) {
-		return self::admin_alert( 'changed', $grant, $user, $fields );
+	public static function admin_changed( array $grant, \WP_User $user, array $fields, $old_email = '' ) {
+		$to = '';
+		if ( Grants::owner_id( $grant ) === (int) $user->ID && is_email( $old_email ) ) {
+			$to = (string) $old_email;
+		}
+		return self::admin_alert( 'changed', $grant, $user, $fields, $to );
 	}
 
 	/**
-	 * Sends the administrator alert, for both variants.
+	 * Sends the administrator alert, for both variants. At most ALERT_LIMIT
+	 * emails go out per grant in each ALERT_WINDOW. The last one says more
+	 * may follow. Every event is still logged by the caller.
 	 *
 	 * @param string   $variant created or changed.
 	 * @param array    $grant   Grant of the acting pass.
 	 * @param \WP_User $user    The administrator account.
 	 * @param string[] $fields  What changed, for the changed variant.
+	 * @param string   $to      Recipient override. Empty means the owner.
 	 * @return bool
 	 */
-	private static function admin_alert( $variant, array $grant, \WP_User $user, array $fields ) {
-		$to = self::owner_email( $grant );
+	private static function admin_alert( $variant, array $grant, \WP_User $user, array $fields, $to = '' ) {
+		if ( '' === $to ) {
+			$to = self::owner_email( $grant );
+		}
 		if ( '' === $to ) {
 			return false;
 		}
+
+		$key   = self::ALERT_TRANSIENT . (int) $grant['id'];
+		$state = get_transient( $key );
+		$now   = time();
+		if ( ! is_array( $state ) || empty( $state['until'] ) || (int) $state['until'] <= $now ) {
+			$state = array(
+				'count' => 0,
+				'until' => $now + self::ALERT_WINDOW,
+			);
+		}
+		if ( (int) $state['count'] >= self::ALERT_LIMIT ) {
+			return false;
+		}
+		++$state['count'];
+		set_transient( $key, $state, max( 1, (int) $state['until'] - $now ) );
 
 		$labels = array();
 		foreach ( $fields as $field ) {
@@ -226,6 +261,8 @@ final class Notifications {
 				'changed'    => $labels,
 				'time'       => self::format_time( Clock::now() ),
 				'users_url'  => admin_url( 'users.php' ),
+				'more'       => self::ALERT_LIMIT === (int) $state['count'],
+				'log_url'    => admin_url( 'users.php?page=happyaccess' ),
 			)
 		);
 	}
