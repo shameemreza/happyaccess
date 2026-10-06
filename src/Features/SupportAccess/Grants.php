@@ -8,6 +8,7 @@
 namespace HappyAccess\Features\SupportAccess;
 
 use HappyAccess\Core\AuditLog;
+use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
@@ -198,6 +199,37 @@ final class Grants {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $id ), ARRAY_A );
 		return is_array( $row ) ? self::normalize( $row ) : null;
+	}
+
+	/**
+	 * Who should get a grant's emails and the content of its temp user: the
+	 * creator, or the lowest-ID administrator when the creator is gone or is
+	 * a temp user themselves.
+	 *
+	 * @param array $grant Grant with created_by.
+	 * @return int User id, 0 when no administrator is left.
+	 */
+	public static function owner_id( array $grant ) {
+		$creator = isset( $grant['created_by'] ) ? (int) $grant['created_by'] : 0;
+		if ( $creator > 0 && false !== get_userdata( $creator ) && ! Capabilities::is_temp_user( $creator ) ) {
+			return $creator;
+		}
+
+		$admins = get_users(
+			array(
+				'role'    => 'administrator',
+				'orderby' => 'ID',
+				'order'   => 'ASC',
+				'number'  => 5,
+				'fields'  => 'ID',
+			)
+		);
+		foreach ( $admins as $admin_id ) {
+			if ( ! Capabilities::is_temp_user( (int) $admin_id ) ) {
+				return (int) $admin_id;
+			}
+		}
+		return 0;
 	}
 
 	/**

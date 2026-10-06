@@ -30,6 +30,8 @@ final class CapabilityGuard {
 		'edit_files',
 		'unfiltered_html',
 		'unfiltered_upload',
+		'erase_others_personal_data',
+		'export_others_personal_data',
 		'manage_network',
 		'manage_network_users',
 		'manage_network_plugins',

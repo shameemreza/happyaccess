@@ -6,8 +6,10 @@
  */
 
 use HappyAccess\Core\AuditLog;
+use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Privacy;
+use HappyAccess\Features\SupportAccess\CapabilityGuard;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
 
@@ -305,6 +307,39 @@ class PrivacyTest extends WP_UnitTestCase {
 			$this->assertSame( '203.0.113.9', $wpdb->get_var( $wpdb->prepare( "SELECT ip_address FROM {$logs} WHERE token_id = %d AND event_type = %s", $id, $event ) ), $event );
 		}
 		$this->assertSame( '0.0.0.0', $wpdb->get_var( $wpdb->prepare( "SELECT ip_address FROM {$logs} WHERE token_id = %d AND event_type = %s", $id, 'login_success' ) ) );
+	}
+
+	public function test_a_temp_user_has_neither_privacy_capability() {
+		Capabilities::register();
+		CapabilityGuard::register();
+		$temp = TempUsers::get_or_create( $this->grant_by_label( 'Acme' ) );
+		$this->assertTrue( user_can( $this->user, 'export_others_personal_data' ) );
+		$this->assertFalse( user_can( $temp, 'export_others_personal_data' ) );
+		$this->assertFalse( user_can( $temp, 'erase_others_personal_data' ) );
+	}
+
+	public function test_erase_as_a_temp_user_changes_nothing() {
+		global $wpdb;
+		$temp     = TempUsers::get_or_create( $this->grant_by_label( 'Acme' ) );
+		$logs     = Installer::table( 'logs' );
+		$tokens   = Installer::table( 'tokens' );
+		$logs_now = $wpdb->get_results( "SELECT * FROM {$logs} ORDER BY id", ARRAY_A );
+		$grants   = $wpdb->get_results( "SELECT * FROM {$tokens} ORDER BY id", ARRAY_A );
+		$this->assertNotEmpty( $logs_now );
+
+		wp_set_current_user( $temp );
+		$result = Privacy::erase( 'me@example.org', 1 );
+		$this->assertSame(
+			array(
+				'items_removed'  => false,
+				'items_retained' => false,
+				'messages'       => array(),
+				'done'           => true,
+			),
+			$result
+		);
+		$this->assertSame( $logs_now, $wpdb->get_results( "SELECT * FROM {$logs} ORDER BY id", ARRAY_A ) );
+		$this->assertSame( $grants, $wpdb->get_results( "SELECT * FROM {$tokens} ORDER BY id", ARRAY_A ) );
 	}
 
 	private function grant_by_label( $label ) {

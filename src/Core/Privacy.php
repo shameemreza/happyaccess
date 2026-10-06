@@ -279,7 +279,7 @@ final class Privacy {
 
 		unset( $page );
 		$email = trim( (string) $email );
-		if ( '' === $email ) {
+		if ( '' === $email || Capabilities::is_temp_user( get_current_user_id() ) ) {
 			return array(
 				'items_removed'  => false,
 				'items_retained' => false,

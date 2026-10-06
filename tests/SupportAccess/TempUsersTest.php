@@ -114,6 +114,41 @@ class TempUsersTest extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_delete_reassigns_to_the_fallback_admin_when_the_creator_is_0() {
+		$backup           = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$grant            = $this->grant();
+		$grant['created_by'] = 0;
+		$user_id          = TempUsers::create( $grant );
+		$grant['user_id'] = $user_id;
+		$post_id          = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		foreach ( get_users( array( 'role' => 'administrator', 'fields' => 'ID' ) ) as $id ) {
+			if ( (int) $id < $backup ) {
+				update_user_meta( (int) $id, 'happyaccess_temp_user', 1 );
+			}
+		}
+
+		$this->assertTrue( TempUsers::delete( $grant ) );
+		$this->assertSame( $backup, (int) get_post( $post_id )->post_author );
+	}
+
+	public function test_delete_does_not_reassign_to_the_user_being_deleted() {
+		$grant               = $this->grant();
+		$grant['created_by'] = 0;
+		$grant['role']       = 'administrator';
+		$user_id             = TempUsers::create( $grant );
+		$grant['user_id']    = $user_id;
+		$post_id             = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		foreach ( get_users( array( 'role' => 'administrator', 'fields' => 'ID' ) ) as $id ) {
+			if ( (int) $id !== $user_id ) {
+				update_user_meta( (int) $id, 'happyaccess_temp_user', 1 );
+			}
+		}
+
+		$this->assertTrue( TempUsers::delete( $grant ) );
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertSame( 'trash', get_post_status( $post_id ) );
+	}
+
 	public function test_delete_refuses_a_normal_user() {
 		$grant            = $this->grant();
 		$grant['user_id'] = $this->owner;

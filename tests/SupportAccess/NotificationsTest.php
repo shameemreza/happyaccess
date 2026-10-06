@@ -40,6 +40,26 @@ class NotificationsTest extends WP_UnitTestCase {
 		$this->assertCount( 0, $this->sent() );
 	}
 
+	public function test_login_alert_for_a_grant_without_a_creator_goes_to_an_admin() {
+		$grant = Grants::get( Grants::create( array( 'label' => 'Orphan', 'created_by' => 0 ) )['id'] );
+		Notifications::login( $grant, true );
+		$this->assertCount( 1, $this->sent() );
+		$owner = get_userdata( Grants::owner_id( $grant ) );
+		$this->assertTrue( in_array( 'administrator', $owner->roles, true ) );
+		$this->assertSame( $owner->user_email, $this->sent()[0]['to'][0][0] );
+	}
+
+	public function test_login_alert_falls_back_to_the_site_email_when_no_admin_is_left() {
+		foreach ( get_users( array( 'role' => 'administrator', 'fields' => 'ID' ) ) as $id ) {
+			update_user_meta( (int) $id, 'happyaccess_temp_user', 1 );
+		}
+		$grant = Grants::get( Grants::create( array( 'label' => 'Orphan', 'created_by' => 0 ) )['id'] );
+		$this->assertSame( 0, Grants::owner_id( $grant ) );
+		Notifications::login( $grant, true );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertSame( get_option( 'admin_email' ), $this->sent()[0]['to'][0][0] );
+	}
+
 	public function test_bundle_email_has_link_and_code_but_log_does_not() {
 		$made  = Grants::create( array( 'label' => 'Acme', 'email' => 'agent@example.org' ) );
 		$grant = Grants::get( $made['id'] );

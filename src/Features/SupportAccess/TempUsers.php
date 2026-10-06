@@ -161,10 +161,8 @@ final class TempUsers {
 
 		self::destroy_sessions( $user_id );
 
-		$reassign = null;
-		if ( ! empty( $grant['created_by'] ) && false !== get_userdata( (int) $grant['created_by'] ) ) {
-			$reassign = (int) $grant['created_by'];
-		}
+		$owner_id = Grants::owner_id( $grant );
+		$reassign = $owner_id > 0 ? $owner_id : null;
 
 		$login   = $user->user_login;
 		$deleted = self::remove_user( $user_id, $reassign );

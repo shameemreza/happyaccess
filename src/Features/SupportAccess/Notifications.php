@@ -215,14 +215,20 @@ final class Notifications {
 	}
 
 	/**
-	 * Email address of the user who granted access.
+	 * Email address that gets the alerts for a grant: its owner, or the site
+	 * email when there is no owner with a valid address.
 	 *
 	 * @param array $grant Grant.
-	 * @return string Empty when the user is gone or has no address.
+	 * @return string
 	 */
 	private static function owner_email( array $grant ) {
-		$user = ! empty( $grant['created_by'] ) ? get_userdata( (int) $grant['created_by'] ) : false;
-		return $user && is_email( $user->user_email ) ? $user->user_email : '';
+		$owner = Grants::owner_id( $grant );
+		$user  = $owner > 0 ? get_userdata( $owner ) : false;
+		if ( $user && is_email( $user->user_email ) ) {
+			return $user->user_email;
+		}
+		$site_email = (string) get_option( 'admin_email' );
+		return is_email( $site_email ) ? $site_email : '';
 	}
 
 	/**
