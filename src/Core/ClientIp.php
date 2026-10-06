@@ -29,20 +29,66 @@ final class ClientIp {
 	/**
 	 * IP from a server array.
 	 *
+	 * Expects a WP-slashed array like $_SERVER. With no proxy header configured
+	 * the result is REMOTE_ADDR. When the owner picked a header, the list is
+	 * read from the right: the nearest public hop wins, because the client
+	 * controls the left side of X-Forwarded-For and can put anything there.
+	 * If no entry is public, the rightmost valid IP is used. If none is valid,
+	 * REMOTE_ADDR is used. Sites behind Cloudflare should pick CF-Connecting-IP,
+	 * which holds a single value set by Cloudflare.
+	 *
 	 * @param array $server Usually $_SERVER.
 	 * @return string
 	 */
 	public static function from_server( array $server ) {
 		$header = (string) Settings::get( 'security.proxy_header', '' );
 		if ( '' !== $header && ! empty( $server[ $header ] ) && is_string( $server[ $header ] ) ) {
-			$parts = explode( ',', wp_unslash( $server[ $header ] ) );
-			$first = trim( $parts[0] );
-			if ( self::valid( $first ) ) {
-				return $first;
+			$picked = self::pick_from_list( wp_unslash( $server[ $header ] ) );
+			if ( '' !== $picked ) {
+				return $picked;
 			}
 		}
 		$remote = isset( $server['REMOTE_ADDR'] ) && is_string( $server['REMOTE_ADDR'] ) ? trim( wp_unslash( $server['REMOTE_ADDR'] ) ) : '';
-		return self::valid( $remote ) ? $remote : '0.0.0.0';
+		return self::valid( $remote ) ? self::normalize( $remote ) : '0.0.0.0';
+	}
+
+	/**
+	 * Nearest public IP in a comma separated list, walking from the right.
+	 *
+	 * @param string $header_value Header value.
+	 * @return string Empty string when the list has no valid IP.
+	 */
+	private static function pick_from_list( $header_value ) {
+		$valid = array();
+		foreach ( explode( ',', $header_value ) as $entry ) {
+			$entry = trim( $entry );
+			if ( self::valid( $entry ) ) {
+				$valid[] = self::normalize( $entry );
+			}
+		}
+		if ( empty( $valid ) ) {
+			return '';
+		}
+		foreach ( array_reverse( $valid ) as $ip ) {
+			if ( false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE ) ) {
+				return $ip;
+			}
+		}
+		return end( $valid );
+	}
+
+	/**
+	 * Converts an IPv4-mapped IPv6 address to dotted IPv4.
+	 *
+	 * @param string $ip Valid IP address.
+	 * @return string
+	 */
+	private static function normalize( $ip ) {
+		$binary = inet_pton( $ip );
+		if ( false !== $binary && 16 === strlen( $binary ) && str_repeat( "\0", 10 ) . "\xff\xff" === substr( $binary, 0, 12 ) ) {
+			return inet_ntop( substr( $binary, 12 ) );
+		}
+		return $ip;
 	}
 
 	/**

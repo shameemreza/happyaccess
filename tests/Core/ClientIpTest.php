@@ -43,6 +43,39 @@ class ClientIpTest extends WP_UnitTestCase {
 		$this->assertSame( '10.0.0.1', ClientIp::from_server( $server ) );
 	}
 
+	public function test_spoofed_leftmost_entry_is_ignored() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array(
+			'REMOTE_ADDR'          => '10.0.0.1',
+			'HTTP_X_FORWARDED_FOR' => '1.2.3.4, 198.51.100.7, 10.0.0.2',
+		);
+		$this->assertSame( '198.51.100.7', ClientIp::from_server( $server ) );
+	}
+
+	public function test_all_private_list_returns_rightmost() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_X_FORWARDED_FOR' ) ) );
+		$server = array(
+			'REMOTE_ADDR'          => '203.0.113.9',
+			'HTTP_X_FORWARDED_FOR' => '10.0.0.5, 10.0.0.6',
+		);
+		$this->assertSame( '10.0.0.6', ClientIp::from_server( $server ) );
+	}
+
+	public function test_ipv4_mapped_ipv6_is_normalized() {
+		$this->assertSame( '203.0.113.9', ClientIp::from_server( array( 'REMOTE_ADDR' => '::ffff:203.0.113.9' ) ) );
+		$this->assertSame(
+			'203.0.113.9',
+			ClientIp::bucket( ClientIp::from_server( array( 'REMOTE_ADDR' => '::ffff:203.0.113.9' ) ) )
+		);
+	}
+
+	public function test_get_uses_configured_header() {
+		Settings::update( array( 'security' => array( 'proxy_header' => 'HTTP_CF_CONNECTING_IP' ) ) );
+		$_SERVER['REMOTE_ADDR']           = '10.0.0.1';
+		$_SERVER['HTTP_CF_CONNECTING_IP'] = '198.51.100.7';
+		$this->assertSame( '198.51.100.7', ClientIp::get() );
+	}
+
 	public function test_missing_remote_addr_falls_back() {
 		$this->assertSame( '0.0.0.0', ClientIp::from_server( array() ) );
 	}
