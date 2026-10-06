@@ -92,4 +92,48 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertFalse( TempUsers::delete( $grant ) );
 		$this->assertNotFalse( get_userdata( $this->owner ) );
 	}
+
+	public function test_destroy_sessions_ends_sessions_but_keeps_the_user() {
+		$grant   = $this->grant();
+		$user_id = TempUsers::create( $grant );
+		$tokens  = WP_Session_Tokens::get_instance( $user_id );
+		$tokens->create( time() + 3600 );
+		$this->assertNotEmpty( $tokens->get_all() );
+
+		TempUsers::destroy_sessions( $user_id );
+
+		$this->assertEmpty( WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+	}
+
+	public function test_delete_refuses_another_grants_temp_user() {
+		$other_grant      = $this->grant( 8 );
+		$other_user       = TempUsers::create( $other_grant );
+		$grant            = $this->grant( 7 );
+		$grant['user_id'] = $other_user;
+
+		$this->assertFalse( TempUsers::delete( $grant ) );
+		$this->assertNotFalse( get_userdata( $other_user ) );
+	}
+
+	public function test_get_or_create_does_not_reuse_another_grants_temp_user() {
+		$other_grant      = $this->grant( 8 );
+		$other_user       = TempUsers::create( $other_grant );
+		$grant            = $this->grant( 7 );
+		$grant['user_id'] = $other_user;
+
+		$this->assertNotSame( $other_user, TempUsers::get_or_create( $grant ) );
+	}
+
+	public function test_delete_clears_the_link_when_the_user_is_already_gone() {
+		global $wpdb;
+		$grant            = $this->grant();
+		$user_id          = TempUsers::create( $grant );
+		$grant['user_id'] = $user_id;
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		wp_delete_user( $user_id );
+
+		$this->assertFalse( TempUsers::delete( $grant ) );
+		$this->assertSame( '0', (string) $wpdb->get_var( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = 7' ) );
+	}
 }
