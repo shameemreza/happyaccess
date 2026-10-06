@@ -26,6 +26,7 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
 		Session::reset();
 		Clock::freeze( null );
 		parent::tear_down();
@@ -112,6 +113,69 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertTrue( Grants::suspend( $id ) );
 		$this->assertTrue( Grants::resume( $id ) );
 		$this->assertSame( 'used', Grants::get( $id )['status'] );
+	}
+
+	/**
+	 * Logs the temp user in with a cookie and a session that end at a given time.
+	 *
+	 * @param int $user_id    Temp user id.
+	 * @param int $expiration When the cookie and the session end.
+	 * @return string Session token.
+	 */
+	private function log_in_until( $user_id, $expiration ) {
+		$token                       = WP_Session_Tokens::get_instance( $user_id )->create( $expiration );
+		$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $user_id, $expiration, 'logged_in', $token );
+		wp_set_current_user( $user_id );
+		Session::set_resolver( array( Grants::class, 'resolve_user' ) );
+		Session::set_headers_check( '__return_false' );
+		return $token;
+	}
+
+	/**
+	 * Records each logged_in cookie core issues during the callback.
+	 *
+	 * @param callable $callback Work to run.
+	 * @return array User id and token of each cookie.
+	 */
+	private function issued_cookies( $callback ) {
+		$issued = array();
+		$spy    = function ( $cookie, $expire, $expiration, $user_id, $scheme, $token ) use ( &$issued ) {
+			$issued[] = array( $user_id, $token );
+		};
+		add_action( 'set_logged_in_cookie', $spy, 10, 6 );
+		call_user_func( $callback );
+		remove_action( 'set_logged_in_cookie', $spy, 10 );
+		return $issued;
+	}
+
+	public function test_enforce_keeps_the_session_of_an_extended_one_time_grant() {
+		// Core drops sessions that ended before the real time, so the clock follows it here.
+		Clock::freeze( time() );
+		list( $id, $user_id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$token = $this->log_in_until( $user_id, Grants::get( $id )['expires_at'] );
+
+		$this->assertTrue( Grants::extend( $id, DAY_IN_SECONDS ) );
+		$expires = Grants::get( $id )['expires_at'];
+		$issued  = $this->issued_cookies( array( Session::class, 'enforce' ) );
+
+		$this->assertSame( $user_id, get_current_user_id() );
+		$this->assertSame( $expires, WP_Session_Tokens::get_instance( $user_id )->get( $token )['expiration'] );
+		$this->assertSame( array( array( $user_id, $token ) ), $issued );
+	}
+
+	public function test_enforce_leaves_a_cookie_that_already_covers_the_grant() {
+		// Core drops sessions that ended before the real time, so the clock follows it here.
+		Clock::freeze( time() );
+		list( $id, $user_id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$expires = Grants::get( $id )['expires_at'];
+		$token   = $this->log_in_until( $user_id, $expires );
+
+		$issued = $this->issued_cookies( array( Session::class, 'enforce' ) );
+
+		$this->assertSame( array(), $issued );
+		$this->assertSame( $expires, WP_Session_Tokens::get_instance( $user_id )->get( $token )['expiration'] );
 	}
 
 	public function test_regenerate_returns_null_for_a_revoked_grant() {

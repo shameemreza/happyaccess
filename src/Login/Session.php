@@ -24,6 +24,11 @@ defined( 'ABSPATH' ) || exit;
 final class Session {
 
 	/**
+	 * Seconds the grant may run past the cookie before the cookie is issued again.
+	 */
+	const COOKIE_MARGIN = 300;
+
+	/**
 	 * Grant resolver: function ( int $user_id ): ?array.
 	 *
 	 * @var callable|null
@@ -36,6 +41,14 @@ final class Session {
 	 * @var array
 	 */
 	private static $cache = array();
+
+	/**
+	 * Tells whether response headers are out. Tests swap it, because PHPUnit
+	 * prints before the first test runs.
+	 *
+	 * @var callable
+	 */
+	private static $headers_check = 'headers_sent';
 
 	/**
 	 * Hooks the cookie filter and the per-request check.
@@ -115,13 +128,24 @@ final class Session {
 	}
 
 	/**
-	 * Clears the resolver and cache.
+	 * Sets the check for sent headers. Null restores headers_sent(). For tests.
+	 *
+	 * @param callable|null $check Returns true when headers are out.
+	 * @return void
+	 */
+	public static function set_headers_check( $check ) {
+		self::$headers_check = is_callable( $check ) ? $check : 'headers_sent';
+	}
+
+	/**
+	 * Clears the resolver, the cache and the headers check.
 	 *
 	 * @return void
 	 */
 	public static function reset() {
-		self::$resolver = null;
-		self::$cache    = array();
+		self::$resolver      = null;
+		self::$cache         = array();
+		self::$headers_check = 'headers_sent';
 	}
 
 	/**
@@ -211,6 +235,9 @@ final class Session {
 		$user_id = get_current_user_id();
 		$reason  = $user_id ? self::end_reason( $user_id ) : null;
 		if ( null === $reason ) {
+			if ( $user_id ) {
+				self::follow_grant_expiry( $user_id );
+			}
 			return;
 		}
 
@@ -223,6 +250,43 @@ final class Session {
 
 		wp_safe_redirect( Router::url( 'ended', array( 'reason' => $reason ) ) );
 		exit;
+	}
+
+	/**
+	 * Carries a temp user's session up to the grant's expiry when the grant
+	 * now ends well after the cookie, for example after an extend. The cookie
+	 * and the session token were both fixed at login. Never shortens either,
+	 * and does nothing for other users or for requests without a session
+	 * token, such as application passwords.
+	 *
+	 * @param int $user_id Current user id.
+	 * @return void
+	 */
+	private static function follow_grant_expiry( $user_id ) {
+		$grant = self::grant( $user_id );
+		if ( null === $grant || 'active' !== $grant['state'] ) {
+			return;
+		}
+		$expires = (int) $grant['expires_at'];
+		if ( PHP_INT_MAX === $expires || call_user_func( self::$headers_check ) ) {
+			return;
+		}
+		$token  = wp_get_session_token();
+		$cookie = wp_parse_auth_cookie( '', 'logged_in' );
+		if ( '' === $token || ! is_array( $cookie ) || $expires - (int) $cookie['expiration'] <= self::COOKIE_MARGIN ) {
+			return;
+		}
+		$manager = \WP_Session_Tokens::get_instance( $user_id );
+		$session = $manager->get( $token );
+		if ( ! is_array( $session ) ) {
+			return;
+		}
+		if ( ! isset( $session['expiration'] ) || (int) $session['expiration'] < $expires ) {
+			$session['expiration'] = $expires;
+			$manager->update( $token, $session );
+		}
+		// The cookie length comes from cap_cookie(), so it ends with the grant.
+		wp_set_auth_cookie( $user_id, true, '', $token );
 	}
 
 	/**
