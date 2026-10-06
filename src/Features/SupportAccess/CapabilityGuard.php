@@ -89,6 +89,18 @@ final class CapabilityGuard {
 	);
 
 	/**
+	 * The network list of active plugins, guarded so HappyAccess stays active.
+	 */
+	const NETWORK_PLUGINS_OPTION = 'active_sitewide_plugins';
+
+	/**
+	 * Characters allowed in an option name a temp user writes. The options
+	 * table ignores case and accents, so any other name could reach a
+	 * protected option.
+	 */
+	const OPTION_NAME_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789_-';
+
+	/**
 	 * Every option starting with this is protected too.
 	 */
 	const OPTION_PREFIX = 'happyaccess_';
@@ -106,16 +118,14 @@ final class CapabilityGuard {
 	);
 
 	/**
-	 * Caps blocked on every level, including full. The network caps match
-	 * the ones in Catalog::NEVER.
+	 * Caps blocked on every level, including full. The file editor could
+	 * rewrite HappyAccess itself. The network caps match the ones in Catalog::NEVER.
 	 */
 	const SELF_BLOCKED = array(
-		'create_app_password',
-		'edit_app_password',
-		'list_app_passwords',
-		'read_app_password',
-		'delete_app_password',
-		'delete_app_passwords',
+		...self::APP_PASSWORD_CAPS,
+		'edit_plugins',
+		'edit_themes',
+		'edit_files',
 		'erase_others_personal_data',
 		'export_others_personal_data',
 		'manage_network',
@@ -205,7 +215,7 @@ final class CapabilityGuard {
 		add_filter( 'allowed_options', array( __CLASS__, 'filter_allowed_options' ) );
 		add_filter( 'pre_update_option', array( __CLASS__, 'keep_old_option' ), 10, 3 );
 		add_action( 'delete_option', array( __CLASS__, 'block_option_delete' ) );
-		foreach ( self::PROTECTED_SITE_OPTIONS as $site_option ) {
+		foreach ( array_merge( self::PROTECTED_SITE_OPTIONS, array( self::NETWORK_PLUGINS_OPTION ) ) as $site_option ) {
 			add_filter( 'pre_update_site_option_' . $site_option, array( __CLASS__, 'keep_old_site_option' ), 10, 4 );
 			add_action( 'pre_delete_site_option_' . $site_option, array( __CLASS__, 'block_site_option_delete' ), 10, 2 );
 		}
@@ -513,7 +523,8 @@ final class CapabilityGuard {
 
 	/**
 	 * Keeps the old value of a protected option when a temp user writes it.
-	 * The active plugins list may change but always keeps HappyAccess.
+	 * The active plugins list may change but always keeps HappyAccess. A name
+	 * outside lowercase letters, digits, underscores and hyphens is refused.
 	 *
 	 * @param mixed  $value     New value.
 	 * @param string $option    Option name.
@@ -528,11 +539,11 @@ final class CapabilityGuard {
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
 		}
+		if ( ! self::is_plain_option_name( $option ) ) {
+			return $old_value;
+		}
 		if ( 'active_plugins' === $option ) {
-			if ( is_array( $value ) && is_array( $old_value ) && in_array( HAPPYACCESS_PLUGIN_BASENAME, $old_value, true ) && ! in_array( HAPPYACCESS_PLUGIN_BASENAME, $value, true ) ) {
-				$value[] = HAPPYACCESS_PLUGIN_BASENAME;
-			}
-			return $value;
+			return self::keep_plugin_active( $value, $old_value );
 		}
 		$level = self::level_for( $user_id );
 		if ( 'protected' !== $level ) {
@@ -584,14 +595,18 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Stops a temp user deleting a protected option.
+	 * Stops a temp user deleting a protected option, or any option whose name
+	 * isn't plain lowercase.
 	 *
 	 * @param string $option Option name.
 	 * @return void
 	 */
 	public static function block_option_delete( $option ) {
 		$user_id = get_current_user_id();
-		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) || ! self::is_protected_option( $option, self::level_for( $user_id ) ) ) {
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
+			return;
+		}
+		if ( self::is_plain_option_name( $option ) && ! self::is_protected_option( $option, self::level_for( $user_id ) ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -609,14 +624,21 @@ final class CapabilityGuard {
 	public static function keep_old_site_option( $value, $old_value = null, $option = '', $network_id = 0 ) {
 		unset( $network_id );
 		$user_id = get_current_user_id();
-		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) || ! self::is_protected_site_option( $option, self::level_for( $user_id ) ) ) {
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
 		}
-		return $old_value;
+		if ( ! self::is_plain_option_name( $option ) ) {
+			return $old_value;
+		}
+		if ( self::NETWORK_PLUGINS_OPTION === $option ) {
+			return self::keep_network_plugin_active( $value, $old_value );
+		}
+		return self::is_protected_site_option( $option, self::level_for( $user_id ) ) ? $old_value : $value;
 	}
 
 	/**
-	 * Stops a temp user deleting a protected network option.
+	 * Stops a temp user deleting a protected network option, the network
+	 * active plugins list, or any network option whose name isn't plain lowercase.
 	 *
 	 * @param string $option     Option name.
 	 * @param int    $network_id Network id.
@@ -625,10 +647,69 @@ final class CapabilityGuard {
 	public static function block_site_option_delete( $option, $network_id = 0 ) {
 		unset( $network_id );
 		$user_id = get_current_user_id();
-		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) || ! self::is_protected_site_option( $option, self::level_for( $user_id ) ) ) {
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
+			return;
+		}
+		$protected = ! self::is_plain_option_name( $option )
+			|| self::NETWORK_PLUGINS_OPTION === $option
+			|| self::is_protected_site_option( $option, self::level_for( $user_id ) );
+		if ( ! $protected ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
+	}
+
+	/**
+	 * Keeps HappyAccess in the active plugins list when it was there. A value
+	 * that isn't a list keeps the old list.
+	 *
+	 * @param mixed $value     New list.
+	 * @param mixed $old_value Current list.
+	 * @return mixed
+	 */
+	private static function keep_plugin_active( $value, $old_value ) {
+		if ( ! is_array( $old_value ) || ! in_array( HAPPYACCESS_PLUGIN_BASENAME, $old_value, true ) ) {
+			return $value;
+		}
+		if ( ! is_array( $value ) ) {
+			return $old_value;
+		}
+		if ( ! in_array( HAPPYACCESS_PLUGIN_BASENAME, $value, true ) ) {
+			$value[] = HAPPYACCESS_PLUGIN_BASENAME;
+		}
+		return $value;
+	}
+
+	/**
+	 * Keeps HappyAccess in the network active plugins list, which is keyed by
+	 * plugin file, when it was there. A value that isn't a list keeps the old list.
+	 *
+	 * @param mixed $value     New list.
+	 * @param mixed $old_value Current list.
+	 * @return mixed
+	 */
+	private static function keep_network_plugin_active( $value, $old_value ) {
+		if ( ! is_array( $old_value ) || ! isset( $old_value[ HAPPYACCESS_PLUGIN_BASENAME ] ) ) {
+			return $value;
+		}
+		if ( ! is_array( $value ) ) {
+			return $old_value;
+		}
+		if ( ! isset( $value[ HAPPYACCESS_PLUGIN_BASENAME ] ) ) {
+			$value[ HAPPYACCESS_PLUGIN_BASENAME ] = $old_value[ HAPPYACCESS_PLUGIN_BASENAME ];
+		}
+		return $value;
+	}
+
+	/**
+	 * Whether an option name uses only lowercase letters, digits, underscores
+	 * and hyphens.
+	 *
+	 * @param mixed $option Option name.
+	 * @return bool
+	 */
+	private static function is_plain_option_name( $option ) {
+		return is_string( $option ) && '' !== $option && strlen( $option ) === strspn( $option, self::OPTION_NAME_CHARS );
 	}
 
 	/**

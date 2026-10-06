@@ -10,6 +10,7 @@ use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\AccountGuard;
 use HappyAccess\Features\SupportAccess\CapabilityGuard;
+use HappyAccess\Features\SupportAccess\Catalog;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
 
@@ -285,6 +286,99 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		);
 		$this->assertSame( 1, $rows['total'] );
 		$this->assertSame( 'Changed role permissions', $rows['items'][0]['summary'] );
+	}
+
+	public function test_full_cannot_empty_the_plugin_list() {
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME, 'hello.php' ) );
+		$this->full();
+		update_option( 'active_plugins', '' );
+		$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
+
+		update_option( 'active_plugins', array( 'hello.php' ) );
+		$this->assertSame( array( 'hello.php', HAPPYACCESS_PLUGIN_BASENAME ), get_option( 'active_plugins' ) );
+	}
+
+	public function test_full_cannot_empty_the_network_plugin_list() {
+		update_site_option( 'active_sitewide_plugins', array( HAPPYACCESS_PLUGIN_BASENAME => 1 ) );
+		$this->full();
+		update_site_option( 'active_sitewide_plugins', '' );
+		$this->assertSame( array( HAPPYACCESS_PLUGIN_BASENAME => 1 ), get_site_option( 'active_sitewide_plugins' ) );
+
+		update_site_option( 'active_sitewide_plugins', array( 'hello.php' => 2 ) );
+		$this->assertSame(
+			array(
+				'hello.php'                 => 2,
+				HAPPYACCESS_PLUGIN_BASENAME => 1,
+			),
+			get_site_option( 'active_sitewide_plugins' )
+		);
+	}
+
+	public function test_full_cannot_reach_options_through_other_letter_cases() {
+		$secret = get_option( 'happyaccess_secret' );
+		$this->assertNotEmpty( $secret );
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
+		$this->full();
+
+		update_option( 'HAPPYACCESS_SECRET', 'x' );
+		update_option( 'Active_Plugins', array() );
+		wp_cache_delete( 'happyaccess_secret', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+
+		$this->assertSame( $secret, get_option( 'happyaccess_secret' ) );
+		$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
+		$this->assertSame( 'old', CapabilityGuard::keep_old_site_option( 'new', 'old', 'Site_Admins', 1 ) );
+	}
+
+	public function test_full_cannot_delete_an_option_through_another_letter_case() {
+		$this->full();
+		$this->expectException( WPDieException::class );
+		CapabilityGuard::block_option_delete( 'HAPPYACCESS_SECRET' );
+	}
+
+	public function test_full_cannot_open_the_file_editor() {
+		$this->full();
+		foreach ( array( 'edit_plugins', 'edit_themes', 'edit_files' ) as $cap ) {
+			$this->assertFalse( current_user_can( $cap ), $cap );
+		}
+	}
+
+	public function test_every_network_cap_in_the_catalog_is_self_blocked() {
+		$network = array();
+		foreach ( Catalog::NEVER as $cap ) {
+			if ( false !== strpos( $cap, 'network' ) || false !== strpos( $cap, '_sites' ) ) {
+				$network[] = $cap;
+			}
+		}
+		$this->assertCount( 10, $network );
+		$this->assertSame( array(), array_values( array_diff( $network, CapabilityGuard::SELF_BLOCKED ) ) );
+		$this->assertSame( array(), array_values( array_diff( CapabilityGuard::APP_PASSWORD_CAPS, CapabilityGuard::SELF_BLOCKED ) ) );
+	}
+
+	public function test_full_options_page_save_cannot_write_happyaccess_options() {
+		$secret = get_option( 'happyaccess_secret' );
+		$this->full();
+		$allowed = apply_filters(
+			'allowed_options',
+			array(
+				'options' => array( 'blogname', 'happyaccess_secret', 'happyaccess_settings' ),
+				'general' => array( 'blogname' ),
+			)
+		);
+		foreach ( $allowed as $group => $options ) {
+			$this->assertStringStartsNotWith( 'happyaccess_', $group );
+			foreach ( $options as $option ) {
+				$this->assertStringStartsNotWith( 'happyaccess_', $option );
+			}
+		}
+
+		// options.php with option_page=options saves whatever page_options lists.
+		foreach ( explode( ',', 'blogname,happyaccess_secret,HAPPYACCESS_SECRET' ) as $option ) {
+			update_option( $option, 'posted' );
+		}
+		wp_cache_delete( 'happyaccess_secret', 'options' );
+		$this->assertSame( 'posted', get_option( 'blogname' ) );
+		$this->assertSame( $secret, get_option( 'happyaccess_secret' ) );
 	}
 
 	public function test_unreadable_grant_fails_closed_to_protected() {
