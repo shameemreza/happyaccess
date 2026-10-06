@@ -198,4 +198,166 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'] ) );
 		$this->assertSame( 1, AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['total'] );
 	}
+	private function insert_legacy_token( $hash, array $extra = array() ) {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'happyaccess_tokens',
+			array_merge(
+				array(
+					'token_hash' => $hash,
+					'created_by' => 1,
+					'expires_at' => Clock::mysql( 1790000000 + DAY_IN_SECONDS ),
+				),
+				$extra
+			)
+		);
+		return (int) $wpdb->insert_id;
+	}
+
+	public function test_one_time_flag_is_kept() {
+		$id = $this->insert_legacy_token(
+			'once',
+			array(
+				'otp_code' => '333333',
+				'max_uses' => 1,
+			)
+		);
+
+		Installer::migrate();
+
+		$row = $this->token( 'once' );
+		$this->assertSame( $id, (int) $row['id'] );
+		$this->assertSame( 1, (int) $row['max_uses'] );
+		$this->assertSame( 0, (int) $row['use_count'] );
+		$this->assertTrue( Codes::verify_code( '333333', $row['code_hash'] ) );
+	}
+
+	public function test_suspension_is_carried_by_user_meta_and_by_user_id_column() {
+		$by_meta = $this->insert_legacy_token( 'sus-meta' );
+		$by_col  = $this->insert_legacy_token( 'sus-col' );
+		$other   = $this->insert_legacy_token( 'sus-none' );
+
+		$meta_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $meta_user, 'happyaccess_temp_user', true );
+		update_user_meta( $meta_user, 'happyaccess_token_id', $by_meta );
+		update_user_meta( $meta_user, 'happyaccess_deactivated', true );
+
+		$col_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $col_user, 'happyaccess_deactivated', true );
+		global $wpdb;
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'user_id' => $col_user ), array( 'id' => $by_col ) );
+
+		$active_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $active_user, 'happyaccess_temp_user', true );
+		update_user_meta( $active_user, 'happyaccess_token_id', $other );
+
+		Installer::migrate();
+
+		$this->assertSame( Clock::mysql(), $this->token( 'sus-meta' )['suspended_at'] );
+		$this->assertSame( Clock::mysql(), $this->token( 'sus-col' )['suspended_at'] );
+		$this->assertNull( $this->token( 'sus-none' )['suspended_at'] );
+		$this->assertSame( '', (string) get_user_meta( $meta_user, 'happyaccess_deactivated', true ) );
+		$this->assertSame( '', (string) get_user_meta( $col_user, 'happyaccess_deactivated', true ) );
+	}
+
+	public function test_existing_suspended_at_is_not_overwritten() {
+		global $wpdb;
+		$id = $this->insert_legacy_token( 'sus-old' );
+		Installer::install();
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'suspended_at' => '2026-01-02 03:04:05' ), array( 'id' => $id ) );
+		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user, 'happyaccess_temp_user', true );
+		update_user_meta( $user, 'happyaccess_token_id', $id );
+		update_user_meta( $user, 'happyaccess_deactivated', true );
+
+		Installer::migrate();
+
+		$this->assertSame( '2026-01-02 03:04:05', $this->token( 'sus-old' )['suspended_at'] );
+		$this->assertSame( '', (string) get_user_meta( $user, 'happyaccess_deactivated', true ) );
+	}
+
+	public function test_restrictions_are_built_from_ip_column_and_metadata() {
+		$this->insert_legacy_token(
+			'restr',
+			array(
+				'ip_restrictions' => ' 203.0.113.5 , not-an-ip,2001:db8::1,,198.51.100.7 ',
+				'metadata'        => wp_json_encode(
+					array(
+						'restricted_menus' => array( 'plugins.php', ' <b>tools.php</b> ', '' ),
+						'hide_admin_bar'   => true,
+					)
+				),
+			)
+		);
+		$this->insert_legacy_token( 'plain' );
+
+		Installer::migrate();
+
+		$row = $this->token( 'restr' );
+		$this->assertSame(
+			array(
+				'ips'            => array( '203.0.113.5', '2001:db8::1', '198.51.100.7' ),
+				'menus'          => array( 'plugins.php', 'tools.php' ),
+				'hide_admin_bar' => true,
+			),
+			json_decode( $row['restrictions'], true )
+		);
+		$this->assertSame( ' 203.0.113.5 , not-an-ip,2001:db8::1,,198.51.100.7 ', $row['ip_restrictions'] );
+		$this->assertEmpty( $this->token( 'plain' )['restrictions'] );
+	}
+
+	public function test_existing_restrictions_are_not_replaced() {
+		global $wpdb;
+		$id = $this->insert_legacy_token( 'restr-keep', array( 'ip_restrictions' => '203.0.113.5' ) );
+		Installer::install();
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'restrictions' => '{"ips":["192.0.2.1"],"menus":[],"hide_admin_bar":false}' ), array( 'id' => $id ) );
+
+		Installer::migrate();
+
+		$this->assertSame( '{"ips":["192.0.2.1"],"menus":[],"hide_admin_bar":false}', $this->token( 'restr-keep' )['restrictions'] );
+	}
+
+	public function test_note_becomes_label_only_when_label_is_empty() {
+		global $wpdb;
+		$this->insert_legacy_token( 'note-a', array( 'metadata' => wp_json_encode( array( 'note' => '  Ticket <i>1234</i>  ' ) ) ) );
+		$this->insert_legacy_token( 'note-long', array( 'metadata' => wp_json_encode( array( 'note' => str_repeat( 'é', 250 ) ) ) ) );
+		$kept = $this->insert_legacy_token( 'note-kept', array( 'metadata' => wp_json_encode( array( 'note' => 'Old note' ) ) ) );
+		Installer::install();
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'label' => 'Chosen label' ), array( 'id' => $kept ) );
+
+		Installer::migrate();
+
+		$this->assertSame( 'Ticket 1234', $this->token( 'note-a' )['label'] );
+		$this->assertSame( str_repeat( 'é', 190 ), $this->token( 'note-long' )['label'] );
+		$this->assertSame( 'Chosen label', $this->token( 'note-kept' )['label'] );
+	}
+
+	public function test_carried_state_is_stable_when_the_migration_runs_twice() {
+		$id = $this->insert_legacy_token(
+			'twice',
+			array(
+				'ip_restrictions' => '203.0.113.5',
+				'metadata'        => wp_json_encode(
+					array(
+						'note'             => 'Twice',
+						'restricted_menus' => array( 'tools.php' ),
+					)
+				),
+			)
+		);
+		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user, 'happyaccess_temp_user', true );
+		update_user_meta( $user, 'happyaccess_token_id', $id );
+		update_user_meta( $user, 'happyaccess_deactivated', true );
+
+		Installer::migrate();
+		$first = $this->token( 'twice' );
+		Clock::freeze( 1790000000 + 3600 );
+		Installer::migrate();
+
+		$this->assertSame( $first, $this->token( 'twice' ) );
+		$this->assertSame( 'Twice', $first['label'] );
+		$this->assertNotEmpty( $first['suspended_at'] );
+		$this->assertNotEmpty( $first['restrictions'] );
+	}
 }

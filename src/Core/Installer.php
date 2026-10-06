@@ -98,6 +98,9 @@ final class Installer {
 
 		self::install();
 		$result = self::hash_legacy_codes();
+		if ( self::carry_legacy_grant_state() ) {
+			$result['failed'] = true;
+		}
 		self::migrate_options( $is_upgrade );
 
 		// Leave the version and the legacy tables alone when anything failed, so the next maybe_upgrade() retries.
@@ -205,6 +208,121 @@ final class Installer {
 		return array(
 			'hashed' => $hashed,
 			'failed' => $failed,
+		);
+	}
+
+	/**
+	 * Carries 1.0.6 grant state into the 1.1.0 columns: the deactivated flag
+	 * on the temp user becomes suspended_at, the IP allowlist and the menu and
+	 * admin bar settings become restrictions, and the note becomes the label.
+	 * The old columns stay as they are. Safe to run more than once.
+	 *
+	 * @return bool Whether any write failed.
+	 */
+	private static function carry_legacy_grant_state() {
+		global $wpdb;
+		$table = self::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, no input.
+		$rows   = $wpdb->get_results( "SELECT id, user_id, label, restrictions, suspended_at, ip_restrictions, metadata FROM {$table}", ARRAY_A );
+		$failed = false;
+
+		foreach ( (array) $rows as $row ) {
+			$data      = array();
+			$metadata  = empty( $row['metadata'] ) ? array() : json_decode( $row['metadata'], true );
+			$metadata  = is_array( $metadata ) ? $metadata : array();
+			$suspended = array();
+
+			foreach ( self::legacy_temp_user_ids( $row ) as $user_id ) {
+				if ( get_user_meta( $user_id, 'happyaccess_deactivated', true ) ) {
+					$suspended[] = $user_id;
+				}
+			}
+			if ( ! empty( $suspended ) && empty( $row['suspended_at'] ) ) {
+				$data['suspended_at'] = Clock::mysql();
+			}
+
+			if ( empty( $row['restrictions'] ) ) {
+				$restrictions = self::legacy_restrictions( $row, $metadata );
+				if ( null !== $restrictions ) {
+					$data['restrictions'] = wp_json_encode( $restrictions );
+				}
+			}
+
+			if ( '' === (string) $row['label'] && isset( $metadata['note'] ) && is_string( $metadata['note'] ) ) {
+				$note = mb_substr( sanitize_text_field( $metadata['note'] ), 0, 190, 'UTF-8' );
+				if ( '' !== $note ) {
+					$data['label'] = $note;
+				}
+			}
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+			if ( ! empty( $data ) && false === $wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) ) ) {
+				$failed = true;
+				continue;
+			}
+
+			// Only after the grant row holds the state, so a failed write is retried with the flag still in place.
+			foreach ( $suspended as $user_id ) {
+				delete_user_meta( $user_id, 'happyaccess_deactivated' );
+			}
+		}
+
+		return $failed;
+	}
+
+	/**
+	 * Temp users that belong to a 1.0.6 token: the one on the row, plus any
+	 * user whose happyaccess_token_id meta points at it.
+	 *
+	 * @param array $row Token row.
+	 * @return int[]
+	 */
+	private static function legacy_temp_user_ids( array $row ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No Options API equivalent for a lookup by meta value.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s", 'happyaccess_token_id', (string) (int) $row['id'] ) );
+		if ( ! empty( $row['user_id'] ) ) {
+			$ids[] = $row['user_id'];
+		}
+		return array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
+	}
+
+	/**
+	 * Restrictions in the 1.1.0 shape, or null when the 1.0.6 grant had none.
+	 *
+	 * @param array $row      Token row.
+	 * @param array $metadata Decoded 1.0.6 metadata.
+	 * @return array|null
+	 */
+	private static function legacy_restrictions( array $row, array $metadata ) {
+		$ips = array();
+		foreach ( explode( ',', (string) $row['ip_restrictions'] ) as $ip ) {
+			$ip = trim( $ip );
+			if ( ClientIp::valid( $ip ) ) {
+				$ips[] = $ip;
+			}
+		}
+
+		$menus = array();
+		if ( isset( $metadata['restricted_menus'] ) && is_array( $metadata['restricted_menus'] ) ) {
+			foreach ( $metadata['restricted_menus'] as $slug ) {
+				$slug = is_string( $slug ) ? sanitize_text_field( $slug ) : '';
+				if ( '' !== $slug ) {
+					$menus[] = $slug;
+				}
+			}
+		}
+
+		$hide_admin_bar = ! empty( $metadata['hide_admin_bar'] );
+
+		if ( empty( $ips ) && empty( $menus ) && ! $hide_admin_bar ) {
+			return null;
+		}
+
+		return array(
+			'ips'            => $ips,
+			'menus'          => $menus,
+			'hide_admin_bar' => $hide_admin_bar,
 		);
 	}
 
