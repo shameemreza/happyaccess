@@ -21,16 +21,28 @@ final class Catalog {
 		'content'    => array(
 			'edit_posts',
 			'edit_others_posts',
+			'edit_published_posts',
+			'edit_private_posts',
 			'publish_posts',
 			'delete_posts',
 			'delete_others_posts',
+			'delete_published_posts',
+			'delete_private_posts',
+			'read_private_posts',
 			'edit_pages',
 			'edit_others_pages',
+			'edit_published_pages',
+			'edit_private_pages',
 			'publish_pages',
 			'delete_pages',
+			'delete_others_pages',
+			'delete_published_pages',
+			'delete_private_pages',
+			'read_private_pages',
 			'upload_files',
 			'moderate_comments',
 			'manage_categories',
+			'manage_links',
 		),
 		'store'      => array(
 			'manage_woocommerce',
@@ -81,6 +93,21 @@ final class Catalog {
 			'unfiltered_html',
 		),
 	);
+
+	/**
+	 * Capabilities every pass has, so they are never offered.
+	 */
+	const ALWAYS = array( 'read' );
+
+	/**
+	 * Pattern for unlisted capabilities that belong to the store group.
+	 */
+	const STORE_PATTERN = '/^(manage_woocommerce|view_woocommerce_reports)$|_(product|products|product_terms|shop_order|shop_orders|shop_order_terms|shop_coupon|shop_coupons|shop_coupon_terms|shop_webhook|shop_webhooks)$/';
+
+	/**
+	 * Pattern for unlisted capabilities that belong to the content group.
+	 */
+	const CONTENT_PATTERN = '/_(post|posts|page|pages)$/';
 
 	/**
 	 * Capabilities a support pass can never receive.
@@ -197,6 +224,18 @@ final class Catalog {
 			'upload_files'             => __( 'Upload media', 'happyaccess' ),
 			'moderate_comments'        => __( 'Moderate comments', 'happyaccess' ),
 			'manage_categories'        => __( 'Manage categories and tags', 'happyaccess' ),
+			'edit_published_posts'     => __( 'Edit published posts', 'happyaccess' ),
+			'edit_private_posts'       => __( 'Edit private posts', 'happyaccess' ),
+			'delete_published_posts'   => __( 'Delete published posts', 'happyaccess' ),
+			'delete_private_posts'     => __( 'Delete private posts', 'happyaccess' ),
+			'read_private_posts'       => __( 'Read private posts', 'happyaccess' ),
+			'edit_published_pages'     => __( 'Edit published pages', 'happyaccess' ),
+			'edit_private_pages'       => __( 'Edit private pages', 'happyaccess' ),
+			'delete_others_pages'      => __( 'Delete pages by others', 'happyaccess' ),
+			'delete_published_pages'   => __( 'Delete published pages', 'happyaccess' ),
+			'delete_private_pages'     => __( 'Delete private pages', 'happyaccess' ),
+			'read_private_pages'       => __( 'Read private pages', 'happyaccess' ),
+			'manage_links'             => __( 'Manage links', 'happyaccess' ),
 			'manage_woocommerce'       => __( 'WooCommerce settings and status', 'happyaccess' ),
 			'view_woocommerce_reports' => __( 'See reports and analytics', 'happyaccess' ),
 			'edit_shop_orders'         => __( 'View and edit orders', 'happyaccess' ),
@@ -237,6 +276,22 @@ final class Catalog {
 	}
 
 	/**
+	 * Position of a group in a built list.
+	 *
+	 * @param array  $groups Built groups.
+	 * @param string $id     Group id.
+	 * @return int|null
+	 */
+	private static function group_index( array $groups, $id ) {
+		foreach ( $groups as $index => $group ) {
+			if ( $id === $group['id'] ) {
+				return $index;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Groups of capabilities a custom pass may receive, ready for the editor.
 	 *
 	 * @return array<int, array{id:string, label:string, hint:string, caps:array<int, array{cap:string, label:string}>}>
@@ -247,6 +302,10 @@ final class Catalog {
 		$labels = self::cap_labels();
 		$groups = array();
 		$fixed  = array();
+		$routed = array(
+			'content' => array(),
+			'store'   => array(),
+		);
 
 		foreach ( self::GROUPS as $id => $caps ) {
 			$fixed = array_merge( $fixed, $caps );
@@ -273,11 +332,45 @@ final class Catalog {
 		}
 
 		$other = array();
-		foreach ( array_diff( $held, $fixed, self::NEVER ) as $cap ) {
-			$other[] = array(
+		foreach ( array_diff( $held, $fixed, self::NEVER, self::ALWAYS ) as $cap ) {
+			$item = array(
 				'cap'   => $cap,
 				'label' => $cap,
 			);
+			if ( preg_match( self::STORE_PATTERN, $cap ) ) {
+				$routed['store'][] = $item;
+			} elseif ( preg_match( self::CONTENT_PATTERN, $cap ) ) {
+				$routed['content'][] = $item;
+			} else {
+				$other[] = $item;
+			}
+		}
+		foreach ( $routed as $id => $items ) {
+			if ( empty( $items ) ) {
+				continue;
+			}
+			foreach ( $items as $key => $item ) {
+				$items[ $key ]['label'] = ucfirst( str_replace( '_', ' ', $item['cap'] ) );
+			}
+			$index = self::group_index( $groups, $id );
+			if ( null === $index ) {
+				// Content always exists, so a missing store group goes right after it.
+				array_splice(
+					$groups,
+					1,
+					0,
+					array(
+						array(
+							'id'    => $id,
+							'label' => $text[ $id ]['label'],
+							'hint'  => $text[ $id ]['hint'],
+							'caps'  => array(),
+						),
+					)
+				);
+				$index = 1;
+			}
+			$groups[ $index ]['caps'] = array_merge( $groups[ $index ]['caps'], $items );
 		}
 		if ( ! empty( $other ) ) {
 			$groups[] = array(

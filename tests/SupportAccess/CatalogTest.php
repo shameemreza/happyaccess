@@ -10,7 +10,7 @@ use HappyAccess\Features\SupportAccess\Catalog;
 class CatalogTest extends WP_UnitTestCase {
 
 	public function tear_down() {
-		foreach ( array( 'shop_manager', 'seo', 'netty' ) as $role ) {
+		foreach ( array( 'shop_manager', 'seo', 'netty', 'merch' ) as $role ) {
 			remove_role( $role );
 		}
 		parent::tear_down();
@@ -149,5 +149,38 @@ class CatalogTest extends WP_UnitTestCase {
 		add_role( 'shop_manager', 'Shop manager', array( 'edit_shop_orders' => true ) );
 		$found = wp_list_filter( $this->group( 'store' )['caps'], array( 'cap' => 'edit_shop_orders' ) );
 		$this->assertSame( 'View and edit orders', reset( $found )['label'] );
+	}
+
+	public function test_read_is_never_offered() {
+		$this->assertContains( 'read', array_keys( array_filter( wp_roles()->get_role( 'editor' )->capabilities ) ) );
+		$this->assertNotContains( 'read', Catalog::grantable() );
+		$this->assertNotContains( 'read', Catalog::NEVER );
+		$this->assertContains( 'read', Catalog::ALWAYS );
+	}
+
+	public function test_core_private_and_published_caps_are_in_content() {
+		$caps = $this->group_caps( 'content' );
+		$this->assertContains( 'delete_private_posts', $caps );
+		$this->assertContains( 'edit_published_pages', $caps );
+		$this->assertContains( 'manage_links', $caps );
+	}
+
+	public function test_store_pattern_caps_route_to_store_with_a_readable_label() {
+		add_role( 'merch', 'Merch', array( 'delete_others_products' => true ) );
+		$found = wp_list_filter( $this->group( 'store' )['caps'], array( 'cap' => 'delete_others_products' ) );
+		$this->assertCount( 1, $found );
+		$this->assertSame( 'Delete others products', reset( $found )['label'] );
+		$this->assertNotContains( 'delete_others_products', $this->group_caps( 'other' ) );
+	}
+
+	public function test_content_pattern_caps_route_to_content() {
+		add_role( 'merch', 'Merch', array( 'edit_things_posts' => true ) );
+		$found = wp_list_filter( $this->group( 'content' )['caps'], array( 'cap' => 'edit_things_posts' ) );
+		$this->assertSame( 'Edit things posts', reset( $found )['label'] );
+	}
+
+	public function test_unknown_plugin_caps_stay_in_other() {
+		add_role( 'seo', 'SEO', array( 'wpseo_manage_options' => true ) );
+		$this->assertContains( 'wpseo_manage_options', $this->group_caps( 'other' ) );
 	}
 }
