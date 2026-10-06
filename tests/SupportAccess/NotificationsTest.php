@@ -1,0 +1,80 @@
+<?php
+/**
+ * Notifications tests.
+ *
+ * @package HappyAccess
+ */
+
+use HappyAccess\Core\AuditLog;
+use HappyAccess\Core\Installer;
+use HappyAccess\Core\Mailer;
+use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\Notifications;
+
+class NotificationsTest extends WP_UnitTestCase {
+
+	public function set_up() {
+		parent::set_up();
+		Installer::install();
+		reset_phpmailer_instance();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator', 'user_email' => 'owner@example.org' ) ) );
+		Grants::flush_cache();
+		delete_transient( 'happyaccess_site_lock_alerted' );
+	}
+
+	private function sent() {
+		return tests_retrieve_phpmailer_instance()->mock_sent;
+	}
+
+	public function test_login_alert_respects_notify_setting() {
+		$first = Grants::get( Grants::create( array( 'label' => 'Acme' ) )['id'] );
+		Notifications::login( $first, true );
+		Notifications::login( $first, false );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertSame( 'owner@example.org', $this->sent()[0]['to'][0][0] );
+		$this->assertStringContainsString( 'Acme', $this->sent()[0]['body'] );
+
+		reset_phpmailer_instance();
+		$off = Grants::get( Grants::create( array( 'label' => 'Quiet', 'notify' => 'off' ) )['id'] );
+		Notifications::login( $off, true );
+		$this->assertCount( 0, $this->sent() );
+	}
+
+	public function test_bundle_email_has_link_and_code_but_log_does_not() {
+		$made  = Grants::create( array( 'label' => 'Acme', 'email' => 'agent@example.org' ) );
+		$grant = Grants::get( $made['id'] );
+		$this->assertTrue( Notifications::send_bundle( $grant, $made['code'], $made['link_key'] ) );
+		$body = $this->sent()[0]['body'];
+		$this->assertStringContainsString( $made['link_key'], $body );
+		$this->assertStringContainsString( substr( $made['code'], 0, 4 ), $body );
+		$this->assertStringNotContainsString( $made['code'], wp_json_encode( AuditLog::query()['items'] ) );
+	}
+
+	public function test_bundle_text_contains_all_parts() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		$text = Notifications::bundle_text( Grants::get( $made['id'] ), $made['code'], $made['link_key'] );
+		$this->assertStringContainsString( 'step=link', $text );
+		$this->assertStringContainsString( 'step=code', $text );
+		$this->assertStringContainsString( substr( $made['code'], 0, 4 ) . ' ' . substr( $made['code'], 4 ), $text );
+	}
+
+	public function test_access_ended_summary_lists_activity() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		AuditLog::add( 'plugin_activated', array( 'token_id' => $made['id'], 'summary' => 'Activated plugin: Query Monitor' ) );
+		Notifications::register();
+		Grants::revoke( $made['id'] );
+		$sent = $this->sent();
+		$last = end( $sent );
+		$this->assertStringContainsString( 'Activated plugin: Query Monitor', $last['body'] );
+	}
+
+	public function test_site_lock_alert_is_sent_once() {
+		Notifications::site_lock( 3600 );
+		Notifications::site_lock( 3600 );
+		$this->assertCount( 1, $this->sent() );
+	}
+
+	public function test_invalid_recipient_returns_false() {
+		$this->assertFalse( Mailer::send( 'nope', 'x', 'login-alert', array() ) );
+	}
+}
