@@ -114,4 +114,12 @@ class AccountGuardTest extends WP_UnitTestCase {
 		$this->expectException( WPDieException::class );
 		AccountGuard::block_wc_auth( $wp );
 	}
+
+	public function test_credential_change_emails_are_skipped_for_temp_users() {
+		$this->assertTrue( apply_filters( 'send_password_change_email', true, array(), array() ) );
+		$this->assertTrue( apply_filters( 'send_email_change_email', true, array(), array() ) );
+		wp_set_current_user( $this->temp );
+		$this->assertFalse( apply_filters( 'send_password_change_email', true, array(), array() ) );
+		$this->assertFalse( apply_filters( 'send_email_change_email', true, array(), array() ) );
+	}
 }

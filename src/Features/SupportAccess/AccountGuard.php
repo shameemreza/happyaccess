@@ -24,6 +24,8 @@ final class AccountGuard {
 	 */
 	public static function register() {
 		add_filter( 'wp_pre_insert_user_data', array( __CLASS__, 'freeze_credentials' ), PHP_INT_MAX, 4 );
+		add_filter( 'send_password_change_email', array( __CLASS__, 'skip_change_email' ), PHP_INT_MAX, 3 );
+		add_filter( 'send_email_change_email', array( __CLASS__, 'skip_change_email' ), PHP_INT_MAX, 3 );
 		add_filter( 'allow_password_reset', array( __CLASS__, 'block_reset' ), PHP_INT_MAX, 2 );
 		add_filter( 'woocommerce_save_account_details_errors', array( __CLASS__, 'block_wc_account' ), 10, 2 );
 		add_action( 'wp_ajax_woocommerce_update_api_key', array( __CLASS__, 'block_wc_api_key' ), 0 );
@@ -60,6 +62,20 @@ final class AccountGuard {
 		$data['user_pass']  = $stored->user_pass;
 		$data['user_email'] = $stored->user_email;
 		return $data;
+	}
+
+	/**
+	 * Skips the "password changed" and "email changed" notices when a temp user
+	 * saves a profile. The change is frozen, so the customer would get a false alarm.
+	 *
+	 * @param bool  $send     Whether to send the email.
+	 * @param array $user     User data before the update.
+	 * @param array $userdata Data passed to the update.
+	 * @return bool
+	 */
+	public static function skip_change_email( $send, $user = array(), $userdata = array() ) {
+		unset( $user, $userdata );
+		return self::is_blocked_request() ? false : $send;
 	}
 
 	/**
