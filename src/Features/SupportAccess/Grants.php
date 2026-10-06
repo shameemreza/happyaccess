@@ -13,6 +13,7 @@ use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Internal;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Session;
@@ -475,14 +476,19 @@ final class Grants {
 			return false;
 		}
 
-		if ( $grant['user_id'] > 0 && false !== get_userdata( $grant['user_id'] )
-			&& ( Capabilities::is_temp_user( $grant['user_id'] ) || TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) ) {
-			// If the delete below fails, the account stays but can do nothing and has no API keys.
-			( new \WP_User( $grant['user_id'] ) )->set_role( '' );
-			TempUsers::delete_wc_api_keys( $grant['user_id'] );
-		}
-		TempUsers::destroy_sessions( $grant['user_id'] );
-		$deleted = TempUsers::delete( $grant );
+		// HappyAccess's own writes. Under Internal, the activity log never pins them on a temp user whose request runs this.
+		$deleted = Internal::run(
+			static function () use ( $grant ) {
+				if ( $grant['user_id'] > 0 && false !== get_userdata( $grant['user_id'] )
+					&& ( Capabilities::is_temp_user( $grant['user_id'] ) || TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) ) {
+					// If the delete below fails, the account stays but can do nothing and has no API keys.
+					( new \WP_User( $grant['user_id'] ) )->set_role( '' );
+					TempUsers::delete_wc_api_keys( $grant['user_id'] );
+				}
+				TempUsers::destroy_sessions( $grant['user_id'] );
+				return TempUsers::delete( $grant );
+			}
+		);
 		self::flush_cache();
 		if ( $grant['user_id'] > 0 && ! $deleted ) {
 			AuditLog::add(

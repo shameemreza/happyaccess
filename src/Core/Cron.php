@@ -74,6 +74,10 @@ final class Cron {
 	 * @return void
 	 */
 	public static function maybe_run_fallback() {
+		// A temp user's request would end other grants, and the activity log would pin those writes on that agent.
+		if ( Capabilities::is_temp_user( get_current_user_id() ) ) {
+			return;
+		}
 		if ( false !== get_transient( self::FALLBACK_TRANSIENT ) ) {
 			return;
 		}

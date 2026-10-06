@@ -9,7 +9,9 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Cron;
 use HappyAccess\Core\Installer;
+use HappyAccess\Features\SupportAccess\ActivityTracker;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\TempUsers;
 
 class CronTest extends WP_UnitTestCase {
 
@@ -21,6 +23,7 @@ class CronTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		ActivityTracker::reset();
 		Clock::freeze( null );
 		wp_clear_scheduled_hook( Cron::HOOK );
 		parent::tear_down();
@@ -109,5 +112,75 @@ class CronTest extends WP_UnitTestCase {
 		$grant = Grants::get( $active['id'] );
 		$this->assertSame( 0, $grant['revoked_at'] );
 		$this->assertSame( 'active', $grant['status'] );
+	}
+
+	/**
+	 * Agent A is browsing while grant B has run out with its temp user still there.
+	 *
+	 * @return array Grant id and user id of A, then grant id and user id of B.
+	 */
+	private function agent_browsing_while_another_grant_expired() {
+		Clock::freeze( 1790000000 );
+		$a      = Grants::create(
+			array(
+				'label'    => 'A',
+				'duration' => DAY_IN_SECONDS,
+			)
+		);
+		$b      = Grants::create(
+			array(
+				'label'    => 'B',
+				'duration' => 3600,
+			)
+		);
+		$a_user = TempUsers::get_or_create( Grants::get( $a['id'] ) );
+		$b_user = TempUsers::get_or_create( Grants::get( $b['id'] ) );
+		Clock::freeze( 1790000000 + 7200 );
+		ActivityTracker::register();
+		wp_set_current_user( $a_user );
+		return array( $a['id'], $a_user, $b['id'], $b_user );
+	}
+
+	/**
+	 * Role and settings rows logged under a grant.
+	 *
+	 * @param int $grant_id Grant id.
+	 * @return array
+	 */
+	private function role_and_settings_rows( $grant_id ) {
+		ActivityTracker::flush();
+		$rows = array();
+		foreach ( array( 'user_role_changed', 'user_role_added', 'settings_saved' ) as $event ) {
+			$found = AuditLog::query(
+				array(
+					'event'    => $event,
+					'token_id' => $grant_id,
+				)
+			)['items'];
+			$rows  = array_merge( $rows, wp_list_pluck( $found, 'summary' ) );
+		}
+		return $rows;
+	}
+
+	public function test_fallback_does_not_run_inside_a_temp_users_request() {
+		list( $a_id, , $b_id, $b_user ) = $this->agent_browsing_while_another_grant_expired();
+
+		Cron::maybe_run_fallback();
+
+		$this->assertSame( 0, Grants::get( $b_id )['revoked_at'] );
+		$this->assertNotFalse( get_userdata( $b_user ) );
+		$this->assertFalse( get_transient( Cron::FALLBACK_TRANSIENT ) );
+		$this->assertSame( array(), $this->role_and_settings_rows( $a_id ) );
+	}
+
+	public function test_cleanup_in_a_temp_users_request_logs_nothing_under_that_agent() {
+		list( $a_id, , $b_id, $b_user ) = $this->agent_browsing_while_another_grant_expired();
+
+		$counts = Cron::run();
+
+		$this->assertSame( 1, $counts['grants'] );
+		$this->assertGreaterThan( 0, Grants::get( $b_id )['revoked_at'] );
+		$this->assertFalse( get_userdata( $b_user ) );
+		$this->assertSame( array(), $this->role_and_settings_rows( $a_id ) );
 	}
 }

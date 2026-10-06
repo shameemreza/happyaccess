@@ -9,6 +9,7 @@ namespace HappyAccess\Features\SupportAccess;
 
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Internal;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -558,11 +559,12 @@ final class ActivityTracker {
 
 	/**
 	 * Whether the current user is a temp user, so their changes are logged.
+	 * HappyAccess's own writes, run under Internal, are never theirs.
 	 *
 	 * @return bool
 	 */
 	private static function is_tracking() {
-		return Capabilities::is_temp_user( get_current_user_id() );
+		return ! Internal::active() && Capabilities::is_temp_user( get_current_user_id() );
 	}
 
 	/**
