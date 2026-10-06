@@ -1,0 +1,41 @@
+<?php
+/**
+ * CLI helper tests.
+ *
+ * @package HappyAccess
+ */
+
+use HappyAccess\Core\Installer;
+use HappyAccess\Features\SupportAccess\Cli;
+use HappyAccess\Features\SupportAccess\Grants;
+
+class CliTest extends WP_UnitTestCase {
+
+	public function set_up() {
+		parent::set_up();
+		Installer::install();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+	}
+
+	public function test_grant_args_mapping() {
+		$args = Cli::grant_args( array( 'label' => 'Acme', 'expires' => '3d', 'one-time' => true, 'allow-installs' => true, 'role' => 'editor' ) );
+		$this->assertSame( 'Acme', $args['label'] );
+		$this->assertSame( 3 * DAY_IN_SECONDS, $args['duration'] );
+		$this->assertTrue( $args['one_time'] );
+		$this->assertTrue( $args['allow_installs'] );
+		$this->assertSame( 'editor', $args['role'] );
+		$this->assertSame( 12 * HOUR_IN_SECONDS, Cli::grant_args( array( 'label' => 'x', 'expires' => '12h' ) )['duration'] );
+	}
+
+	public function test_bad_unit_throws() {
+		$this->expectException( InvalidArgumentException::class );
+		Cli::grant_args( array( 'label' => 'x', 'expires' => '3w' ) );
+	}
+
+	public function test_list_rows() {
+		Grants::create( array( 'label' => 'Acme' ) );
+		$rows = Cli::list_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( array( 'id', 'label', 'role', 'status', 'expires', 'logins' ), array_keys( $rows[0] ) );
+	}
+}
