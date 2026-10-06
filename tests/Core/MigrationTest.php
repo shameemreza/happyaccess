@@ -131,4 +131,71 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
 		$this->assertSame( 0, AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['total'] );
 	}
+
+	public function test_fresh_install_reactivated_still_records_no_consent() {
+		HappyAccess_Test_Legacy_Schema::drop_all();
+		foreach ( Installer::LEGACY_OPTIONS as $option ) {
+			delete_option( $option );
+		}
+		delete_option( 'happyaccess_db_version' );
+
+		Installer::migrate();
+		Installer::migrate();
+
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['total'] );
+	}
+
+	public function test_exhausted_code_is_not_hashed() {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'happyaccess_tokens',
+			array(
+				'token_hash' => 'd',
+				'otp_code'   => '222222',
+				'created_by' => 1,
+				'expires_at' => Clock::mysql( 1790000000 + DAY_IN_SECONDS ),
+				'max_uses'   => 1,
+				'use_count'  => 1,
+			)
+		);
+
+		Installer::migrate();
+
+		$exhausted = $this->token( 'd' );
+		$this->assertNull( $exhausted['otp_code'] );
+		$this->assertEmpty( $exhausted['code_hash'] );
+	}
+
+	public function test_write_failure_keeps_version_and_legacy_tables_then_retry_completes() {
+		global $wpdb;
+		$tokens  = $wpdb->prefix . 'happyaccess_tokens';
+		$already = false;
+		$break   = static function ( $query ) use ( &$already, $tokens ) {
+			if ( ! $already && 0 === strpos( $query, "UPDATE `{$tokens}`" ) ) {
+				$already = true;
+				return 'UPDATE this is not valid sql';
+			}
+			return $query;
+		};
+		add_filter( 'query', $break );
+		$suppress = $wpdb->suppress_errors( true );
+
+		Installer::migrate();
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $break );
+
+		$this->assertTrue( $already, 'The UPDATE was not intercepted.' );
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertTrue( Installer::table_exists( 'magic_links' ) );
+
+		Installer::maybe_upgrade();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertFalse( Installer::table_exists( 'magic_links' ) );
+		$this->assertNull( $this->token( 'a' )['otp_code'] );
+		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'] ) );
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['total'] );
+	}
 }

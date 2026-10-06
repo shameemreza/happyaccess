@@ -94,23 +94,33 @@ final class Installer {
 	 */
 	public static function migrate() {
 		$previous   = (string) get_option( 'happyaccess_db_version', '0.0.0' );
-		$is_upgrade = '0.0.0' !== $previous || false !== get_option( 'happyaccess_version', false );
+		$is_upgrade = ( '0.0.0' !== $previous && version_compare( $previous, self::DB_VERSION, '<' ) ) || false !== get_option( 'happyaccess_version', false );
 
 		self::install();
-		$hashed = self::hash_legacy_codes();
+		$result = self::hash_legacy_codes();
 		self::migrate_options( $is_upgrade );
-		self::drop_legacy_tables();
 
+		// Leave the version and the legacy tables alone when anything failed, so the next maybe_upgrade() retries.
+		if ( $result['failed'] ) {
+			return;
+		}
+		foreach ( array( 'tokens', 'logs', 'attempts', 'challenges' ) as $name ) {
+			if ( ! self::table_exists( $name ) ) {
+				return;
+			}
+		}
+
+		self::drop_legacy_tables();
 		update_option( 'happyaccess_db_version', self::DB_VERSION );
 
-		if ( $is_upgrade && version_compare( $previous, self::DB_VERSION, '<' ) ) {
+		if ( $is_upgrade ) {
 			AuditLog::add(
 				'plugin_upgraded',
 				array(
 					'feature' => 'core',
 					'user_id' => 0,
 					'summary' => sprintf( 'Upgraded from %1$s to %2$s', $previous, self::DB_VERSION ),
-					'meta'    => array( 'codes_hashed' => $hashed ),
+					'meta'    => array( 'codes_hashed' => $result['hashed'] ),
 				)
 			);
 		}
@@ -131,8 +141,11 @@ final class Installer {
 				)
 			) as $site_id ) {
 				switch_to_blog( (int) $site_id );
-				self::migrate();
-				restore_current_blog();
+				try {
+					self::migrate();
+				} finally {
+					restore_current_blog();
+				}
 			}
 			return;
 		}
@@ -153,33 +166,46 @@ final class Installer {
 			return;
 		}
 		switch_to_blog( (int) $site->blog_id );
-		self::migrate();
-		restore_current_blog();
+		try {
+			self::migrate();
+		} finally {
+			restore_current_blog();
+		}
 	}
 
 	/**
-	 * Hashes 1.0.x plain codes that are still active and removes every plain code.
+	 * Hashes 1.0.x plain codes that are still usable and removes every plain code.
 	 *
-	 * @return int Number of codes hashed.
+	 * @return array{hashed:int,failed:bool} Codes hashed, and whether any write failed.
 	 */
 	private static function hash_legacy_codes() {
 		global $wpdb;
 		$table = self::table( 'tokens' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, no input.
-		$rows   = $wpdb->get_results( "SELECT id, otp_code, expires_at, revoked_at FROM {$table} WHERE otp_code IS NOT NULL AND otp_code <> ''", ARRAY_A );
+		$rows   = $wpdb->get_results( "SELECT id, otp_code, expires_at, revoked_at, max_uses, use_count FROM {$table} WHERE otp_code IS NOT NULL AND otp_code <> ''", ARRAY_A );
 		$hashed = 0;
+		$failed = false;
 
 		foreach ( (array) $rows as $row ) {
-			$data = array( 'otp_code' => null );
-			if ( empty( $row['revoked_at'] ) && Clock::from_mysql( $row['expires_at'] ) > Clock::now() ) {
+			$data      = array( 'otp_code' => null );
+			$max_uses  = (int) $row['max_uses'];
+			$exhausted = $max_uses > 0 && (int) $row['use_count'] >= $max_uses;
+			$active    = empty( $row['revoked_at'] ) && ! $exhausted && Clock::from_mysql( $row['expires_at'] ) > Clock::now();
+			if ( $active ) {
 				$data['code_hash'] = Codes::hash_code( $row['otp_code'] );
-				++$hashed;
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-			$wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) );
+			if ( false === $wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) ) ) {
+				$failed = true;
+			} elseif ( $active ) {
+				++$hashed;
+			}
 		}
 
-		return $hashed;
+		return array(
+			'hashed' => $hashed,
+			'failed' => $failed,
+		);
 	}
 
 	/**
@@ -225,8 +251,13 @@ final class Installer {
 
 		$secret = get_option( 'happyaccess_recaptcha_secret_key', null );
 		if ( null !== $secret ) {
-			delete_option( 'happyaccess_recaptcha_secret_key' );
-			add_option( 'happyaccess_recaptcha_secret_key', $secret, '', false );
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Autoload flag is not exposed by the Options API.
+			$autoload = $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", 'happyaccess_recaptcha_secret_key' ) );
+			if ( ! in_array( $autoload, array( 'no', 'off' ), true ) ) {
+				delete_option( 'happyaccess_recaptcha_secret_key' );
+				add_option( 'happyaccess_recaptcha_secret_key', $secret, '', false );
+			}
 		}
 
 		foreach ( self::LEGACY_OPTIONS as $option ) {
