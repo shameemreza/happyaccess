@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\CapabilityGuard;
@@ -190,6 +191,80 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		wp_set_current_user( $temp );
 		update_option( 'active_plugins', array( 'hello.php' ) );
 		$this->assertEqualsCanonicalizing( array( 'hello.php', HAPPYACCESS_PLUGIN_BASENAME ), get_option( 'active_plugins' ) );
+	}
+
+	public function test_role_writes_are_allowed_while_a_plugin_activates_and_logged() {
+		global $wpdb;
+		$temp    = $this->temp();
+		$key     = $wpdb->prefix . 'user_roles';
+		$changed = get_option( $key );
+		$changed['administrator']['name'] = 'Admin renamed';
+		wp_set_current_user( $temp );
+
+		do_action( 'activate_plugin', 'x/x.php', false );
+		update_option( $key, $changed );
+		$this->assertSame( 'Admin renamed', get_option( $key )['administrator']['name'] );
+
+		$rows = AuditLog::query( array( 'event' => 'roles_changed', 'token_id' => Capabilities::grant_id( $temp ) ) )['items'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'support', $rows[0]['feature'] );
+		$this->assertSame( 'Roles changed while activating or updating a plugin', $rows[0]['summary'] );
+
+		do_action( 'activated_plugin', 'x/x.php', false );
+		$again = $changed;
+		$again['administrator']['name'] = 'Admin again';
+		update_option( $key, $again );
+		$this->assertSame( 'Admin renamed', get_option( $key )['administrator']['name'] );
+	}
+
+	public function test_other_protected_options_stay_protected_during_activation() {
+		$temp = $this->temp();
+		update_option( 'default_role', 'subscriber' );
+		wp_set_current_user( $temp );
+		do_action( 'activate_plugin', 'x/x.php', false );
+		update_option( 'default_role', 'administrator' );
+		$this->assertSame( 'subscriber', get_option( 'default_role' ) );
+		do_action( 'activated_plugin', 'x/x.php', false );
+	}
+
+	public function test_the_plugin_write_counter_never_goes_below_zero() {
+		global $wpdb;
+		$temp    = $this->temp();
+		$key     = $wpdb->prefix . 'user_roles';
+		$changed = get_option( $key );
+		$changed['administrator']['name'] = 'Changed';
+		wp_set_current_user( $temp );
+
+		do_action( 'activated_plugin', 'x/x.php', false );
+		do_action( 'activated_plugin', 'x/x.php', false );
+		do_action( 'activate_plugin', 'x/x.php', false );
+		update_option( $key, $changed );
+		$this->assertSame( 'Changed', get_option( $key )['administrator']['name'] );
+		do_action( 'activated_plugin', 'x/x.php', false );
+	}
+
+	public function test_a_plugin_update_opens_the_role_window_until_it_finishes() {
+		global $wpdb;
+		$temp    = $this->temp();
+		$key     = $wpdb->prefix . 'user_roles';
+		$changed = get_option( $key );
+		$changed['administrator']['name'] = 'Updated';
+		wp_set_current_user( $temp );
+
+		$this->assertSame( 'kept', apply_filters( 'upgrader_pre_install', 'kept', array() ) );
+		update_option( $key, $changed );
+		$this->assertSame( 'Updated', get_option( $key )['administrator']['name'] );
+		CapabilityGuard::plugin_work_finished();
+	}
+
+	public function test_an_unchanged_role_table_write_during_activation_is_not_logged() {
+		global $wpdb;
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+		do_action( 'activate_plugin', 'x/x.php', false );
+		update_option( $wpdb->prefix . 'user_roles', get_option( $wpdb->prefix . 'user_roles' ) );
+		do_action( 'activated_plugin', 'x/x.php', false );
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'roles_changed' ) )['total'] );
 	}
 
 	public function test_temp_user_cannot_delete_protected_options() {

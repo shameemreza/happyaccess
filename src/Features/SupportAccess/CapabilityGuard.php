@@ -7,7 +7,9 @@
 
 namespace HappyAccess\Features\SupportAccess;
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Internal;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -115,6 +117,14 @@ final class CapabilityGuard {
 	private static $rules = array();
 
 	/**
+	 * How many plugin activations or updates are running in this request.
+	 * While it is above zero, a temp user's role table writes are allowed.
+	 *
+	 * @var int
+	 */
+	private static $plugin_writes = 0;
+
+	/**
 	 * Hooks everything the guard needs.
 	 *
 	 * @return void
@@ -129,15 +139,49 @@ final class CapabilityGuard {
 		add_action( 'delete_option', array( __CLASS__, 'block_option_delete' ) );
 		add_filter( 'all_plugins', array( __CLASS__, 'hide_plugin' ) );
 		add_filter( 'users_list_table_query_args', array( __CLASS__, 'hide_owner' ) );
+		add_action( 'activate_plugin', array( __CLASS__, 'plugin_work_started' ), 10, 2 );
+		add_filter( 'upgrader_pre_install', array( __CLASS__, 'upgrade_work_started' ) );
+		add_action( 'activated_plugin', array( __CLASS__, 'plugin_work_finished' ) );
+		add_action( 'upgrader_process_complete', array( __CLASS__, 'plugin_work_finished' ) );
 	}
 
 	/**
-	 * Clears the per request rules cache.
+	 * Counts a plugin activation as started.
+	 *
+	 * @return void
+	 */
+	public static function plugin_work_started() {
+		++self::$plugin_writes;
+	}
+
+	/**
+	 * Counts a plugin update as started. This is a filter, so it returns its first argument.
+	 *
+	 * @param mixed $response Filter value, returned as it came.
+	 * @return mixed
+	 */
+	public static function upgrade_work_started( $response = null ) {
+		++self::$plugin_writes;
+		return $response;
+	}
+
+	/**
+	 * Counts a plugin activation or update as finished.
+	 *
+	 * @return void
+	 */
+	public static function plugin_work_finished() {
+		self::$plugin_writes = max( 0, self::$plugin_writes - 1 );
+	}
+
+	/**
+	 * Clears the per request rules cache and the plugin work counter.
 	 *
 	 * @return void
 	 */
 	public static function flush_cache() {
-		self::$rules = array();
+		self::$rules         = array();
+		self::$plugin_writes = 0;
 	}
 
 	/**
@@ -282,12 +326,30 @@ final class CapabilityGuard {
 	 * @return mixed
 	 */
 	public static function keep_old_option( $value, $option = '', $old_value = null ) {
-		if ( ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+		if ( Internal::active() ) {
+			return $value;
+		}
+		$user_id = get_current_user_id();
+		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
 		}
 		if ( 'active_plugins' === $option ) {
 			if ( is_array( $value ) && is_array( $old_value ) && in_array( HAPPYACCESS_PLUGIN_BASENAME, $old_value, true ) && ! in_array( HAPPYACCESS_PLUGIN_BASENAME, $value, true ) ) {
 				$value[] = HAPPYACCESS_PLUGIN_BASENAME;
+			}
+			return $value;
+		}
+		if ( self::$plugin_writes > 0 && self::is_roles_option( $option ) ) {
+			if ( $value !== $old_value ) {
+				AuditLog::add(
+					'roles_changed',
+					array(
+						'feature'  => 'support',
+						'token_id' => Capabilities::grant_id( $user_id ),
+						'user_id'  => $user_id,
+						'summary'  => 'Roles changed while activating or updating a plugin',
+					)
+				);
 			}
 			return $value;
 		}
@@ -301,7 +363,7 @@ final class CapabilityGuard {
 	 * @return void
 	 */
 	public static function block_option_delete( $option ) {
-		if ( ! self::is_protected_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
+		if ( Internal::active() || ! self::is_protected_option( $option ) || ! Capabilities::is_temp_user( get_current_user_id() ) ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -380,6 +442,17 @@ final class CapabilityGuard {
 		}
 		$folder = dirname( HAPPYACCESS_PLUGIN_BASENAME );
 		return '.' !== $folder && strtolower( (string) strtok( $file, '/' ) ) === strtolower( $folder );
+	}
+
+	/**
+	 * Whether an option is the role table of this site.
+	 *
+	 * @param mixed $option Option name.
+	 * @return bool
+	 */
+	private static function is_roles_option( $option ) {
+		global $wpdb;
+		return is_string( $option ) && $wpdb->prefix . 'user_roles' === $option;
 	}
 
 	/**

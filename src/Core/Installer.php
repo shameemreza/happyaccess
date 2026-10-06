@@ -121,7 +121,11 @@ final class Installer {
 			return;
 		}
 		try {
-			$failure = self::run_migration();
+			$failure = Internal::run(
+				static function () {
+					return self::run_migration();
+				}
+			);
 			if ( '' === $failure ) {
 				delete_transient( self::FAILED_TRANSIENT );
 			} else {

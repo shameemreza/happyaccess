@@ -109,7 +109,11 @@ final class Settings {
 	 */
 	public static function update( array $changes ) {
 		$merged = self::clean( self::defaults(), array_replace_recursive( self::all(), $changes ), '' );
-		update_option( self::OPTION, $merged, true );
+		Internal::run(
+			static function () use ( $merged ) {
+				update_option( self::OPTION, $merged, true );
+			}
+		);
 		return $merged;
 	}
 

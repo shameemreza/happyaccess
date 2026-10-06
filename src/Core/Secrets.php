@@ -60,10 +60,18 @@ final class Secrets {
 
 		if ( $stored === $missing ) {
 			// Missing. INSERT IGNORE creates the row in one statement, so a request that lost the race leaves the winner's key alone.
-			Installer::insert_option_once( self::OPTION, $encoded );
+			Internal::run(
+				static function () use ( $encoded ) {
+					Installer::insert_option_once( self::OPTION, $encoded );
+				}
+			);
 		} else {
 			// Exists but unusable (empty, array, bad base64): repair it.
-			update_option( self::OPTION, $encoded, false );
+			Internal::run(
+				static function () use ( $encoded ) {
+					update_option( self::OPTION, $encoded, false );
+				}
+			);
 		}
 
 		// Always re-read from the database and adopt what is stored, so a concurrent request's key wins.

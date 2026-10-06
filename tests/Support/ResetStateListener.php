@@ -26,8 +26,12 @@ class HappyAccess_Test_Reset_State_Listener implements TestListener {
 	 */
 	public function startTest( Test $test ): void {
 		\HappyAccess\Core\Secrets::reset_cache();
+		\HappyAccess\Core\Internal::reset();
 		if ( class_exists( '\HappyAccess\Features\SupportAccess\Grants' ) ) {
 			\HappyAccess\Features\SupportAccess\Grants::flush_cache();
+		}
+		if ( class_exists( '\HappyAccess\Features\SupportAccess\CapabilityGuard' ) ) {
+			\HappyAccess\Features\SupportAccess\CapabilityGuard::flush_cache();
 		}
 	}
 }
