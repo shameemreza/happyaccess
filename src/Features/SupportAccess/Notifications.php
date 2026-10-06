@@ -11,6 +11,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
+use HappyAccess\Core\EventLabels;
 use HappyAccess\Core\Internal;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\Settings;
@@ -118,7 +119,7 @@ final class Notifications {
 		);
 		$activity = array();
 		foreach ( $log['items'] as $item ) {
-			$line = '' !== (string) $item['summary'] ? (string) $item['summary'] : self::event_name( (string) $item['event_type'] );
+			$line = '' !== (string) $item['summary'] ? (string) $item['summary'] : EventLabels::label( (string) $item['event_type'] );
 			if ( '' !== $line ) {
 				$activity[] = $line;
 			}

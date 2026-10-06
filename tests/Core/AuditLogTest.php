@@ -121,4 +121,36 @@ class AuditLogTest extends WP_UnitTestCase {
 
 		remove_filter( 'determine_current_user', $count, 1 );
 	}
+
+	public function test_search_matches_the_summary_and_treats_wildcards_literally() {
+		AuditLog::add( 'settings_saved', array( 'summary' => 'Changed shipping zones' ) );
+		AuditLog::add( 'settings_saved', array( 'summary' => 'Changed tax rates' ) );
+		AuditLog::add( 'settings_saved', array( 'summary' => 'Discount 50%_off set' ) );
+		AuditLog::add( 'settings_saved', array( 'summary' => 'Discount 500 set' ) );
+
+		$result = AuditLog::query( array( 'search' => 'shipping' ) );
+		$this->assertSame( 1, $result['total'] );
+		$this->assertSame( 'Changed shipping zones', $result['items'][0]['summary'] );
+
+		$literal = AuditLog::query( array( 'search' => '50%_' ) );
+		$this->assertSame( 1, $literal['total'] );
+		$this->assertSame( 'Discount 50%_off set', $literal['items'][0]['summary'] );
+
+		$this->assertSame( 4, AuditLog::query( array( 'search' => '' ) )['total'] );
+	}
+
+	public function test_search_is_cut_to_100_characters() {
+		AuditLog::add( 'settings_saved', array( 'summary' => str_repeat( 'a', 100 ) ) );
+		$this->assertSame( 1, AuditLog::query( array( 'search' => str_repeat( 'a', 100 ) . 'zzz' ) )['total'] );
+	}
+
+	public function test_features_filter_matches_any_listed_feature() {
+		AuditLog::add( 'login_success', array( 'feature' => 'support' ) );
+		AuditLog::add( 'plugin_upgraded', array( 'feature' => 'core' ) );
+		AuditLog::add( 'other', array( 'feature' => 'extra' ) );
+
+		$this->assertSame( 2, AuditLog::query( array( 'features' => array( 'support', 'core' ) ) )['total'] );
+		$this->assertSame( 1, AuditLog::query( array( 'features' => array( 'extra' ) ) )['total'] );
+		$this->assertSame( 3, AuditLog::query( array( 'features' => array() ) )['total'] );
+	}
 }

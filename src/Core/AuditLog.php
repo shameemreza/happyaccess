@@ -85,9 +85,20 @@ final class AuditLog {
 	}
 
 	/**
+	 * Cuts a string to a number of characters.
+	 *
+	 * @param string $value Text.
+	 * @param int    $chars Maximum characters.
+	 * @return string
+	 */
+	private static function clip_chars( $value, $chars ) {
+		return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, $chars, 'UTF-8' ) : substr( $value, 0, $chars );
+	}
+
+	/**
 	 * Reads entries, newest first.
 	 *
-	 * @param array $filters feature, event, user_id, token_id, since, until, page, per_page.
+	 * @param array $filters feature, features, event, user_id, token_id, search, since, until, page, per_page.
 	 * @return array items, total, page, per_page.
 	 */
 	public static function query( array $filters = array() ) {
@@ -97,9 +108,11 @@ final class AuditLog {
 			$filters,
 			array(
 				'feature'  => '',
+				'features' => array(),
 				'event'    => '',
 				'user_id'  => 0,
 				'token_id' => 0,
+				'search'   => '',
 				'since'    => '',
 				'until'    => '',
 				'page'     => 1,
@@ -114,6 +127,11 @@ final class AuditLog {
 			$where[]  = 'feature = %s';
 			$params[] = sanitize_key( $f['feature'] );
 		}
+		$features = array_values( array_filter( array_map( 'sanitize_key', (array) $f['features'] ) ) );
+		if ( $features ) {
+			$where[] = 'feature IN ( ' . implode( ', ', array_fill( 0, count( $features ), '%s' ) ) . ' )';
+			$params  = array_merge( $params, $features );
+		}
 		if ( '' !== $f['event'] ) {
 			$where[]  = 'event_type = %s';
 			$params[] = sanitize_key( $f['event'] );
@@ -125,6 +143,11 @@ final class AuditLog {
 		if ( $f['token_id'] ) {
 			$where[]  = 'token_id = %d';
 			$params[] = absint( $f['token_id'] );
+		}
+		$search = self::clip_chars( sanitize_text_field( (string) $f['search'] ), 100 );
+		if ( '' !== $search ) {
+			$where[]  = 'summary LIKE %s';
+			$params[] = '%' . $wpdb->esc_like( $search ) . '%';
 		}
 		if ( '' !== $f['since'] ) {
 			$where[]  = 'created_at >= %s';
