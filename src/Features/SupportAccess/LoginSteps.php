@@ -51,7 +51,7 @@ final class LoginSteps {
 	 * @return void
 	 */
 	public static function print_code_link() {
-		if ( ! Grants::has_current() ) {
+		if ( ! self::db_ready() || ! Grants::has_current() ) {
 			return;
 		}
 		printf(
@@ -143,8 +143,7 @@ final class LoginSteps {
 			return self::code_screen( self::code_error() );
 		}
 
-		$response = self::log_in( $grant, 'code' );
-		return null === $response ? self::code_screen( self::code_error() ) : $response;
+		return self::log_in( $grant, 'code' );
 	}
 
 	/**
@@ -169,7 +168,13 @@ final class LoginSteps {
 		}
 
 		if ( ! self::nonce_ok( $post, 'happyaccess_link' ) ) {
-			return self::link_error();
+			// A stale page with a key that still works gets a fresh confirm screen instead of a dead end.
+			$key   = self::text( $post, 'k' );
+			$stale = self::grant_for_link( $key );
+			if ( null === $stale ) {
+				return self::link_error();
+			}
+			return self::link_confirm( $stale, $key, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Select Log in again.', 'happyaccess' ) ) );
 		}
 
 		$wait = RateLimiter::attempt(
@@ -189,8 +194,7 @@ final class LoginSteps {
 			return self::link_error();
 		}
 
-		$response = self::log_in( $grant, 'link' );
-		return null === $response ? self::link_error() : $response;
+		return self::log_in( $grant, 'link' );
 	}
 
 	/**
@@ -228,27 +232,29 @@ final class LoginSteps {
 
 	/**
 	 * Signs the grant's temp user in. Call only after record_login() counted
-	 * the login.
+	 * the login. The audit row and the owner alert are written before the
+	 * wp_login action, so a listener that exits can't skip them.
 	 *
 	 * @param array  $grant  Grant.
 	 * @param string $method code or link.
-	 * @return array|null Redirect response, or null when the user could not be created.
+	 * @return array Redirect response, or the setup_failed screen.
 	 */
 	public static function log_in( array $grant, $method ) {
+		$user_id = 0;
+		$reason  = 'user_missing';
 		try {
 			$user_id = TempUsers::get_or_create( $grant );
 		} catch ( \Exception $e ) {
-			return null;
+			$reason = $e->getMessage();
 		}
 
-		$user = get_userdata( $user_id );
+		$user = $user_id > 0 ? get_userdata( $user_id ) : false;
 		if ( false === $user ) {
-			return null;
+			return self::setup_failed( $grant, $reason );
 		}
 
 		wp_set_auth_cookie( $user_id, false );
 		wp_set_current_user( $user_id );
-		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
 
 		$action = 'link' === $method ? self::LINK_ACTION : self::CODE_ACTION;
 		RateLimiter::clear( $action, 'ip', RateLimiter::ip_subject() );
@@ -267,14 +273,42 @@ final class LoginSteps {
 			)
 		);
 
-		$fresh = Grants::get( $grant['id'] );
-		$fresh = null === $fresh ? $grant : $fresh;
-		Notifications::login( $fresh, 1 === (int) $fresh['login_count'], $method );
+		$login_count = Grants::last_login_count();
+		Notifications::login( $grant, 1 === $login_count, $method );
 
-		$to = '' !== $grant['redirect_to'] ? $grant['redirect_to'] : admin_url();
+		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
+
 		return array(
 			'type' => 'redirect',
-			'url'  => $to,
+			'url'  => '' !== $grant['redirect_to'] ? $grant['redirect_to'] : admin_url(),
+		);
+	}
+
+	/**
+	 * Logs and shows a failure to set up the temp user.
+	 *
+	 * @param array  $grant  Grant.
+	 * @param string $reason Why, for the log.
+	 * @return array
+	 */
+	private static function setup_failed( array $grant, $reason ) {
+		AuditLog::add(
+			'login_failed',
+			array(
+				'feature'  => 'support',
+				'token_id' => $grant['id'],
+				'user_id'  => 0,
+				'summary'  => __( "Couldn't set up the support account", 'happyaccess' ),
+				'meta'     => array( 'reason' => mb_substr( (string) $reason, 0, 190 ) ),
+			)
+		);
+
+		return array(
+			'type'    => 'render',
+			'title'   => __( 'Support access', 'happyaccess' ),
+			'body'    => '',
+			'errors'  => new \WP_Error( 'setup_failed', esc_html__( "Couldn't set up your support account. Ask the site owner to send a new link or code.", 'happyaccess' ) ),
+			'message' => '',
 		);
 	}
 
@@ -373,7 +407,7 @@ final class LoginSteps {
 	 * @return \WP_Error
 	 */
 	private static function code_error() {
-		return new \WP_Error( 'invalid_code', __( "That code didn't work. Check it and try again.", 'happyaccess' ) );
+		return new \WP_Error( 'invalid_code', esc_html__( "That code didn't work. Check it and try again.", 'happyaccess' ) );
 	}
 
 	/**
@@ -386,10 +420,12 @@ final class LoginSteps {
 		$minutes = max( 1, (int) ceil( $wait / MINUTE_IN_SECONDS ) );
 		return new \WP_Error(
 			'locked',
-			sprintf(
-				/* translators: %d: minutes. */
-				_n( 'Too many attempts. Try again in %d minute.', 'Too many attempts. Try again in %d minutes.', $minutes, 'happyaccess' ),
-				$minutes
+			esc_html(
+				sprintf(
+					/* translators: %d: minutes. */
+					_n( 'Too many attempts. Try again in %d minute.', 'Too many attempts. Try again in %d minutes.', $minutes, 'happyaccess' ),
+					$minutes
+				)
 			)
 		);
 	}
@@ -400,7 +436,7 @@ final class LoginSteps {
 	 * @return string
 	 */
 	private static function updating_text() {
-		return __( 'Support access is updating. Try again in a minute.', 'happyaccess' );
+		return esc_html__( 'Support access is updating. Try again in a minute.', 'happyaccess' );
 	}
 
 	/**
@@ -431,9 +467,10 @@ final class LoginSteps {
 	 *
 	 * @param array  $grant Grant.
 	 * @param string $key   Link key from the URL.
+	 * @param \WP_Error|null $errors Errors to show.
 	 * @return array
 	 */
-	private static function link_confirm( array $grant, $key ) {
+	private static function link_confirm( array $grant, $key, $errors = null ) {
 		$question = sprintf(
 			/* translators: 1: site name, 2: grant label. */
 			__( 'Log in to %1$s as %2$s?', 'happyaccess' ),
@@ -452,7 +489,7 @@ final class LoginSteps {
 			'type'    => 'render',
 			'title'   => __( 'Support access', 'happyaccess' ),
 			'body'    => $body,
-			'errors'  => null,
+			'errors'  => $errors,
 			'message' => '',
 		);
 	}
@@ -465,7 +502,7 @@ final class LoginSteps {
 	 */
 	private static function link_error( $errors = null ) {
 		if ( null === $errors ) {
-			$errors = new \WP_Error( 'invalid_link', __( "This link has expired or isn't valid anymore.", 'happyaccess' ) );
+			$errors = new \WP_Error( 'invalid_link', esc_html__( "This link has expired or isn't valid anymore.", 'happyaccess' ) );
 		}
 		return array(
 			'type'    => 'render',

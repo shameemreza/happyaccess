@@ -55,6 +55,34 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertSame( (string) $user_id, $wpdb->get_var( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = 7' ) );
 	}
 
+	public function test_losing_a_parallel_create_keeps_one_temp_user_and_returns_the_winner() {
+		global $wpdb;
+		$stale  = $this->grant();
+		$winner = TempUsers::create( $stale );
+		$this->assertSame( 0, $stale['user_id'] );
+
+		$returned = TempUsers::get_or_create( $stale );
+
+		$this->assertSame( $winner, $returned );
+		$this->assertSame( $winner, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = %d', 7 ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$temp = get_users( array( 'meta_key' => 'happyaccess_token_id', 'meta_value' => 7, 'fields' => 'ID' ) ); // phpcs:ignore WordPress.DB.SlowDBQuery
+		$this->assertSame( array( $winner ), array_map( 'intval', $temp ) );
+	}
+
+	public function test_a_stale_link_to_a_deleted_user_is_replaced() {
+		global $wpdb;
+		$grant = $this->grant();
+		$gone  = TempUsers::create( $grant );
+		wp_delete_user( $gone );
+		$grant['user_id'] = $gone;
+
+		$fresh = TempUsers::get_or_create( $grant );
+
+		$this->assertNotSame( $gone, $fresh );
+		$this->assertSame( $fresh, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = %d', 7 ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$this->assertNotFalse( get_userdata( $fresh ) );
+	}
+
 	public function test_get_or_create_reuses_a_live_temp_user() {
 		$grant            = $this->grant();
 		$first            = TempUsers::get_or_create( $grant );

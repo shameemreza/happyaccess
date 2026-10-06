@@ -41,6 +41,13 @@ final class Grants {
 	private static $resolved = array();
 
 	/**
+	 * Login count written by the last successful record_login(), 0 when unknown.
+	 *
+	 * @var int
+	 */
+	private static $last_login_count = 0;
+
+	/**
 	 * Creates a grant.
 	 *
 	 * @param array $args label, email, role, duration, one_time, ips, menus, hide_admin_bar, redirect_to, allow_installs, notify, created_by.
@@ -506,12 +513,29 @@ final class Grants {
 		global $wpdb;
 		$now   = Clock::mysql();
 		$table = Installer::table( 'tokens' );
-		$sql   = "UPDATE {$table} SET use_count = use_count + 1, login_count = login_count + 1, last_login_at = %s, used_at = COALESCE( used_at, %s )
+		$sql   = "UPDATE {$table} SET use_count = use_count + 1, login_count = LAST_INSERT_ID( login_count + 1 ), last_login_at = %s, used_at = COALESCE( used_at, %s )
 			WHERE id = %d AND revoked_at IS NULL AND suspended_at IS NULL AND expires_at > %s AND ( max_uses = 0 OR use_count < max_uses )";
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Custom table; the query is prepared here.
 		$changed = $wpdb->query( $wpdb->prepare( $sql, $now, $now, (int) $id, $now ) );
 		self::flush_cache();
-		return 1 === $changed;
+
+		self::$last_login_count = 0;
+		if ( 1 !== $changed ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reads this connection's value set by the UPDATE above.
+		self::$last_login_count = (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' );
+		return true;
+	}
+
+	/**
+	 * Login count that the last successful record_login() wrote. It comes from
+	 * the same UPDATE, so two parallel first logins can't both see 1.
+	 *
+	 * @return int 0 when unknown.
+	 */
+	public static function last_login_count() {
+		return self::$last_login_count;
 	}
 
 	/**

@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
@@ -218,7 +219,7 @@ class LoginStepsTest extends WP_UnitTestCase {
 				'_wpnonce' => 'nope',
 			)
 		);
-		$this->assertSame( array( 'invalid_link' ), $bad['errors']->get_error_codes() );
+		$this->assertSame( array( 'expired_page' ), $bad['errors']->get_error_codes() );
 		$none = LoginSteps::handle_link(
 			'POST',
 			array(),
@@ -228,6 +229,8 @@ class LoginStepsTest extends WP_UnitTestCase {
 			)
 		);
 		$this->assertSame( array( 'invalid_link' ), $none['errors']->get_error_codes() );
+		$gone = LoginSteps::handle_link( 'POST', array(), array( 'k' => 'nope', '_wpnonce' => 'nope' ) );
+		$this->assertSame( array( 'invalid_link' ), $gone['errors']->get_error_codes() );
 		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
 	}
 
@@ -256,5 +259,57 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$this->assertNotSame( $expired['body'], $default['body'] );
 		$odd = LoginSteps::handle_ended( array( 'reason' => '<script>' ) );
 		$this->assertSame( $default['body'], $odd['body'] );
+	}
+
+	public function test_expired_nonce_on_a_valid_link_shows_the_confirm_screen_again() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		$res  = LoginSteps::handle_link( 'POST', array(), array( 'k' => $made['link_key'], '_wpnonce' => 'old' ) );
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'expired_page' ), $res['errors']->get_error_codes() );
+		$this->assertStringContainsString( 'This page expired. Select Log in again.', $res['errors']->get_error_message() );
+		$this->assertStringContainsString( 'Acme', $res['body'] );
+		$this->assertStringContainsString( '_wpnonce', $res['body'] );
+		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
+	}
+
+	public function test_setup_failure_is_reported_and_logged() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+		add_filter( 'pre_user_login', '__return_empty_string' );
+		$res = $this->post_code( $made['code'] );
+		remove_filter( 'pre_user_login', '__return_empty_string' );
+
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'setup_failed' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, get_current_user_id() );
+		$rows = AuditLog::query( array( 'event' => 'login_failed' ) )['items'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $made['id'], (int) $rows[0]['token_id'] );
+		$this->assertSame( "Couldn't set up the support account", $rows[0]['summary'] );
+		$this->assertNotEmpty( $rows[0]['meta']['reason'] );
+	}
+
+	public function test_audit_and_alert_happen_before_the_wp_login_action() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+		$seen = array();
+		$spy  = function () use ( &$seen, $made ) {
+			$seen['audit'] = ! empty( AuditLog::query( array( 'event' => 'login_success' ) )['items'] );
+			$seen['count'] = Grants::get( $made['id'] )['login_count'];
+		};
+		add_action( 'wp_login', $spy );
+		$this->post_code( $made['code'] );
+		remove_action( 'wp_login', $spy );
+		$this->assertTrue( $seen['audit'] );
+		$this->assertSame( 1, $seen['count'] );
+	}
+
+	public function test_login_form_link_is_hidden_during_migration() {
+		LoginSteps::register();
+		Grants::create( array( 'label' => 'Acme' ) );
+		update_option( 'happyaccess_db_version', '1.0.4' );
+		ob_start();
+		do_action( 'login_form' );
+		$this->assertStringNotContainsString( 'happyaccess-code-link', ob_get_clean() );
 	}
 }

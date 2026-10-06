@@ -64,9 +64,7 @@ final class TempUsers {
 		}
 		$user_id = (int) $user_id;
 
-		self::set_grant_user( (int) $grant['id'], $user_id );
-
-		return $user_id;
+		return self::link_or_yield( $grant, $user_id );
 	}
 
 	/**
@@ -78,13 +76,66 @@ final class TempUsers {
 	 */
 	public static function get_or_create( array $grant ) {
 		$user_id = isset( $grant['user_id'] ) ? (int) $grant['user_id'] : 0;
-		if ( $user_id > 0 && false !== get_userdata( $user_id ) && self::belongs_to_grant( $user_id, $grant ) ) {
-			$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
-			if ( 0 === $blog_id || get_current_blog_id() === $blog_id ) {
+		if ( self::usable( $user_id, $grant ) ) {
+			return $user_id;
+		}
+		return self::create( $grant );
+	}
+
+	/**
+	 * Links a freshly created user to the grant, unless another request linked
+	 * one first. A losing request deletes its own user and returns the winner's,
+	 * so parallel first logins end up with one temp user.
+	 *
+	 * @param array $grant   Grant with id.
+	 * @param int   $user_id Newly created user.
+	 * @return int User id that is linked to the grant.
+	 * @throws \RuntimeException When no usable user could be linked.
+	 */
+	private static function link_or_yield( array $grant, $user_id ) {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		$id    = (int) $grant['id'];
+
+		for ( $try = 0; $try < 2; $try++ ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+			$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET user_id = %d WHERE id = %d AND ( user_id IS NULL OR user_id = 0 )", $user_id, $id ) );
+			if ( 1 === $changed ) {
+				return $user_id;
+			}
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+			$current = (int) $wpdb->get_var( $wpdb->prepare( "SELECT user_id FROM {$table} WHERE id = %d", $id ) );
+			if ( self::usable( $current, $grant ) ) {
+				self::remove_user( $user_id, null );
+				return $current;
+			}
+
+			// The row points at a user that is gone or not usable: take it over only if it is still that value.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+			$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET user_id = %d WHERE id = %d AND user_id = %d", $user_id, $id, $current ) );
+			if ( 1 === $changed ) {
 				return $user_id;
 			}
 		}
-		return self::create( $grant );
+
+		self::remove_user( $user_id, null );
+		throw new \RuntimeException( 'HappyAccess could not link the support user to the grant.' );
+	}
+
+	/**
+	 * Whether a user id is a live temp user of this grant on this site.
+	 *
+	 * @param int   $user_id User id.
+	 * @param array $grant   Grant with id.
+	 * @return bool
+	 */
+	private static function usable( $user_id, array $grant ) {
+		if ( $user_id < 1 || false === get_userdata( $user_id ) || ! self::belongs_to_grant( $user_id, $grant ) ) {
+			return false;
+		}
+		$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
+		return 0 === $blog_id || get_current_blog_id() === $blog_id;
 	}
 
 	/**
@@ -110,30 +161,13 @@ final class TempUsers {
 
 		self::destroy_sessions( $user_id );
 
-		if ( ! function_exists( 'wp_delete_user' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-		}
-		if ( is_multisite() && ! function_exists( 'wpmu_delete_user' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/ms.php';
-		}
-
 		$reassign = null;
 		if ( ! empty( $grant['created_by'] ) && false !== get_userdata( (int) $grant['created_by'] ) ) {
 			$reassign = (int) $grant['created_by'];
 		}
 
-		$login = $user->user_login;
-		if ( is_multisite() ) {
-			$other_blogs = array_diff( array_keys( (array) get_blogs_of_user( $user_id ) ), array( get_current_blog_id() ) );
-			// Removing from the blog first reassigns posts and links; wpmu_delete_user alone would delete them.
-			$removed = remove_user_from_blog( $user_id, get_current_blog_id(), $reassign );
-			$deleted = ! is_wp_error( $removed );
-			if ( $deleted && empty( $other_blogs ) ) {
-				$deleted = wpmu_delete_user( $user_id );
-			}
-		} else {
-			$deleted = wp_delete_user( $user_id, $reassign );
-		}
+		$login   = $user->user_login;
+		$deleted = self::remove_user( $user_id, $reassign );
 		if ( ! $deleted ) {
 			return false;
 		}
@@ -151,6 +185,35 @@ final class TempUsers {
 		);
 
 		return true;
+	}
+
+	/**
+	 * Removes a user from this site, and from the network when no other site
+	 * uses it.
+	 *
+	 * @param int      $user_id  User id.
+	 * @param int|null $reassign Who gets the user's posts and links, or null.
+	 * @return bool
+	 */
+	private static function remove_user( $user_id, $reassign ) {
+		if ( ! function_exists( 'wp_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		if ( is_multisite() && ! function_exists( 'wpmu_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/ms.php';
+		}
+
+		if ( is_multisite() ) {
+			$other_blogs = array_diff( array_keys( (array) get_blogs_of_user( $user_id ) ), array( get_current_blog_id() ) );
+			// Removing from the blog first reassigns posts and links; wpmu_delete_user alone would delete them.
+			$removed = remove_user_from_blog( $user_id, get_current_blog_id(), $reassign );
+			$deleted = ! is_wp_error( $removed );
+			if ( $deleted && empty( $other_blogs ) ) {
+				$deleted = wpmu_delete_user( $user_id );
+			}
+			return (bool) $deleted;
+		}
+		return (bool) wp_delete_user( $user_id, $reassign );
 	}
 
 	/**

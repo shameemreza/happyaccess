@@ -187,6 +187,17 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertSame( 1790000000, $grant['last_login_at'] );
 	}
 
+	public function test_last_login_count_follows_the_updating_statement() {
+		list( $id ) = $this->grant_with_user();
+		$this->assertTrue( Grants::record_login( $id ) );
+		$this->assertSame( 1, Grants::last_login_count() );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$this->assertSame( 2, Grants::last_login_count() );
+		Grants::suspend( $id );
+		$this->assertFalse( Grants::record_login( $id ) );
+		$this->assertSame( 0, Grants::last_login_count() );
+	}
+
 	public function test_record_login_fails_for_suspended_and_expired() {
 		list( $id ) = $this->grant_with_user();
 		Grants::suspend( $id );
