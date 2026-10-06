@@ -77,4 +77,106 @@ class RateLimiterTest extends WP_UnitTestCase {
 		Clock::freeze( 1790000000 + 2 * DAY_IN_SECONDS );
 		$this->assertSame( 2, RateLimiter::purge( DAY_IN_SECONDS ) );
 	}
+
+	public function test_attempt_allows_limit_tries_then_locks() {
+		for ( $i = 1; $i <= 5; $i++ ) {
+			$this->assertSame( 0, RateLimiter::attempt( 'support_code', 'ip', '203.0.113.9', 5, 900, 1800 ), 'Try ' . $i );
+		}
+		$this->assertSame( 1800, RateLimiter::attempt( 'support_code', 'ip', '203.0.113.9', 5, 900, 1800 ) );
+	}
+
+	public function test_a_locked_attempt_does_not_insert() {
+		$this->hits( 5 );
+
+		$this->assertGreaterThan( 0, RateLimiter::attempt( 'support_code', 'ip', '203.0.113.9', 5, 900, 1800 ) );
+		$this->assertGreaterThan( 0, RateLimiter::attempt( 'support_code', 'ip', '203.0.113.9', 5, 900, 1800 ) );
+
+		$this->assertSame( 5, RateLimiter::count( 'support_code', 'ip', '203.0.113.9', 900 ) );
+	}
+
+	public function test_attempt_fails_closed_when_the_insert_fails() {
+		global $wpdb;
+		$attempts = Installer::table( 'attempts' );
+		$break    = static function ( $query ) use ( $attempts ) {
+			return 0 === strpos( $query, "INSERT INTO `{$attempts}`" ) ? 'INSERT this is not valid sql' : $query;
+		};
+		add_filter( 'query', $break );
+		$suppress = $wpdb->suppress_errors( true );
+
+		$wait = RateLimiter::attempt( 'support_code', 'ip', '203.0.113.9', 5, 900, 1800 );
+		$hit  = RateLimiter::hit( 'support_code', 'ip', '203.0.113.9' );
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $break );
+
+		$this->assertSame( 1800, $wait );
+		$this->assertFalse( $hit );
+		$this->assertSame( 0, RateLimiter::count( 'support_code', 'ip', '203.0.113.9', 900 ) );
+	}
+
+	public function test_a_working_insert_returns_true() {
+		$this->assertTrue( RateLimiter::hit( 'support_code', 'ip', '203.0.113.9' ) );
+	}
+
+	public function test_unknown_scope_throws_everywhere() {
+		$calls = array(
+			static function () {
+				RateLimiter::hit( 'support_code', 'user', 'x' );
+			},
+			static function () {
+				RateLimiter::count( 'support_code', 'user', 'x', 900 );
+			},
+			static function () {
+				RateLimiter::retry_after( 'support_code', 'user', 'x', 5, 900, 1800 );
+			},
+			static function () {
+				RateLimiter::attempt( 'support_code', 'user', 'x', 5, 900, 1800 );
+			},
+			static function () {
+				RateLimiter::clear( 'support_code', 'user', 'x' );
+			},
+		);
+		foreach ( $calls as $index => $call ) {
+			try {
+				$call();
+				$this->fail( 'Call ' . $index . ' accepted an unknown scope.' );
+			} catch ( \InvalidArgumentException $e ) {
+				$this->assertStringContainsString( 'scope', $e->getMessage() );
+			}
+		}
+	}
+
+	public function test_raw_subject_never_reaches_the_identifier_column() {
+		global $wpdb;
+		RateLimiter::hit( 'support_code', 'account', 'Person@Example.com' );
+
+		$identifier = $wpdb->get_var( 'SELECT identifier FROM ' . Installer::table( 'attempts' ) );
+
+		$this->assertStringStartsWith( 'support_code:', $identifier );
+		$this->assertStringNotContainsStringIgnoringCase( 'person', $identifier );
+		$this->assertStringNotContainsStringIgnoringCase( 'example', $identifier );
+	}
+
+	public function test_subject_is_trimmed_and_case_folded() {
+		RateLimiter::hit( 'support_code', 'account', 'Person@Example.com' );
+		RateLimiter::hit( 'support_code', 'account', '  person@example.COM ' );
+
+		$this->assertSame( 2, RateLimiter::count( 'support_code', 'account', 'PERSON@example.com', 900 ) );
+	}
+
+	public function test_exactly_limit_hits_inside_the_window_lock_and_one_fewer_does_not() {
+		for ( $i = 0; $i < 3; $i++ ) {
+			Clock::freeze( 1790000000 + $i * 300 );
+			RateLimiter::hit( 'support_code', 'ip', 'exact' );
+		}
+		$this->assertSame( 1800, RateLimiter::retry_after( 'support_code', 'ip', 'exact', 3, 600, 1800 ), 'Newest minus oldest equals the window.' );
+		$this->assertSame( 0, RateLimiter::retry_after( 'support_code', 'ip', 'exact', 4, 600, 1800 ), 'One hit short of the limit.' );
+
+		Clock::freeze( 1790000000 );
+		RateLimiter::hit( 'support_code', 'ip', 'wide' );
+		RateLimiter::hit( 'support_code', 'ip', 'wide' );
+		Clock::freeze( 1790000000 + 601 );
+		RateLimiter::hit( 'support_code', 'ip', 'wide' );
+		$this->assertSame( 0, RateLimiter::retry_after( 'support_code', 'ip', 'wide', 3, 600, 1800 ), 'Newest minus oldest is one second over the window.' );
+	}
 }
