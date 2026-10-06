@@ -178,6 +178,24 @@ class MenuGuardTest extends WP_UnitTestCase {
 		MenuGuard::block_screen( (object) array( 'post_type' => 'post', 'taxonomy' => 'category' ) );
 	}
 
+	public function test_matcher_taxonomy_screens_ignore_post_type() {
+		$this->assertTrue( MenuGuard::is_blocked( array( 'edit-tags.php?taxonomy=product_cat&post_type=product' ), 'edit-tags.php', '', 'post', array( 'taxonomy' => 'product_cat' ) ) );
+		$this->assertTrue( MenuGuard::is_blocked( array( 'edit-tags.php?taxonomy=category' ), 'edit-tags.php', '', 'page', array( 'taxonomy' => 'category', 'post_type' => 'page' ) ) );
+		$this->assertFalse( MenuGuard::is_blocked( array( 'edit-tags.php?taxonomy=product_cat&post_type=product' ), 'edit-tags.php', '', 'product', array( 'taxonomy' => 'product_tag' ) ) );
+	}
+
+	public function test_block_screen_maps_attachment_edit_to_upload() {
+		$temp = $this->temp_user_with_menus( array( 'upload.php' ) );
+		wp_set_current_user( $temp );
+		$GLOBALS['pagenow'] = 'post.php';
+		$this->expectException( WPDieException::class );
+		MenuGuard::block_screen( (object) array( 'post_type' => 'attachment' ) );
+	}
+
+	public function test_matcher_whole_slug_as_page_arg() {
+		$this->assertTrue( MenuGuard::is_blocked( array( 'wc-admin&path=/customers' ), 'admin.php', 'wc-admin&path=/customers', '', array() ) );
+	}
+
 	public function test_matcher_taxonomy_slugs() {
 		$product = array( 'edit-tags.php?taxonomy=product_cat&post_type=product' );
 		$this->assertTrue( MenuGuard::is_blocked( $product, 'edit-tags.php', '', 'product', array( 'taxonomy' => 'product_cat' ) ) );

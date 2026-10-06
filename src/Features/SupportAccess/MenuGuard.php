@@ -30,7 +30,7 @@ final class MenuGuard {
 	/**
 	 * Admin files that list posts of one type, "post" when the slug names none.
 	 */
-	const POST_TYPE_FILES = array( 'edit.php', 'post-new.php', 'edit-tags.php' );
+	const POST_TYPE_FILES = array( 'edit.php', 'post-new.php' );
 
 	/**
 	 * Per request cache of grant restrictions, keyed by blog, user and grant id.
@@ -157,13 +157,13 @@ final class MenuGuard {
 			}
 			$hit = self::is_blocked( $blocked, 'edit.php', '', 'post' === $post_type ? '' : $post_type, $list_query );
 		}
+		if ( ! $hit && 'post.php' === $pagenow && 'attachment' === $post_type ) {
+			// Media items are listed on upload.php.
+			$hit = self::is_blocked( $blocked, 'upload.php', '', '', $query );
+		}
 		if ( ! $hit && 'term.php' === $pagenow && isset( $query['taxonomy'] ) ) {
 			// A term edit screen belongs to its taxonomy list page.
-			$list_query = $query;
-			if ( '' === $post_type || 'post' === $post_type ) {
-				unset( $list_query['post_type'] );
-			}
-			$hit = self::is_blocked( $blocked, 'edit-tags.php', '', isset( $list_query['post_type'] ) ? $post_type : '', $list_query );
+			$hit = self::is_blocked( $blocked, 'edit-tags.php', '', '', array( 'taxonomy' => $query['taxonomy'] ) );
 		}
 		if ( ! $hit ) {
 			return;
@@ -330,6 +330,16 @@ final class MenuGuard {
 		$args = array();
 		if ( '' !== $sep ) {
 			wp_parse_str( substr( $slug, $pos + 1 ), $args );
+		}
+
+		if ( '&' === $sep && $page === $slug ) {
+			// An encoded ampersand ("wc-admin%26path=/customers") makes the whole slug the page arg.
+			return true;
+		}
+
+		if ( 'edit-tags.php' === $base ) {
+			// Taxonomy screens belong to the taxonomy, whatever post type the URL carries.
+			unset( $args['post_type'] );
 		}
 
 		$is_file = '?' === $sep;
