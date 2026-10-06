@@ -15,11 +15,16 @@ class MigrationTest extends WP_UnitTestCase {
 
 	/**
 	 * dbDelta's ALTER TABLE commits the test transaction, so rows written
-	 * before it, such as the migration lock, survive the rollback. Clear them.
+	 * before it, such as the migration lock, the seeded 1.0.6 options and temp
+	 * user meta, survive the rollback. Clear every happyaccess option, transient
+	 * and usermeta row, and commit the cleanup.
 	 */
 	private function clear_migration_state() {
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name IN (%s, %s, %s)", Installer::LOCK_OPTION, '_transient_' . Installer::FAILED_TRANSIENT, '_transient_timeout_' . Installer::FAILED_TRANSIENT ) );
+		$like = $wpdb->esc_like( 'happyaccess_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s", $like, '_transient_' . $like, '_transient_timeout_' . $like ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE meta_key LIKE %s", $like ) );
+		$wpdb->query( 'COMMIT' );
 		wp_cache_flush();
 	}
 
@@ -38,9 +43,7 @@ class MigrationTest extends WP_UnitTestCase {
 		Clock::freeze( null );
 		HappyAccess_Test_Legacy_Schema::drop_all();
 		parent::tear_down();
-		global $wpdb;
 		$this->clear_migration_state();
-		$wpdb->query( 'COMMIT' );
 	}
 
 	private function seed_legacy_data() {
@@ -249,48 +252,59 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertTrue( Codes::verify_code( '333333', $row['code_hash'] ) );
 	}
 
-	public function test_suspension_is_carried_by_user_meta_and_by_user_id_column() {
-		$by_meta = $this->insert_legacy_token( 'sus-meta' );
-		$by_col  = $this->insert_legacy_token( 'sus-col' );
-		$other   = $this->insert_legacy_token( 'sus-none' );
-
-		$meta_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $meta_user, 'happyaccess_temp_user', true );
-		update_user_meta( $meta_user, 'happyaccess_token_id', $by_meta );
-		update_user_meta( $meta_user, 'happyaccess_deactivated', true );
-
-		$col_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $col_user, 'happyaccess_deactivated', true );
+	public function test_suspension_is_carried_by_the_token_user_id_and_the_flag_is_kept() {
 		global $wpdb;
-		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'user_id' => $col_user ), array( 'id' => $by_col ) );
+		$suspended = $this->insert_legacy_token( 'sus-col' );
+		$other     = $this->insert_legacy_token( 'sus-none' );
+
+		$deactivated = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $deactivated, 'happyaccess_deactivated', true );
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'user_id' => $deactivated ), array( 'id' => $suspended ) );
 
 		$active_user = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $active_user, 'happyaccess_temp_user', true );
-		update_user_meta( $active_user, 'happyaccess_token_id', $other );
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'user_id' => $active_user ), array( 'id' => $other ) );
 
 		Installer::migrate();
 
-		$this->assertSame( Clock::mysql(), $this->token( 'sus-meta' )['suspended_at'] );
 		$this->assertSame( Clock::mysql(), $this->token( 'sus-col' )['suspended_at'] );
 		$this->assertNull( $this->token( 'sus-none' )['suspended_at'] );
-		$this->assertSame( '', (string) get_user_meta( $meta_user, 'happyaccess_deactivated', true ) );
-		$this->assertSame( '', (string) get_user_meta( $col_user, 'happyaccess_deactivated', true ) );
+		$this->assertTrue( (bool) get_user_meta( $deactivated, 'happyaccess_deactivated', true ), 'The migration leaves the old flag alone.' );
+	}
+
+	public function test_a_deactivated_user_that_is_not_in_the_token_user_id_column_does_not_suspend_it() {
+		$id = $this->insert_legacy_token( 'sus-foreign' );
+
+		// Another site's temp user: usermeta is network-wide and token ids are per site, so the meta can point at this site's token id.
+		$foreign = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $foreign, 'happyaccess_temp_user', true );
+		update_user_meta( $foreign, 'happyaccess_token_id', $id );
+		update_user_meta( $foreign, 'happyaccess_deactivated', true );
+
+		Installer::migrate();
+
+		$this->assertNull( $this->token( 'sus-foreign' )['suspended_at'] );
+		$this->assertTrue( (bool) get_user_meta( $foreign, 'happyaccess_deactivated', true ), 'Another site\'s suspension flag must survive.' );
 	}
 
 	public function test_existing_suspended_at_is_not_overwritten() {
 		global $wpdb;
-		$id = $this->insert_legacy_token( 'sus-old' );
-		Installer::install();
-		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'suspended_at' => '2026-01-02 03:04:05' ), array( 'id' => $id ) );
+		$id   = $this->insert_legacy_token( 'sus-old' );
 		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $user, 'happyaccess_temp_user', true );
-		update_user_meta( $user, 'happyaccess_token_id', $id );
 		update_user_meta( $user, 'happyaccess_deactivated', true );
+		Installer::install();
+		$wpdb->update(
+			$wpdb->prefix . 'happyaccess_tokens',
+			array(
+				'suspended_at' => '2026-01-02 03:04:05',
+				'user_id'      => $user,
+			),
+			array( 'id' => $id )
+		);
 
 		Installer::migrate();
 
 		$this->assertSame( '2026-01-02 03:04:05', $this->token( 'sus-old' )['suspended_at'] );
-		$this->assertSame( '', (string) get_user_meta( $user, 'happyaccess_deactivated', true ) );
+		$this->assertTrue( (bool) get_user_meta( $user, 'happyaccess_deactivated', true ) );
 	}
 
 	public function test_restrictions_are_built_from_ip_column_and_metadata() {
@@ -362,10 +376,10 @@ class MigrationTest extends WP_UnitTestCase {
 				),
 			)
 		);
+		global $wpdb;
 		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $user, 'happyaccess_temp_user', true );
-		update_user_meta( $user, 'happyaccess_token_id', $id );
 		update_user_meta( $user, 'happyaccess_deactivated', true );
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'user_id' => $user ), array( 'id' => $id ) );
 
 		Installer::migrate();
 		$first = $this->token( 'twice' );

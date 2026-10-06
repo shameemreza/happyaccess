@@ -29,7 +29,7 @@ final class Installer {
 	 * with an empty list only has to exist.
 	 */
 	const REQUIRED_COLUMNS = array(
-		'tokens'     => array( 'code_hash', 'link_hash', 'label', 'protection', 'restrictions', 'suspended_at', 'last_login_at', 'login_count' ),
+		'tokens'     => array( 'code_hash', 'link_hash', 'label', 'recipient_email', 'protection', 'restrictions', 'redirect_to', 'notify', 'suspended_at', 'last_login_at', 'login_count' ),
 		'logs'       => array( 'feature', 'summary' ),
 		'attempts'   => array( 'scope' ),
 		'challenges' => array(),
@@ -362,7 +362,7 @@ final class Installer {
 
 	/**
 	 * Carries 1.0.6 grant state into the 1.1.0 columns: the deactivated flag
-	 * on the temp user becomes suspended_at, the IP allowlist and the menu and
+	 * on the token's temp user becomes suspended_at (the flag itself stays), the IP allowlist and the menu and
 	 * admin bar settings become restrictions, and the note becomes the label.
 	 * The old columns stay as they are. Safe to run more than once.
 	 *
@@ -376,17 +376,12 @@ final class Installer {
 		$failed = false;
 
 		foreach ( (array) $rows as $row ) {
-			$data      = array();
-			$metadata  = empty( $row['metadata'] ) ? array() : json_decode( $row['metadata'], true );
-			$metadata  = is_array( $metadata ) ? $metadata : array();
-			$suspended = array();
+			$data     = array();
+			$metadata = empty( $row['metadata'] ) ? array() : json_decode( $row['metadata'], true );
+			$metadata = is_array( $metadata ) ? $metadata : array();
 
-			foreach ( self::legacy_temp_user_ids( $row ) as $user_id ) {
-				if ( get_user_meta( $user_id, 'happyaccess_deactivated', true ) ) {
-					$suspended[] = $user_id;
-				}
-			}
-			if ( ! empty( $suspended ) && empty( $row['suspended_at'] ) ) {
+			// Only the token's own user_id column is site-local. The happyaccess_token_id meta is network-wide while token ids are per site, so on multisite it can point at another site's token.
+			if ( ! empty( $row['user_id'] ) && empty( $row['suspended_at'] ) && get_user_meta( (int) $row['user_id'], 'happyaccess_deactivated', true ) ) {
 				$data['suspended_at'] = Clock::mysql();
 			}
 
@@ -407,33 +402,10 @@ final class Installer {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 			if ( ! empty( $data ) && false === $wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) ) ) {
 				$failed = true;
-				continue;
-			}
-
-			// Only after the grant row holds the state, so a failed write is retried with the flag still in place.
-			foreach ( $suspended as $user_id ) {
-				delete_user_meta( $user_id, 'happyaccess_deactivated' );
 			}
 		}
 
 		return $failed;
-	}
-
-	/**
-	 * Temp users that belong to a 1.0.6 token: the one on the row, plus any
-	 * user whose happyaccess_token_id meta points at it.
-	 *
-	 * @param array $row Token row.
-	 * @return int[]
-	 */
-	private static function legacy_temp_user_ids( array $row ) {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No Options API equivalent for a lookup by meta value.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s", 'happyaccess_token_id', (string) (int) $row['id'] ) );
-		if ( ! empty( $row['user_id'] ) ) {
-			$ids[] = $row['user_id'];
-		}
-		return array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
 	}
 
 	/**
