@@ -97,4 +97,17 @@ class NotificationsTest extends WP_UnitTestCase {
 	public function test_invalid_recipient_returns_false() {
 		$this->assertFalse( Mailer::send( 'nope', 'x', 'login-alert', array() ) );
 	}
+
+	public function test_site_lock_alert_works_inside_a_temp_users_request() {
+		\HappyAccess\Core\Capabilities::register();
+		\HappyAccess\Features\SupportAccess\CapabilityGuard::register();
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( \HappyAccess\Features\SupportAccess\TempUsers::get_or_create( Grants::get( $made['id'] ) ) );
+		reset_phpmailer_instance();
+
+		Notifications::site_lock( 60 );
+		Notifications::site_lock( 60 );
+
+		$this->assertCount( 1, $this->sent() );
+	}
 }

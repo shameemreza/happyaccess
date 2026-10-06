@@ -299,12 +299,22 @@ final class Notifications {
 	 * @return void
 	 */
 	public static function site_lock( $retry_after ) {
-		if ( get_transient( self::LOCK_TRANSIENT ) ) {
+		// Transient calls can add or delete an option, so they run inside the bypass.
+		$alerted = Internal::run(
+			static function () {
+				return get_transient( self::LOCK_TRANSIENT );
+			}
+		);
+		if ( $alerted ) {
 			return;
 		}
 
 		$retry_after = max( 60, (int) $retry_after );
-		set_transient( self::LOCK_TRANSIENT, 1, $retry_after );
+		Internal::run(
+			static function () use ( $retry_after ) {
+				set_transient( self::LOCK_TRANSIENT, 1, $retry_after );
+			}
+		);
 
 		Mailer::send(
 			(string) get_option( 'admin_email' ),

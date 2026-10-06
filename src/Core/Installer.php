@@ -102,7 +102,13 @@ final class Installer {
 	 */
 	public static function maybe_upgrade() {
 		// A failed run backs off for 15 minutes so every request doesn't retry it.
-		if ( false !== get_transient( self::FAILED_TRANSIENT ) ) {
+		// Transient calls can add or delete an option, so they run inside the bypass.
+		$failed = Internal::run(
+			static function () {
+				return get_transient( self::FAILED_TRANSIENT );
+			}
+		);
+		if ( false !== $failed ) {
 			return;
 		}
 		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
@@ -126,11 +132,15 @@ final class Installer {
 					return self::run_migration();
 				}
 			);
-			if ( '' === $failure ) {
-				delete_transient( self::FAILED_TRANSIENT );
-			} else {
-				set_transient( self::FAILED_TRANSIENT, $failure, 15 * MINUTE_IN_SECONDS );
-			}
+			Internal::run(
+				static function () use ( $failure ) {
+					if ( '' === $failure ) {
+						delete_transient( self::FAILED_TRANSIENT );
+					} else {
+						set_transient( self::FAILED_TRANSIENT, $failure, 15 * MINUTE_IN_SECONDS );
+					}
+				}
+			);
 		} finally {
 			self::release_lock();
 		}
