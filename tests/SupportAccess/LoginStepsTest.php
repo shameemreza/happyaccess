@@ -6,6 +6,7 @@
  */
 
 use HappyAccess\Core\AuditLog;
+use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
@@ -194,15 +195,76 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 0, (int) Grants::get( $made['id'] )['login_count'] );
 	}
 
-	public function test_login_form_link_only_with_current_grants() {
+	public function test_login_form_link_shows_whenever_the_feature_is_on() {
 		LoginSteps::register();
+		$this->assertFalse( Grants::has_current() );
 		ob_start();
 		do_action( 'login_form' );
-		$this->assertStringNotContainsString( 'happyaccess-code-link', ob_get_clean() );
+		$this->assertStringContainsString( 'happyaccess-code-link', ob_get_clean() );
 		Grants::create( array( 'label' => 'Acme' ) );
 		ob_start();
 		do_action( 'login_form' );
 		$this->assertStringContainsString( 'happyaccess-code-link', ob_get_clean() );
+	}
+
+	public function test_login_form_link_is_not_registered_while_the_feature_is_off() {
+		remove_action( 'login_form', array( LoginSteps::class, 'print_code_link' ) );
+		Features::set( 'support_access', false );
+		LoginSteps::register();
+		$this->assertFalse( has_action( 'login_form', array( LoginSteps::class, 'print_code_link' ) ) );
+		$this->assertNotNull( \HappyAccess\Login\Router::resolve( 'ended' ) );
+	}
+
+	public function test_temp_login_never_goes_through_core_authentication() {
+		$calls = 0;
+		$spy   = function ( $user ) use ( &$calls ) {
+			++$calls;
+			return $user;
+		};
+		add_filter( 'authenticate', $spy, 1 );
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+		$res = $this->post_code( $made['code'] );
+		remove_filter( 'authenticate', $spy, 1 );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 0, $calls );
+	}
+
+	public function test_success_clears_only_the_ip_scope() {
+		Settings::update( array( 'security' => array( 'site_code_cap' => 5 ) ) );
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->post_code( $this->wrong_code( $made ) );
+		}
+		$this->assertSame( 'redirect', $this->post_code( $made['code'] )['type'] );
+		wp_set_current_user( 0 );
+
+		// The IP counter was cleared: five more wrong tries from this IP are all answered with the generic error.
+		// The site counter was not: it already holds 4 attempts, so the 2nd one here reaches the cap of 5.
+		$this->assertSame( array( 'invalid_code' ), $this->post_code( $this->wrong_code( $made ) )['errors']->get_error_codes() );
+		$this->assertSame( array( 'locked' ), $this->post_code( $this->wrong_code( $made ) )['errors']->get_error_codes() );
+	}
+
+	public function test_allowlist_matches_other_notations_of_the_same_address() {
+		$_SERVER['REMOTE_ADDR'] = '2001:db8::1';
+		$made                   = Grants::create(
+			array(
+				'label' => 'Acme',
+				'ips'   => array( '2001:DB8:0:0:0:0:0:1' ),
+			)
+		);
+		wp_set_current_user( 0 );
+		$this->assertSame( 'redirect', $this->post_code( $made['code'] )['type'] );
+
+		$_SERVER['REMOTE_ADDR'] = '2001:db8::2';
+		wp_set_current_user( 0 );
+		$other = Grants::create(
+			array(
+				'label' => 'Other',
+				'ips'   => array( '2001:DB8:0:0:0:0:0:1' ),
+			)
+		);
+		$this->assertSame( 'render', $this->post_code( $other['code'] )['type'] );
 	}
 
 	public function test_allowed_ip_logs_in() {
@@ -270,7 +332,14 @@ class LoginStepsTest extends WP_UnitTestCase {
 			)
 		);
 		$this->assertSame( array( 'invalid_link' ), $none['errors']->get_error_codes() );
-		$gone = LoginSteps::handle_link( 'POST', array(), array( 'k' => 'nope', '_wpnonce' => 'nope' ) );
+		$gone = LoginSteps::handle_link(
+			'POST',
+			array(),
+			array(
+				'k'        => 'nope',
+				'_wpnonce' => 'nope',
+			)
+		);
 		$this->assertSame( array( 'invalid_link' ), $gone['errors']->get_error_codes() );
 		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
 	}
@@ -304,7 +373,14 @@ class LoginStepsTest extends WP_UnitTestCase {
 
 	public function test_expired_nonce_on_a_valid_link_shows_the_confirm_screen_again() {
 		$made = Grants::create( array( 'label' => 'Acme' ) );
-		$res  = LoginSteps::handle_link( 'POST', array(), array( 'k' => $made['link_key'], '_wpnonce' => 'old' ) );
+		$res  = LoginSteps::handle_link(
+			'POST',
+			array(),
+			array(
+				'k'        => $made['link_key'],
+				'_wpnonce' => 'old',
+			)
+		);
 		$this->assertSame( 'render', $res['type'] );
 		$this->assertSame( array( 'expired_page' ), $res['errors']->get_error_codes() );
 		$this->assertStringContainsString( 'This page expired. Select Log in again.', $res['errors']->get_error_message() );

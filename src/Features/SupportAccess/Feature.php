@@ -20,7 +20,9 @@ defined( 'ABSPATH' ) || exit;
 final class Feature {
 
 	/**
-	 * Registers the guards and, when the feature is on, the login entry points.
+	 * Registers the guards, the ended screen and the CLI whenever the feature is
+	 * on or any grant or temp user exists. The code and link entry points are
+	 * added only while the feature is on.
 	 *
 	 * The guards keep running while any grant or temp user exists, even after
 	 * the feature is switched off, so a live or leftover temp user never loses
@@ -45,10 +47,9 @@ final class Feature {
 		AdminBar::register();
 		Notifications::register();
 
-		if ( ! $enabled ) {
-			return;
-		}
-
+		// The ended screen and the CLI stay wired while the guards run, so a logged-out former agent
+		// still sees the ended screen and the owner can still revoke from the command line.
+		// LoginSteps adds the code and link steps and the login form link only while the feature is on.
 		Router::register();
 		LoginSteps::register();
 		Cli::register();

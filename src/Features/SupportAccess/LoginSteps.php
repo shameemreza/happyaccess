@@ -9,6 +9,7 @@ namespace HappyAccess\Features\SupportAccess;
 
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\ClientIp;
+use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
@@ -34,24 +35,32 @@ final class LoginSteps {
 	const SITE_LOCK   = 3600;
 
 	/**
-	 * Registers the steps and the "Have a support access code?" link.
+	 * Registers the ended step always, so a logged-out former agent sees it while
+	 * the guards run. The code and link steps and the "Have a support access
+	 * code?" link are added only while Support access is on.
 	 *
 	 * @return void
 	 */
 	public static function register() {
+		Router::add_step( 'ended', array( __CLASS__, 'run_ended' ) );
+
+		if ( ! Features::is_enabled( 'support_access' ) ) {
+			return;
+		}
+
 		Router::add_step( 'code', array( __CLASS__, 'run_code' ) );
 		Router::add_step( 'link', array( __CLASS__, 'run_link' ) );
-		Router::add_step( 'ended', array( __CLASS__, 'run_ended' ) );
 		add_action( 'login_form', array( __CLASS__, 'print_code_link' ) );
 	}
 
 	/**
-	 * Prints the code link under the login form while a grant exists.
+	 * Prints the code link under the login form. Registered whenever Support
+	 * access is on, with or without a current pass.
 	 *
 	 * @return void
 	 */
 	public static function print_code_link() {
-		if ( ! self::db_ready() || ! Grants::has_current() ) {
+		if ( ! self::db_ready() ) {
 			return;
 		}
 		printf(
