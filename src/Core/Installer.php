@@ -706,7 +706,7 @@ final class Installer {
 	 */
 	private static function blank_legacy_codes() {
 		global $wpdb;
-		$table = self::table( 'otp_shares' );
+		$table    = self::table( 'otp_shares' );
 		$previous = $wpdb->suppress_errors( true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed table name; the column is NOT NULL.
 		$result = $wpdb->query( "UPDATE {$table} SET otp_code = ''" );
