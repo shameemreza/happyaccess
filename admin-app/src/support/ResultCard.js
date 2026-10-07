@@ -7,6 +7,16 @@ import { formatEnd, levelName } from './passFormat';
 
 const COPIED_MS = 2200;
 
+// Mac, iPhone and iPad use Cmd. The client hint is exact where a browser
+// has it, and the user agent covers the rest.
+function copyKeys() {
+	const platform = navigator.userAgentData?.platform;
+	const apple = platform
+		? 'macOS' === platform || 'iOS' === platform
+		: /Mac|iPhone|iPad/.test( navigator.userAgent );
+	return apple ? 'Cmd+C' : 'Ctrl+C';
+}
+
 function hostOf( url ) {
 	try {
 		return new URL( url ).host;
@@ -135,7 +145,7 @@ export default function ResultCard( {
 			timer.current = setTimeout( () => setCopied( '' ), COPIED_MS );
 			return;
 		}
-		// No clipboard access: select the text so Ctrl+C works.
+		// No clipboard access: select the text so the copy keys work.
 		setCopied( '' );
 		setManual( key );
 		if ( 'link' === key ) {
@@ -191,7 +201,11 @@ export default function ResultCard( {
 	const hint = ( key ) =>
 		manual === key && (
 			<span className="ha-manual">
-				{ __( 'Press Ctrl+C to copy', 'happyaccess' ) }
+				{ sprintf(
+					/* translators: %s: the keys that copy on this computer, Cmd+C or Ctrl+C. */
+					__( 'Press %s to copy', 'happyaccess' ),
+					copyKeys()
+				) }
 			</span>
 		);
 

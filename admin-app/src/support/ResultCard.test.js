@@ -172,6 +172,87 @@ describe( 'ResultCard', () => {
 		);
 	} );
 
+	describe( 'copy hint shortcut', () => {
+		const originalAgent = Object.getOwnPropertyDescriptor(
+			window.navigator,
+			'userAgent'
+		);
+		const setBrowser = ( { agent = '', platform } ) => {
+			Object.defineProperty( navigator, 'userAgent', {
+				configurable: true,
+				value: agent,
+			} );
+			Object.defineProperty( navigator, 'userAgentData', {
+				configurable: true,
+				value: undefined === platform ? undefined : { platform },
+			} );
+		};
+		afterEach( () => {
+			delete navigator.userAgentData;
+			if ( originalAgent ) {
+				Object.defineProperty( navigator, 'userAgent', originalAgent );
+			}
+		} );
+
+		const hintFor = async () => {
+			const { user } = setup();
+			Object.defineProperty( navigator, 'clipboard', {
+				configurable: true,
+				value: undefined,
+			} );
+			await user.click(
+				screen.getByRole( 'button', { name: 'Copy login link' } )
+			);
+		};
+
+		it( 'says Cmd+C on a Mac, by the client hint', async () => {
+			setBrowser( { platform: 'macOS' } );
+			await hintFor();
+			expect(
+				screen.getByText( 'Press Cmd+C to copy' )
+			).toBeInTheDocument();
+		} );
+
+		it( 'says Cmd+C on a Mac, by the user agent when there is no client hint', async () => {
+			setBrowser( {
+				agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15',
+			} );
+			await hintFor();
+			expect(
+				screen.getByText( 'Press Cmd+C to copy' )
+			).toBeInTheDocument();
+		} );
+
+		it( 'says Cmd+C on an iPad', async () => {
+			setBrowser( {
+				agent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)',
+			} );
+			await hintFor();
+			expect(
+				screen.getByText( 'Press Cmd+C to copy' )
+			).toBeInTheDocument();
+		} );
+
+		it( 'says Ctrl+C on Windows, even when the user agent mentions Mac', async () => {
+			setBrowser( {
+				agent: 'Mozilla/5.0 (Macintosh)',
+				platform: 'Windows',
+			} );
+			await hintFor();
+			expect(
+				screen.getByText( 'Press Ctrl+C to copy' )
+			).toBeInTheDocument();
+		} );
+
+		it( 'says Ctrl+C on Linux', async () => {
+			setBrowser( { agent: 'Mozilla/5.0 (X11; Linux x86_64)' } );
+			await hintFor();
+			expect(
+				screen.getByText( 'Press Ctrl+C to copy' )
+			).toBeInTheDocument();
+		} );
+	} );
+
 	it( 'selects the text and shows a hint when the clipboard is missing', async () => {
 		const { user } = setup();
 		Object.defineProperty( navigator, 'clipboard', {
@@ -184,7 +265,7 @@ describe( 'ResultCard', () => {
 		);
 
 		expect(
-			screen.getByText( 'Press Ctrl+C to copy' )
+			screen.getByText( /^Press (Ctrl|Cmd)\+C to copy$/ )
 		).toBeInTheDocument();
 		const link = screen.getByLabelText( 'Login link' );
 		expect( link.selectionStart ).toBe( 0 );

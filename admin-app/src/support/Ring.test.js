@@ -29,12 +29,19 @@ describe( 'time labels', () => {
 describe( 'Ring', () => {
 	const arc = ( container ) => container.querySelector( '.ha-ring__arc' );
 
-	it( 'is an image with the time left as its name and as its label', () => {
-		render( <Ring secondsLeft={ 2 * DAY + 4 * HOUR } total={ 3 * DAY } /> );
+	it( 'is hidden from screen readers, since the row says the time left in words', () => {
+		const { container } = render(
+			<Ring secondsLeft={ 2 * DAY + 4 * HOUR } total={ 3 * DAY } />
+		);
 
+		expect( container.querySelector( '.ha-ring' ) ).toHaveAttribute(
+			'aria-hidden',
+			'true'
+		);
+		expect( screen.queryByRole( 'img' ) ).not.toBeInTheDocument();
 		expect(
-			screen.getByRole( 'img', { name: 'Ends in 2 days 4 hours' } )
-		).toBeInTheDocument();
+			screen.queryByLabelText( 'Ends in 2 days 4 hours' )
+		).not.toBeInTheDocument();
 		expect( screen.getByText( '2d' ) ).toBeInTheDocument();
 	} );
 

@@ -246,6 +246,20 @@ describe( 'GrantForm trust', () => {
 		expectBlocked();
 	} );
 
+	it( 'is a plain box tied to its checkbox, so it is not announced as an alert', async () => {
+		const { user } = setup();
+		await fillLabel( user );
+		await pickLevel( user, /Full admin/ );
+
+		expect( screen.queryByRole( 'alert' ) ).not.toBeInTheDocument();
+		const trust = screen.getByRole( 'checkbox', {
+			name: 'I trust this person with full access to my site',
+		} );
+		expect( trust ).toHaveAccessibleDescription(
+			/^No limits\. They can do anything/
+		);
+	} );
+
 	it( 'asks for trust in Custom only once an admin-level cap is ticked', async () => {
 		const { user } = setup();
 		await fillLabel( user );

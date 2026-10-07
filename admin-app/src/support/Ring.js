@@ -84,7 +84,8 @@ export function longLeft( seconds ) {
 }
 
 /**
- * A ring that empties as a pass runs out.
+ * A ring that empties as a pass runs out. It is for the eye only: the row
+ * beside it says the time left in words.
  *
  * @param {Object} props             Props.
  * @param {number} props.secondsLeft Seconds until the pass ends.
@@ -105,17 +106,12 @@ export default function Ring( { secondsLeft, total, state = 'active' } ) {
 	const filled = ( share * CIRCUMFERENCE ).toFixed( 1 );
 
 	return (
-		<div
-			className="ha-ring"
-			role="img"
-			aria-label={ longLeft( secondsLeft ) }
-		>
+		<div className="ha-ring" aria-hidden="true">
 			<svg
 				className="ha-ring__svg"
 				width="48"
 				height="48"
 				viewBox="0 0 48 48"
-				aria-hidden="true"
 				focusable="false"
 			>
 				<circle
@@ -143,7 +139,7 @@ export default function Ring( { secondsLeft, total, state = 'active' } ) {
 					} }
 				/>
 			</svg>
-			<span className="ha-ring__label" aria-hidden="true">
+			<span className="ha-ring__label">
 				<bdi>{ shortLeft( secondsLeft ) }</bdi>
 			</span>
 		</div>

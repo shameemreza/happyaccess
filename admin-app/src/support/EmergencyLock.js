@@ -82,6 +82,7 @@ export default function EmergencyLock( { onLocked } ) {
 			</Button>
 			{ open && (
 				<Modal
+					className="happyaccess-modal"
 					title={ __( 'End every support pass now?', 'happyaccess' ) }
 					onRequestClose={ close }
 					shouldCloseOnClickOutside={ ! busy }

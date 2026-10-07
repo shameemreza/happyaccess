@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import { revokeAll } from '../api';
 import { useGrants } from '../data/DataProvider';
 import { useDelayedFlag } from '../hooks/useDelayedFlag';
 import { useNow } from '../hooks/useNow';
@@ -80,13 +85,33 @@ export default function SupportTab( {
 		}
 	}, [ result ] );
 
-	const { act } = grants;
+	const { act, revokeAll } = grants;
 	const showResult = useCallback( ( next ) => {
 		setShown( ( count ) => count + 1 );
 		setEvents( ( count ) => count + 1 );
 		setResult( next );
 	}, [] );
 	const resultId = result ? result.id : 0;
+
+	// The card follows the list. The end time comes from the list, so an
+	// Extend shows on the card. A pass that a refresh no longer lists has
+	// ended, so its code and link no longer work and the card goes.
+	const listed = resultId
+		? grants.grants.find( ( grant ) => grant.id === resultId )
+		: null;
+	const listedEnd = listed ? listed.expires_at : 0;
+	const listLoaded = ! grants.loading;
+	useEffect( () => {
+		if ( resultId && listLoaded && ! listed ) {
+			setResult( null );
+		}
+	}, [ resultId, listLoaded, listed ] );
+	const card = useMemo( () => {
+		if ( ! result || ! listedEnd || listedEnd === result.expires_at ) {
+			return result;
+		}
+		return { ...result, expires_at: listedEnd };
+	}, [ result, listedEnd ] );
 	const handleAct = useCallback(
 		async ( id, action, arg ) => {
 			const next = await act( id, action, arg );
@@ -164,10 +189,10 @@ export default function SupportTab( {
 			) }
 			<div className="ha-support__cols">
 				<div className="ha-support__main">
-					{ result ? (
+					{ card ? (
 						<ResultCard
 							key={ shown }
-							result={ result }
+							result={ card }
 							boot={ boot }
 							onDone={ done }
 							onSendEmail={ sendEmail }

@@ -43,6 +43,16 @@ describe( 'EmergencyLock', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
+	it( 'gives the modal its own class, so touch sizing can reach it outside the app root', async () => {
+		const { user } = setup();
+
+		await user.click( lockButton() );
+
+		const modal = screen.getByRole( 'dialog' );
+		expect( modal ).toHaveClass( 'happyaccess-modal' );
+		expect( modal.closest( '.happyaccess-app' ) ).toBeNull();
+	} );
+
 	it( 'closes on Keep access without calling the API', async () => {
 		const { user } = setup();
 

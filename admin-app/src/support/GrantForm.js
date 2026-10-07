@@ -163,10 +163,12 @@ function blockerHint( blocker ) {
  * @return {Element} The box.
  */
 function TrustBox( { children, checked, onChange } ) {
+	const warning = useId();
 	return (
-		<div className="ha-trust" role="alert">
-			<p>{ children }</p>
+		<div className="ha-trust">
+			<p id={ warning }>{ children }</p>
 			<CheckboxControl
+				aria-describedby={ warning }
 				label={ __(
 					'I trust this person with full access to my site',
 					'happyaccess'

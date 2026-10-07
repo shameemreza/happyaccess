@@ -32,7 +32,7 @@ function replaceItem( list, grant, insert = false ) {
  * the list state, so they live only where the caller keeps them.
  *
  * @param {boolean} enabled Whether to load. Off until setup is done.
- * @return {Object} { grants, loading, error, refresh, create, act }
+ * @return {Object} { grants, loading, error, refresh, create, act, revokeAll }
  */
 export function useGrantsStore( enabled = true ) {
 	const [ grants, setGrants ] = useState( [] );
@@ -140,5 +140,16 @@ export function useGrantsStore( enabled = true ) {
 		return result;
 	}, [] );
 
-	return { grants, loading, error, refresh, create, act };
+	// Ends every pass. The list empties at once and counts as a local change,
+	// so a list reply that was already on its way can't show the passes again.
+	const revokeAll = useCallback( async () => {
+		const result = await api.revokeAll();
+		version.current++;
+		if ( mounted.current ) {
+			setGrants( [] );
+		}
+		return result;
+	}, [] );
+
+	return { grants, loading, error, refresh, create, act, revokeAll };
 }

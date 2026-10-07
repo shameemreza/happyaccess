@@ -287,6 +287,40 @@ describe( 'App shell', () => {
 		expect( grantGets() ).toBe( before + 1 );
 	} );
 
+	it( 'drops ended passes from the Activity Who list after Emergency lock', async () => {
+		grantsOnServer = [ grantFixture( { id: 9 } ) ];
+		window.history.replaceState(
+			{},
+			'',
+			'/wp-admin/users.php?page=happyaccess&tab=activity'
+		);
+		const user = userEvent.setup();
+		render( <App boot={ boot() } /> );
+		const who = await screen.findByLabelText( 'Who' );
+		await waitFor( () =>
+			expect(
+				within( who ).getByRole( 'option', {
+					name: 'Acme Plugin Support',
+				} )
+			).toBeInTheDocument()
+		);
+
+		await user.click(
+			screen.getByRole( 'button', { name: 'Emergency lock' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'End all passes' } )
+		);
+
+		await waitFor( () =>
+			expect(
+				within( who ).queryByRole( 'option', {
+					name: 'Acme Plugin Support',
+				} )
+			).not.toBeInTheDocument()
+		);
+	} );
+
 	it( 'walks through setup, then shows the tabs on Support access without a reload', async () => {
 		const user = userEvent.setup();
 		render(

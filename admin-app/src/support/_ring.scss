@@ -10,7 +10,12 @@
 	}
 
 	// The one place a physical direction is fine: the arc starts at the top.
+	// The directive tells rtlcss to leave the turn alone. The default build
+	// minifies comments away before rtlcss runs, so style-index-rtl.css also
+	// stays out of the release (.distignore) and is never loaded.
 	.ha-ring__svg {
+
+		/*rtl:ignore*/
 		transform: rotate(-90deg);
 	}
 

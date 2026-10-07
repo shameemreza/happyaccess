@@ -570,6 +570,74 @@ describe( 'pass actions', () => {
 	} );
 } );
 
+describe( 'result card and the list', () => {
+	const validUntil = () => screen.getByText( /^Valid until / ).textContent;
+
+	it( 'shows the new end time on the open card after an Extend', async () => {
+		mockServer( [] );
+		const { user } = setup();
+		await createPass( user );
+		const before = validUntil();
+
+		await user.click( screen.getByRole( 'button', { name: 'Extend' } ) );
+		await user.click( screen.getByRole( 'button', { name: '+1 day' } ) );
+
+		await waitFor( () => expect( validUntil() ).not.toBe( before ) );
+		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
+	} );
+
+	it( 'closes the card and clears the secrets when a refresh no longer lists its pass', async () => {
+		mockServer( [] );
+		const { user } = setup();
+		await createPass( user );
+		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
+
+		// The pass ended elsewhere. The next poll shows the list without it.
+		db.grants = [];
+		await act( async () => {
+			document.dispatchEvent( new Event( 'visibilitychange' ) );
+		} );
+
+		expect(
+			await screen.findByRole( 'heading', {
+				name: 'Give support access',
+			} )
+		).toBeInTheDocument();
+		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'link', { name: /^Login link/ } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps the card when the refresh fails', async () => {
+		mockServer( [] );
+		const { user } = setup();
+		await createPass( user );
+		const serve = apiFetch.getMockImplementation();
+		let failed = 0;
+		apiFetch.mockImplementation( ( options ) => {
+			if (
+				'/happyaccess/v1/grants' === options.path &&
+				( ! options.method || 'GET' === options.method )
+			) {
+				failed++;
+				return Promise.reject( {
+					code: 'offline',
+					message: 'Offline',
+				} );
+			}
+			return serve( options );
+		} );
+
+		await act( async () => {
+			document.dispatchEvent( new Event( 'visibilitychange' ) );
+		} );
+
+		await waitFor( () => expect( failed ).toBe( 1 ) );
+		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
+	} );
+} );
+
 describe( 'refresh key', () => {
 	it( 'drops an open result card and leaves the list reload to the app', async () => {
 		mockServer( [] );

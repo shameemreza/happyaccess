@@ -65,7 +65,13 @@ describe( 'ActiveList', () => {
 		expect(
 			screen.getByRole( 'heading', { name: 'Who has access' } )
 		).toBeInTheDocument();
-		expect( screen.getByLabelText( '2 in the list' ) ).toBeInTheDocument();
+		// Real text, so screen readers read it, instead of a label on a span.
+		const spoken = screen.getByText( '2 in the list' );
+		expect( spoken ).toHaveClass( 'screen-reader-text' );
+		expect( document.querySelector( '.ha-active__count' ) ).toHaveAttribute(
+			'aria-hidden',
+			'true'
+		);
 		expect( screen.getAllByRole( 'listitem' ) ).toHaveLength( 2 );
 	} );
 

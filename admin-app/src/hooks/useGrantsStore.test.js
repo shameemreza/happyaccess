@@ -246,3 +246,34 @@ it( 'refreshes as soon as the tab becomes visible again', async () => {
 	} );
 	expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 } );
+
+it( 'revoke all clears the list, and a slower list reply cannot bring the passes back', async () => {
+	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ), grant( 6 ) ] } );
+	const { result } = renderHook( () => useGrantsStore() );
+	await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+	// A refresh starts, and its reply is held back.
+	let release;
+	apiFetch.mockImplementationOnce(
+		() => new Promise( ( resolve ) => ( release = resolve ) )
+	);
+	let slow;
+	act( () => {
+		slow = result.current.refresh();
+	} );
+
+	apiFetch.mockResolvedValueOnce( { count: 2 } );
+	await act( async () => {
+		await result.current.revokeAll();
+	} );
+	const call = apiFetch.mock.calls[ 2 ][ 0 ];
+	expect( call.path ).toBe( '/happyaccess/v1/grants/revoke-all' );
+	expect( call.method ).toBe( 'POST' );
+	expect( result.current.grants ).toEqual( [] );
+
+	await act( async () => {
+		release( { items: [ grant( 5 ), grant( 6 ) ] } );
+		await slow;
+	} );
+	expect( result.current.grants ).toEqual( [] );
+} );

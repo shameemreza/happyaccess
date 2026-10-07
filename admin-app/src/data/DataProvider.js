@@ -129,7 +129,7 @@ function useData() {
 }
 
 /**
- * @return {Object} The shared pass list: { grants, loading, error, refresh, create, act }.
+ * @return {Object} The shared pass list: { grants, loading, error, refresh, create, act, revokeAll }.
  */
 export const useGrants = () => useData().grants;
 

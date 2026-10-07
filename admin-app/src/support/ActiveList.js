@@ -144,15 +144,15 @@ export default function ActiveList( {
 				<h2 id="ha-active-title" ref={ heading } tabIndex={ -1 }>
 					{ __( 'Who has access', 'happyaccess' ) }
 				</h2>
-				<span
-					className="ha-active__count"
-					aria-label={ sprintf(
+				<span className="ha-active__count" aria-hidden="true">
+					{ grants.length }
+				</span>
+				<span className="screen-reader-text">
+					{ sprintf(
 						/* translators: %d: number of passes in the list. */
 						__( '%d in the list', 'happyaccess' ),
 						grants.length
 					) }
-				>
-					{ grants.length }
 				</span>
 				<span className="ha-row__spacer" />
 				{ grants.length > 0 && (

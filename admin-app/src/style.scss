@@ -171,3 +171,15 @@
 		}
 	}
 }
+
+// The Emergency lock modal renders in a portal outside .happyaccess-app, so
+// the touch size for its buttons is scoped to its own class instead.
+.happyaccess-modal {
+
+	@media (pointer: coarse) {
+
+		.components-button {
+			min-height: 44px;
+		}
+	}
+}
