@@ -31,6 +31,14 @@ define( 'HAPPYACCESS_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 require_once HAPPYACCESS_PLUGIN_DIR . 'src/Autoloader.php';
 \HappyAccess\Autoloader::register();
 
+// Development switch: boot the 1.1.0 code instead of the legacy plugin.
+if ( defined( 'HAPPYACCESS_NEXT' ) && HAPPYACCESS_NEXT ) {
+	register_activation_hook( __FILE__, array( \HappyAccess\Plugin::class, 'activate' ) );
+	register_deactivation_hook( __FILE__, array( \HappyAccess\Plugin::class, 'deactivate' ) );
+	\HappyAccess\Plugin::boot();
+	return;
+}
+
 // Declare HPOS compatibility (if WooCommerce is active).
 add_action( 'before_woocommerce_init', function() {
 	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
