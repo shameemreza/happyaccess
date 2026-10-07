@@ -9,7 +9,10 @@
 		return pair[ n === 1 ? 0 : 1 ].replace( '%d', n );
 	}
 
+	// Same rules as AdminBar::time_left(): two units under three days or three
+	// hours, so it never shows a day less than is left, then the nearest unit.
 	function span( secs ) {
+		var hours, mins, days;
 		if ( secs < 60 ) {
 			return s.less;
 		}
@@ -17,9 +20,20 @@
 			return unit( Math.floor( secs / 60 ), s.min );
 		}
 		if ( secs < 86400 ) {
-			return unit( Math.floor( secs / 3600 ), s.hour );
+			hours = Math.floor( secs / 3600 );
+			if ( hours < 3 ) {
+				mins = Math.floor( ( secs % 3600 ) / 60 );
+				return mins > 0 ? unit( hours, s.hour ) + ' ' + unit( mins, s.min ) : unit( hours, s.hour );
+			}
+			hours = Math.round( secs / 3600 );
+			return hours >= 24 ? unit( 1, s.day ) : unit( hours, s.hour );
 		}
-		return unit( Math.floor( secs / 86400 ), s.day );
+		days = Math.floor( secs / 86400 );
+		if ( days < 3 ) {
+			hours = Math.floor( ( secs % 86400 ) / 3600 );
+			return hours > 0 ? unit( days, s.day ) + ' ' + unit( hours, s.hour ) : unit( days, s.day );
+		}
+		return unit( Math.round( secs / 86400 ), s.day );
 	}
 
 	function tick() {

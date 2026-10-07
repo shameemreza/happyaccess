@@ -214,6 +214,33 @@ class MenuGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( MenuGuard::is_blocked( array( 'edit.php?post_type=product' ), 'edit.php', '', '' ) );
 	}
 
+	public function test_menu_snapshot_leaves_out_the_happyaccess_page_under_users() {
+		$GLOBALS['menu']    = array(
+			array( 'Users', 'list_users', 'users.php' ),
+		);
+		$GLOBALS['submenu'] = array(
+			'users.php' => array(
+				array( 'All Users', 'list_users', 'users.php' ),
+				array( 'HappyAccess', 'happyaccess_manage', 'happyaccess' ),
+			),
+		);
+
+		$children = MenuGuard::menu_snapshot()[0]['children'];
+		$this->assertSame( array( 'users.php::users.php' ), wp_list_pluck( $children, 'slug' ) );
+	}
+
+	public function test_filter_menu_skips_removal_when_the_menu_globals_are_not_arrays() {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		wp_set_current_user( $this->temp_user_with_menus( array( 'tools.php', 'woocommerce::wc-settings' ) ) );
+		$GLOBALS['menu']    = null;
+		$GLOBALS['submenu'] = null;
+
+		MenuGuard::filter_menu();
+
+		$this->assertNull( $GLOBALS['menu'] );
+		$this->assertNull( $GLOBALS['submenu'] );
+	}
+
 	public function test_menu_snapshot_strips_nested_count_bubbles() {
 		$GLOBALS['menu'] = array(
 			array( 'Plugins <span class="update-plugins count-2"><span class="plugin-count">2</span></span>', 'activate_plugins', 'plugins.php' ),

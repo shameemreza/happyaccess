@@ -6,6 +6,7 @@
  */
 
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\AdminBar;
 use HappyAccess\Features\SupportAccess\Grants;
@@ -20,6 +21,11 @@ class AdminBarTest extends WP_UnitTestCase {
 		require_once ABSPATH . WPINC . '/class-wp-admin-bar.php';
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		Grants::flush_cache();
+	}
+
+	public function tear_down() {
+		Clock::freeze( null );
+		parent::tear_down();
 	}
 
 	private function bar() {
@@ -60,5 +66,35 @@ class AdminBarTest extends WP_UnitTestCase {
 		wp_set_current_user( TempUsers::get_or_create( $grant ) );
 		$node = $this->bar()->get_node( 'happyaccess-timer' );
 		$this->assertStringContainsString( 'data-expires="' . $grant['expires_at'] . '"', $node->title );
+	}
+
+	public function test_time_left_shows_days_and_hours_under_three_days() {
+		$this->assertSame( '2 days 23 hours', AdminBar::time_left( 2 * DAY_IN_SECONDS + 23 * HOUR_IN_SECONDS + 59 ) );
+		$this->assertSame( '1 day 1 hour', AdminBar::time_left( DAY_IN_SECONDS + HOUR_IN_SECONDS ) );
+		$this->assertSame( '2 days', AdminBar::time_left( 2 * DAY_IN_SECONDS + 30 * MINUTE_IN_SECONDS ) );
+	}
+
+	public function test_time_left_rounds_to_the_nearest_day_from_three_days() {
+		$this->assertSame( '4 days', AdminBar::time_left( 3 * DAY_IN_SECONDS + 20 * HOUR_IN_SECONDS ) );
+		$this->assertSame( '3 days', AdminBar::time_left( 3 * DAY_IN_SECONDS + 5 * HOUR_IN_SECONDS ) );
+	}
+
+	public function test_time_left_under_a_day() {
+		$this->assertSame( '2 hours 45 mins', AdminBar::time_left( 2 * HOUR_IN_SECONDS + 45 * MINUTE_IN_SECONDS ) );
+		$this->assertSame( '1 hour', AdminBar::time_left( HOUR_IN_SECONDS + 20 ) );
+		$this->assertSame( '5 hours', AdminBar::time_left( 4 * HOUR_IN_SECONDS + 40 * MINUTE_IN_SECONDS ) );
+		$this->assertSame( '1 min', AdminBar::time_left( 90 ) );
+		$this->assertSame( '59 mins', AdminBar::time_left( HOUR_IN_SECONDS - 1 ) );
+		$this->assertSame( 'less than a minute', AdminBar::time_left( 59 ) );
+	}
+
+	public function test_timer_text_does_not_floor_two_days_23_hours_to_two_days() {
+		$made  = Grants::create( array( 'label' => 'Acme' ) );
+		$grant = Grants::get( $made['id'] );
+		Clock::freeze( (int) $grant['expires_at'] - ( 2 * DAY_IN_SECONDS + 23 * HOUR_IN_SECONDS ) );
+
+		wp_set_current_user( TempUsers::get_or_create( $grant ) );
+		$node = $this->bar()->get_node( 'happyaccess-timer' );
+		$this->assertStringContainsString( 'Support access ends in 2 days 23 hours', $node->title );
 	}
 }

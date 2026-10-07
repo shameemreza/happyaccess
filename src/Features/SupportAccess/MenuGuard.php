@@ -91,14 +91,19 @@ final class MenuGuard {
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
 		}
+		// Core's removers loop over these globals, which another plugin may have emptied to null.
+		$has_menu    = isset( $GLOBALS['menu'] ) && is_array( $GLOBALS['menu'] );
+		$has_submenu = isset( $GLOBALS['submenu'] ) && is_array( $GLOBALS['submenu'] );
 		foreach ( self::restrictions_for( $user_id )['menus'] as $slug ) {
 			if ( ! is_string( $slug ) || '' === $slug ) {
 				continue;
 			}
 			$parts = explode( '::', $slug, 2 );
 			if ( 2 === count( $parts ) ) {
-				remove_submenu_page( $parts[0], $parts[1] );
-			} else {
+				if ( $has_submenu ) {
+					remove_submenu_page( $parts[0], $parts[1] );
+				}
+			} elseif ( $has_menu ) {
 				remove_menu_page( $slug );
 			}
 		}
@@ -270,6 +275,10 @@ final class MenuGuard {
 			if ( isset( $submenu[ $slug ] ) && is_array( $submenu[ $slug ] ) ) {
 				foreach ( $submenu[ $slug ] as $child ) {
 					if ( ! is_array( $child ) || ! isset( $child[2] ) || ! is_string( $child[2] ) ) {
+						continue;
+					}
+					if ( 'users.php' === $slug && 'happyaccess' === $child[2] ) {
+						// Our own screen is always blocked for temp users, so it is no choice.
 						continue;
 					}
 					$children[] = array(

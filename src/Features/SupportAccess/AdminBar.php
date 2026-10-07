@@ -106,6 +106,73 @@ final class AdminBar {
 	}
 
 	/**
+	 * Time left as the admin bar shows it. Under three days or three hours it
+	 * gives two units ("2 days 23 hours"), so the bar never shows a day less
+	 * than is left. From three on it rounds to the nearest whole unit.
+	 * assets/admin-bar.js keeps the same rules for the live countdown.
+	 *
+	 * @param int $seconds Seconds left.
+	 * @return string
+	 */
+	public static function time_left( $seconds ) {
+		$seconds = max( 0, (int) $seconds );
+		if ( $seconds < MINUTE_IN_SECONDS ) {
+			return __( 'less than a minute', 'happyaccess' );
+		}
+		if ( $seconds < HOUR_IN_SECONDS ) {
+			return self::minutes( (int) floor( $seconds / MINUTE_IN_SECONDS ) );
+		}
+		if ( $seconds < DAY_IN_SECONDS ) {
+			$hours = (int) floor( $seconds / HOUR_IN_SECONDS );
+			if ( $hours < 3 ) {
+				$mins = (int) floor( ( $seconds % HOUR_IN_SECONDS ) / MINUTE_IN_SECONDS );
+				return $mins > 0 ? self::hours( $hours ) . ' ' . self::minutes( $mins ) : self::hours( $hours );
+			}
+			$hours = (int) round( $seconds / HOUR_IN_SECONDS );
+			return $hours >= 24 ? self::days( 1 ) : self::hours( $hours );
+		}
+		$days = (int) floor( $seconds / DAY_IN_SECONDS );
+		if ( $days < 3 ) {
+			$hours = (int) floor( ( $seconds % DAY_IN_SECONDS ) / HOUR_IN_SECONDS );
+			return $hours > 0 ? self::days( $days ) . ' ' . self::hours( $hours ) : self::days( $days );
+		}
+		return self::days( (int) round( $seconds / DAY_IN_SECONDS ) );
+	}
+
+	/**
+	 * A number of minutes, like "5 mins".
+	 *
+	 * @param int $count Minutes.
+	 * @return string
+	 */
+	private static function minutes( $count ) {
+		/* translators: %d: number of minutes. */
+		return sprintf( _n( '%d min', '%d mins', $count, 'happyaccess' ), $count );
+	}
+
+	/**
+	 * A number of hours, like "3 hours".
+	 *
+	 * @param int $count Hours.
+	 * @return string
+	 */
+	private static function hours( $count ) {
+		/* translators: %d: number of hours. */
+		return sprintf( _n( '%d hour', '%d hours', $count, 'happyaccess' ), $count );
+	}
+
+	/**
+	 * A number of days, like "2 days".
+	 *
+	 * @param int $count Days.
+	 * @return string
+	 */
+	private static function days( $count ) {
+		/* translators: %d: number of days. */
+		return sprintf( _n( '%d day', '%d days', $count, 'happyaccess' ), $count );
+	}
+
+	/**
 	 * Revokes every current grant.
 	 *
 	 * @return int How many grants were revoked.
@@ -171,7 +238,7 @@ final class AdminBar {
 
 		$text = $expires > $now
 			/* translators: %s: time left, for example "2 hours". */
-			? sprintf( __( 'Support access ends in %s', 'happyaccess' ), human_time_diff( $now, $expires ) )
+			? sprintf( __( 'Support access ends in %s', 'happyaccess' ), self::time_left( $expires - $now ) )
 			: __( 'Support access has ended', 'happyaccess' );
 
 		$bar->add_node(
