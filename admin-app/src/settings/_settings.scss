@@ -258,17 +258,37 @@
 	}
 
 	.ha-loginprev__code {
-		padding: 1px 3px;
-		border-radius: 2px;
-		outline: 2px solid rgba(219, 166, 23, 0.55);
-		outline-offset: 2px;
-		color: #135e96;
-		font-size: 12px;
-		text-decoration: underline;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 4px 0;
 
 		@include motion.motion {
 			animation: happyaccess-in 0.2s ease-out;
 		}
+	}
+
+	.ha-loginprev__link {
+		color: #135e96;
+		font-size: 12px;
+		text-decoration: underline;
+	}
+
+	// Marks what HappyAccess adds, next to the link as it looks on the real screen.
+	.ha-loginprev__tag {
+		margin-inline-start: 8px;
+		padding: 2px 8px;
+		border-radius: 10px;
+		background: #f0f6fc;
+		background: color-mix(
+			in srgb,
+			var(--wp-admin-theme-color, #2271b1) 12%,
+			#fff
+		);
+		color: var(--wp-admin-theme-color, #2271b1);
+		font-size: 11px;
+		line-height: 1.4;
 	}
 
 	.ha-loginprev__lost {

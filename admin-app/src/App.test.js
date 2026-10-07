@@ -263,6 +263,13 @@ describe( 'App shell', () => {
 			await screen.findByRole( 'heading', { name: 'Who has access' } )
 		).toBeInTheDocument();
 		await screen.findByText( 'Acme Plugin Support' );
+		const grantGets = () =>
+			apiFetch.mock.calls.filter(
+				( [ options ] ) =>
+					'/happyaccess/v1/grants' === options.path &&
+					( ! options.method || 'GET' === options.method )
+			).length;
+		const before = grantGets();
 
 		await user.click(
 			screen.getByRole( 'button', { name: 'Emergency lock' } )
@@ -277,6 +284,7 @@ describe( 'App shell', () => {
 		expect(
 			screen.queryByText( 'Acme Plugin Support' )
 		).not.toBeInTheDocument();
+		expect( grantGets() ).toBe( before + 1 );
 	} );
 
 	it( 'walks through setup, then shows the tabs on Support access without a reload', async () => {

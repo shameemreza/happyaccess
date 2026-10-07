@@ -39,7 +39,7 @@ function countLine( count ) {
  * @param {Object}                props                Props.
  * @param {Object}                props.boot           Boot data.
  * @param {boolean}               props.focusOnOpen    Whether the form's first field takes focus when the tab opens, as it does after setup.
- * @param {number}                props.refreshKey     Changes when something outside ended every pass, so the list loads again.
+ * @param {number}                props.refreshKey     Changes when something outside ended every pass, so an open result card is dropped. The app reloads the list.
  * @param {(id?: number) => void} props.onViewActivity Opens the Activity tab, optionally for one pass.
  * @return {Element} The tab.
  */
@@ -69,9 +69,8 @@ export default function SupportTab( {
 		if ( refreshKey !== startKey.current ) {
 			startKey.current = refreshKey;
 			setResult( null );
-			refresh();
 		}
-	}, [ refreshKey, refresh ] );
+	}, [ refreshKey ] );
 
 	// After "Done", or on opening the tab when asked, put the cursor in the form's first field.
 	useEffect( () => {

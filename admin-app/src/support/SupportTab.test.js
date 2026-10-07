@@ -571,7 +571,7 @@ describe( 'pass actions', () => {
 } );
 
 describe( 'refresh key', () => {
-	it( 'loads the list again and drops an open result card', async () => {
+	it( 'drops an open result card and leaves the list reload to the app', async () => {
 		mockServer( [] );
 		const user = userEvent.setup();
 		const view = render(
@@ -598,11 +598,10 @@ describe( 'refresh key', () => {
 			} )
 		).toBeInTheDocument();
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
-		await waitFor( () =>
-			expect( screen.getAllByText( 'Nobody has access.' ) ).toHaveLength(
-				1
-			)
-		);
+		const listGets = calls.filter(
+			( c ) => '/grants' === c.route && 'GET' === c.method
+		).length;
+		expect( listGets ).toBe( 1 );
 	} );
 } );
 

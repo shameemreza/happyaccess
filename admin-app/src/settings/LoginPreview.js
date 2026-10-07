@@ -56,7 +56,15 @@ export default function LoginPreview( { supportAccess } ) {
 				</div>
 				{ supportAccess && (
 					<div className="ha-loginprev__code">
-						{ __( 'Have a support access code?', 'happyaccess' ) }
+						<span className="ha-loginprev__link">
+							{ __(
+								'Have a support access code?',
+								'happyaccess'
+							) }
+						</span>
+						<span className="ha-loginprev__tag">
+							{ __( 'Added by HappyAccess', 'happyaccess' ) }
+						</span>
 					</div>
 				) }
 				<div className="ha-loginprev__lost">
