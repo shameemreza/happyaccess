@@ -11,6 +11,8 @@ use HappyAccess\Core\Cron;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
+use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\TempUsers;
 use HappyAccess\Login\Router;
 use HappyAccess\Plugin;
 use HappyAccess\Rest\Routes;
@@ -170,5 +172,94 @@ class PluginBootTest extends WP_UnitTestCase {
 		Plugin::deactivate();
 
 		$this->assertFalse( wp_next_scheduled( Cron::HOOK ) );
+	}
+
+	public function test_deactivate_clears_the_network_upgrade_event() {
+		wp_schedule_single_event( time() + 60, Installer::NETWORK_HOOK );
+		$this->assertNotFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+
+		Plugin::deactivate();
+
+		$this->assertFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+	}
+
+	/**
+	 * Makes a pass and its temp user.
+	 *
+	 * @param string $label Pass label.
+	 * @return array Grant id and temp user id.
+	 */
+	private function pass_with_user( $label ) {
+		$made = Grants::create(
+			array(
+				'label'    => $label,
+				'duration' => DAY_IN_SECONDS,
+			)
+		);
+		return array( $made['id'], TempUsers::get_or_create( Grants::get( $made['id'] ) ) );
+	}
+
+	public function test_deactivate_as_an_admin_revokes_every_pass_and_keeps_the_data() {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		Settings::update( array( 'privacy' => array( 'retention_days' => 90 ) ) );
+		$settings = get_option( Settings::OPTION );
+		Cron::register();
+		list( $first, $first_user )   = $this->pass_with_user( 'One' );
+		list( $second, $second_user ) = $this->pass_with_user( 'Two' );
+
+		Plugin::deactivate();
+
+		$this->assertGreaterThan( 0, Grants::get( $first )['revoked_at'] );
+		$this->assertGreaterThan( 0, Grants::get( $second )['revoked_at'] );
+		$this->assertSame( 'plugin_deactivated', Grants::get( $first )['end_reason'] );
+		$this->assertFalse( get_userdata( $first_user ) );
+		$this->assertFalse( get_userdata( $second_user ) );
+		$this->assertFalse( TempUsers::any_exist() );
+		$this->assertSame( $settings, get_option( Settings::OPTION ) );
+		$this->assertSame( array(), Grants::list_current() );
+		$this->assertTrue( Installer::table_exists( 'tokens' ) );
+		$this->assertTrue( Installer::table_exists( 'logs' ) );
+		$this->assertFalse( wp_next_scheduled( Cron::HOOK ) );
+		$this->assertNotFalse( get_userdata( $admin ) );
+	}
+
+	public function test_deactivate_as_a_temp_user_changes_nothing() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		Cron::register();
+		list( $id, $user_id ) = $this->pass_with_user( 'Acme' );
+		wp_set_current_user( $user_id );
+
+		Plugin::deactivate();
+
+		$this->assertSame( 0, Grants::get( $id )['revoked_at'] );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertNotFalse( wp_next_scheduled( Cron::HOOK ) );
+	}
+
+	public function test_the_plugins_row_gets_a_settings_link_for_managers_only() {
+		Plugin::boot();
+		do_action( 'plugins_loaded' );
+		$filter = 'plugin_action_links_' . HAPPYACCESS_PLUGIN_BASENAME;
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$links = apply_filters( $filter, array( 'deactivate' => '<a href="#">Deactivate</a>' ) );
+		$this->assertSame( array( 'settings', 'deactivate' ), array_keys( $links ) );
+		$this->assertStringContainsString( 'href="' . esc_url( admin_url( 'users.php?page=happyaccess' ) ) . '"', $links['settings'] );
+		$this->assertStringContainsString( '>Settings</a>', $links['settings'] );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->assertSame( array( 'deactivate' ), array_keys( apply_filters( $filter, array( 'deactivate' => 'x' ) ) ) );
+
+		wp_set_current_user( 0 );
+		$this->assertSame( array( 'deactivate' ), array_keys( apply_filters( $filter, array( 'deactivate' => 'x' ) ) ) );
+	}
+
+	public function test_the_settings_link_is_registered_once() {
+		Plugin::boot();
+		do_action( 'plugins_loaded' );
+		do_action( 'plugins_loaded' );
+
+		$this->assertSame( 1, $this->count_registrations( 'plugin_action_links_' . HAPPYACCESS_PLUGIN_BASENAME, array( Plugin::class, 'action_links' ) ) );
 	}
 }

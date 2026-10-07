@@ -6,6 +6,9 @@
  */
 
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Internal;
+use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\TempUsers;
 use HappyAccess\Plugin;
 
 /**
@@ -103,5 +106,79 @@ class MultisiteBootTest extends WP_UnitTestCase {
 		$site_id = self::factory()->blog->create();
 
 		$this->assertSame( 1, $this->migrated( array( $site_id ) ) );
+	}
+
+	/**
+	 * Marks a site's last migration as failed.
+	 *
+	 * @param int $site_id Site id.
+	 * @return void
+	 */
+	private function mark_failed( $site_id ) {
+		switch_to_blog( $site_id );
+		Internal::run(
+			static function () {
+				set_transient( Installer::FAILED_TRANSIENT, 'write_failed', 15 * MINUTE_IN_SECONDS );
+			}
+		);
+		restore_current_blog();
+	}
+
+	public function test_a_site_backing_off_does_not_take_a_batch_slot() {
+		$site_ids = self::factory()->blog->create_many( 25 );
+		$failed   = array_slice( $site_ids, 0, 3 );
+		$healthy  = array_slice( $site_ids, 3 );
+		foreach ( $failed as $site_id ) {
+			$this->mark_failed( $site_id );
+		}
+		$this->activate_network_wide();
+
+		Installer::network_upgrade();
+
+		$this->assertSame( 0, $this->migrated( $failed ) );
+		$this->assertSame( 20, $this->migrated( $healthy ) );
+		$this->assertNotSame( Installer::DB_VERSION, get_site_option( Installer::NETWORK_OPTION ) );
+	}
+
+	public function test_the_loop_is_scheduled_even_when_this_site_is_backing_off() {
+		$this->activate_network_wide();
+		self::factory()->blog->create();
+		Internal::run(
+			static function () {
+				set_transient( Installer::FAILED_TRANSIENT, 'write_failed', 15 * MINUTE_IN_SECONDS );
+			}
+		);
+
+		Installer::maybe_upgrade();
+
+		$this->assertNotFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+	}
+
+	public function test_network_deactivation_revokes_the_passes_of_every_site() {
+		$site_ids = self::factory()->blog->create_many( 3 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$made = array();
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( $site_id );
+			Installer::install();
+			update_option( 'happyaccess_db_version', Installer::DB_VERSION );
+			$grant            = Grants::create(
+				array(
+					'label'    => 'Site ' . $site_id,
+					'duration' => DAY_IN_SECONDS,
+				)
+			);
+			$made[ $site_id ] = array( $grant['id'], TempUsers::get_or_create( Grants::get( $grant['id'] ) ) );
+			restore_current_blog();
+		}
+
+		Plugin::deactivate( true );
+
+		foreach ( $made as $site_id => $pair ) {
+			switch_to_blog( $site_id );
+			$this->assertGreaterThan( 0, Grants::get( $pair[0] )['revoked_at'], 'site ' . $site_id );
+			$this->assertFalse( get_userdata( $pair[1] ), 'site ' . $site_id );
+			restore_current_blog();
+		}
 	}
 }

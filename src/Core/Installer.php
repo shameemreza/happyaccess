@@ -112,20 +112,30 @@ final class Installer {
 	 * @return void
 	 */
 	public static function maybe_upgrade() {
-		// A failed run backs off for 15 minutes so every request doesn't retry it.
+		// Scheduled first: a site backing off after a failed run must not stop the network loop from starting.
+		self::maybe_schedule_network_upgrade();
+		if ( self::migration_failed() ) {
+			return;
+		}
+		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
+			self::migrate();
+		}
+	}
+
+	/**
+	 * Whether the last migration of this site failed less than 15 minutes ago.
+	 * A failed run backs off so every request doesn't retry it.
+	 *
+	 * @return bool
+	 */
+	private static function migration_failed() {
 		// Transient calls can add or delete an option, so they run inside the bypass.
 		$failed = Internal::run(
 			static function () {
 				return get_transient( self::FAILED_TRANSIENT );
 			}
 		);
-		if ( false !== $failed ) {
-			return;
-		}
-		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
-			self::migrate();
-		}
-		self::maybe_schedule_network_upgrade();
+		return false !== $failed;
 	}
 
 	/**
@@ -171,6 +181,11 @@ final class Installer {
 			switch_to_blog( (int) $site_id );
 			try {
 				if ( self::DB_VERSION !== get_option( 'happyaccess_db_version' ) ) {
+					if ( self::migration_failed() ) {
+						// Backing off. It stays behind, and it doesn't take a slot from a site that can move.
+						++$behind;
+						continue;
+					}
 					if ( $migrated < self::NETWORK_BATCH ) {
 						++$migrated;
 						self::maybe_upgrade();
