@@ -27,6 +27,17 @@ describe( 'time labels', () => {
 } );
 
 describe( 'Ring', () => {
+	it( 'starts the arc at the top with an SVG transform, so RTL builds cannot flip it', () => {
+		const { container } = render(
+			<Ring secondsLeft={ 2 * DAY } total={ 3 * DAY } />
+		);
+		expect(
+			container
+				.querySelector( '.ha-ring__arc' )
+				.getAttribute( 'transform' )
+		).toBe( 'rotate(-90 24 24)' );
+	} );
+
 	const arc = ( container ) => container.querySelector( '.ha-ring__arc' );
 
 	it( 'is hidden from screen readers, since the row says the time left in words', () => {

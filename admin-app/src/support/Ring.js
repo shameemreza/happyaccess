@@ -125,6 +125,7 @@ export default function Ring( { secondsLeft, total, state = 'active' } ) {
 				/>
 				<circle
 					className="ha-ring__arc"
+					transform="rotate(-90 24 24)"
 					cx="24"
 					cy="24"
 					r={ RADIUS }
