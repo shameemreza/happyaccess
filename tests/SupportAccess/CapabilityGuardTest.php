@@ -288,6 +288,10 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		update_option( $key, $changed );
 		$this->assertSame( 'Updated', get_option( $key )['administrator']['name'] );
 		do_action( 'upgrader_process_complete', null, array() );
+
+		$changed['administrator']['name'] = 'After complete';
+		update_option( $key, $changed );
+		$this->assertSame( 'Updated', get_option( $key )['administrator']['name'] );
 	}
 
 	public function test_a_bulk_update_closes_the_role_window_with_one_complete() {
@@ -434,5 +438,170 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( user_can( $temp, 'edit_users', $manager ) );
 		$this->assertTrue( user_can( $temp, 'edit_users', $subscriber ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', 999999 ) );
+	}
+
+	public function test_a_refused_role_write_outside_plugin_work_is_logged_once_per_request() {
+		global $wpdb;
+		$temp    = $this->temp();
+		$key     = $wpdb->prefix . 'user_roles';
+		$roles   = get_option( $key );
+		$changed = $roles;
+		$changed['administrator']['name'] = 'Blocked';
+		wp_set_current_user( $temp );
+
+		update_option( $key, $roles );
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'role_change_blocked' ) )['total'] );
+
+		update_option( $key, $changed );
+		$changed['editor']['name'] = 'Blocked too';
+		update_option( $key, $changed );
+
+		$this->assertSame( $roles, get_option( $key ) );
+		$rows = AuditLog::query( array( 'event' => 'role_change_blocked' ) )['items'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'support', $rows[0]['feature'] );
+		$this->assertSame( Capabilities::grant_id( $temp ), (int) $rows[0]['token_id'] );
+		$this->assertSame( $temp, (int) $rows[0]['user_id'] );
+		$this->assertContains( 'role_change_blocked', \HappyAccess\Core\Privacy::AGENT_EVENTS );
+	}
+
+	public function test_a_refused_role_write_on_a_custom_pass_is_logged_and_full_writes_are_not_blocked() {
+		global $wpdb;
+		$key     = $wpdb->prefix . 'user_roles';
+		$changed = get_option( $key );
+		$changed['administrator']['name'] = 'Custom tried';
+		$custom  = $this->temp( array( 'level' => 'custom', 'caps' => array( 'edit_posts' ) ) );
+		wp_set_current_user( $custom );
+		update_option( $key, $changed );
+		$this->assertNotSame( 'Custom tried', get_option( $key )['administrator']['name'] );
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'role_change_blocked', 'token_id' => Capabilities::grant_id( $custom ) ) )['total'] );
+
+		wp_set_current_user( $this->owner );
+		$full = $this->temp( array( 'level' => 'full', 'confirm_full' => true ) );
+		wp_set_current_user( $full );
+		$changed['administrator']['name'] = 'Full changed';
+		update_option( $key, $changed );
+		$this->assertSame( 'Full changed', get_option( $key )['administrator']['name'] );
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'role_change_blocked', 'token_id' => Capabilities::grant_id( $full ) ) )['total'] );
+	}
+
+	public function test_rest_user_query_hides_the_creator_and_the_locked_owner() {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$made   = Grants::create( array( 'label' => 'Acme', 'created_by' => $editor ) );
+		$temp   = TempUsers::get_or_create( Grants::get( $made['id'] ) );
+		$locked = CapabilityGuard::creator_for( $temp );
+		$this->assertGreaterThan( 0, $locked );
+		$this->assertNotSame( $editor, $locked );
+
+		wp_set_current_user( $temp );
+		$args = apply_filters( 'rest_user_query', array( 'exclude' => array( 7 ) ), new WP_REST_Request( 'GET', '/wp/v2/users' ) );
+		$this->assertContains( 7, $args['exclude'] );
+		$this->assertContains( $editor, $args['exclude'] );
+		$this->assertContains( $locked, $args['exclude'] );
+
+		$listed = apply_filters( 'users_list_table_query_args', array() );
+		$this->assertContains( $editor, $listed['exclude'] );
+		$this->assertContains( $locked, $listed['exclude'] );
+
+		wp_set_current_user( $this->owner );
+		$this->assertSame( array( 'number' => 5 ), apply_filters( 'rest_user_query', array( 'number' => 5 ), new WP_REST_Request( 'GET', '/wp/v2/users' ) ) );
+	}
+
+	/**
+	 * On a network only a super admin holds create_users, so only they can give it to a pass.
+	 *
+	 * @return void
+	 */
+	private function owner_may_give_create_users() {
+		if ( is_multisite() ) {
+			grant_super_admin( $this->owner );
+		}
+	}
+
+	public function test_custom_pass_with_create_users_gives_new_users_subscriber_when_the_default_role_is_beyond_it() {
+		$this->owner_may_give_create_users();
+		update_option( 'default_role', 'editor' );
+		$temp = $this->temp( array( 'level' => 'custom', 'caps' => array( 'create_users', 'list_users' ), 'confirm_full' => true ) );
+		wp_set_current_user( $temp );
+
+		$made = wp_insert_user( array( 'user_login' => 'madebycustom', 'user_pass' => 'x-strong-password', 'user_email' => 'madebycustom@example.org' ) );
+
+		$this->assertIsInt( $made );
+		$this->assertSame( array( 'subscriber' ), get_userdata( $made )->roles );
+		$this->assertSame( 'editor', get_option( 'default_role' ) );
+	}
+
+	public function test_custom_pass_keeps_a_default_role_its_caps_cover() {
+		$this->owner_may_give_create_users();
+		update_option( 'default_role', 'contributor' );
+		$temp = $this->temp( array( 'level' => 'custom', 'caps' => array( 'create_users', 'edit_posts', 'delete_posts' ), 'confirm_full' => true ) );
+		wp_set_current_user( $temp );
+
+		$made = wp_insert_user( array( 'user_login' => 'madecontributor', 'user_pass' => 'x-strong-password', 'user_email' => 'madecontributor@example.org' ) );
+
+		$this->assertSame( array( 'contributor' ), get_userdata( $made )->roles );
+	}
+
+	public function test_an_admin_still_gets_the_default_role_and_a_pass_reads_it_unchanged() {
+		update_option( 'default_role', 'editor' );
+		$by_admin = wp_insert_user( array( 'user_login' => 'madebyadmin', 'user_pass' => 'x-strong-password', 'user_email' => 'madebyadmin@example.org' ) );
+		$this->assertSame( array( 'editor' ), get_userdata( $by_admin )->roles );
+
+		$this->owner_may_give_create_users();
+		$temp = $this->temp( array( 'level' => 'custom', 'caps' => array( 'create_users' ), 'confirm_full' => true ) );
+		wp_set_current_user( $temp );
+		$this->assertSame( 'editor', get_option( 'default_role' ) );
+	}
+
+	public function test_temp_user_cannot_add_a_guarded_network_option() {
+		$temp = $this->temp();
+		delete_site_option( 'registration' );
+		CapabilityGuard::register();
+		$this->assertSame( 10, has_filter( 'pre_add_site_option_registration', array( CapabilityGuard::class, 'block_site_option_add' ) ) );
+		wp_set_current_user( $temp );
+		$this->expectException( 'WPDieException' );
+		add_site_option( 'registration', 'all' );
+	}
+
+	public function test_admins_and_internal_writes_may_add_guarded_network_options() {
+		delete_site_option( 'registration' );
+		$this->assertTrue( add_site_option( 'registration', 'none' ) );
+		delete_site_option( 'registration' );
+
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+		$added = \HappyAccess\Core\Internal::run(
+			static function () {
+				return add_site_option( 'registration', 'user' );
+			}
+		);
+		$this->assertTrue( $added );
+		$this->assertSame( 'new', CapabilityGuard::block_site_option_add( 'new', 'blog_upload_space', 1 ) );
+	}
+
+	public function test_real_site_option_writes_and_deletes_are_guarded_for_a_temp_user() {
+		update_site_option( 'site_admins', array( 'admin' ) );
+		$temp = $this->temp();
+		wp_set_current_user( $temp );
+
+		update_site_option( 'site_admins', array( 'admin', 'intruder' ) );
+		$this->assertSame( array( 'admin' ), get_site_option( 'site_admins' ) );
+
+		$this->expectException( 'WPDieException' );
+		delete_site_option( 'site_admins' );
+	}
+
+	public function test_is_low_privilege_ignores_level_caps_and_accepts_no_caps() {
+		$legacy = new WP_User( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$legacy->add_cap( 'level_0' );
+		$legacy->add_cap( 'level_10' );
+		$this->assertTrue( CapabilityGuard::is_low_privilege( new WP_User( $legacy->ID ) ) );
+
+		$bare = new WP_User( self::factory()->user->create( array( 'role' => '' ) ) );
+		$this->assertSame( array(), array_filter( $bare->allcaps ) );
+		$this->assertTrue( CapabilityGuard::is_low_privilege( $bare ) );
+
+		$legacy->add_cap( 'level_x' );
+		$this->assertFalse( CapabilityGuard::is_low_privilege( new WP_User( $legacy->ID ) ) );
 	}
 }

@@ -93,6 +93,28 @@ class AccountGuardTest extends WP_UnitTestCase {
 		$this->assertStringEndsWith( '@happyaccess.invalid', get_userdata( $this->temp )->user_email );
 	}
 
+	public function test_an_admin_still_changes_a_customers_password_and_email() {
+		$subscriber = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_email' => 'before@example.org',
+			)
+		);
+		$hash       = get_userdata( $subscriber )->user_pass;
+		wp_update_user(
+			array(
+				'ID'         => $subscriber,
+				'user_email' => 'after@example.org',
+				'user_pass'  => 'new-pass-123',
+			)
+		);
+		clean_user_cache( $subscriber );
+		$user = get_userdata( $subscriber );
+		$this->assertFalse( Capabilities::is_temp_user( get_current_user_id() ) );
+		$this->assertSame( 'after@example.org', $user->user_email );
+		$this->assertNotSame( $hash, $user->user_pass );
+	}
+
 	public function test_password_reset_blocked_for_temp_users() {
 		$this->assertFalse( apply_filters( 'allow_password_reset', true, $this->temp ) );
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );

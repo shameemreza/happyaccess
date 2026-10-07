@@ -268,7 +268,7 @@ final class Session {
 			return;
 		}
 		$expires = (int) $grant['expires_at'];
-		if ( PHP_INT_MAX === $expires || call_user_func( self::$headers_check ) ) {
+		if ( PHP_INT_MAX === $expires || call_user_func( self::$headers_check ) || self::is_plain_http_to_secure_admin() ) {
 			return;
 		}
 		$token  = wp_get_session_token();
@@ -287,6 +287,20 @@ final class Session {
 		}
 		// The cookie length comes from cap_cookie(), so it ends with the grant.
 		wp_set_auth_cookie( $user_id, true, '', $token );
+	}
+
+	/**
+	 * Whether this is a plain HTTP request on a site whose admin runs over
+	 * HTTPS. A cookie issued here would be the non-secure kind, which the
+	 * admin doesn't read, so the next HTTPS request carries the session instead.
+	 *
+	 * @return bool
+	 */
+	private static function is_plain_http_to_secure_admin() {
+		if ( is_ssl() ) {
+			return false;
+		}
+		return force_ssl_admin() || 'https' === wp_parse_url( admin_url(), PHP_URL_SCHEME );
 	}
 
 	/**

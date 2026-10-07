@@ -193,6 +193,21 @@ final class CapabilityGuard {
 	private static $open_roles_logged = false;
 
 	/**
+	 * Whether a refused role table write already logged in this request.
+	 *
+	 * @var bool
+	 */
+	private static $blocked_roles_logged = false;
+
+	/**
+	 * Whether a custom pass is creating a user that gets the default role.
+	 * Set just before core reads default_role, and used once.
+	 *
+	 * @var bool
+	 */
+	private static $new_user_role = false;
+
+	/**
 	 * Per request cache of the stored row name an option name resolves to.
 	 *
 	 * @var array
@@ -216,10 +231,15 @@ final class CapabilityGuard {
 		foreach ( array_merge( self::PROTECTED_SITE_OPTIONS, array( self::NETWORK_PLUGINS_OPTION ) ) as $site_option ) {
 			add_filter( 'pre_update_site_option_' . $site_option, array( __CLASS__, 'keep_old_site_option' ), 10, 4 );
 			add_action( 'pre_delete_site_option_' . $site_option, array( __CLASS__, 'block_site_option_delete' ), 10, 2 );
+			add_filter( 'pre_add_site_option_' . $site_option, array( __CLASS__, 'block_site_option_add' ), 10, 3 );
 		}
 		add_filter( 'all_plugins', array( __CLASS__, 'hide_plugin' ) );
 		add_filter( 'users_list_table_query_args', array( __CLASS__, 'hide_owner' ) );
+		add_filter( 'rest_user_query', array( __CLASS__, 'hide_owner' ) );
 		add_filter( 'editable_roles', array( __CLASS__, 'filter_editable_roles' ), PHP_INT_MAX );
+		add_filter( 'insert_user_meta', array( __CLASS__, 'note_new_user' ), PHP_INT_MAX, 4 );
+		add_filter( 'option_default_role', array( __CLASS__, 'default_role_for_new_user' ), PHP_INT_MAX );
+		add_action( 'user_register', array( __CLASS__, 'forget_new_user' ), 0 );
 		add_action( 'activate_plugin', array( __CLASS__, 'plugin_work_started' ), 10, 2 );
 		add_filter( 'upgrader_pre_install', array( __CLASS__, 'upgrade_work_started' ) );
 		add_action( 'activated_plugin', array( __CLASS__, 'plugin_work_finished' ) );
@@ -304,10 +324,12 @@ final class CapabilityGuard {
 	 */
 	public static function reset() {
 		self::flush_cache();
-		self::$activation_writes = 0;
-		self::$upgrade_writes    = 0;
-		self::$roles_logged      = false;
-		self::$open_roles_logged = false;
+		self::$activation_writes    = 0;
+		self::$upgrade_writes       = 0;
+		self::$roles_logged         = false;
+		self::$open_roles_logged    = false;
+		self::$blocked_roles_logged = false;
+		self::$new_user_role        = false;
 	}
 
 	/**
@@ -609,6 +631,9 @@ final class CapabilityGuard {
 			return $value;
 		}
 		if ( self::is_guarded_option( $option, $level ) ) {
+			if ( $value !== $old_value && ( self::is_roles_option( $option ) || self::is_roles_option( self::stored_option_name( $option ) ) ) ) {
+				self::log_blocked_role_change( $user_id );
+			}
 			return $old_value;
 		}
 		if ( 'custom' === $level && self::resolves_to( $option, 'default_role' ) && ! self::is_low_privilege_role( $value ) ) {
@@ -658,6 +683,30 @@ final class CapabilityGuard {
 				'token_id' => Capabilities::grant_id( $user_id ),
 				'user_id'  => $user_id,
 				'summary'  => 'Changed role permissions',
+			)
+		);
+	}
+
+	/**
+	 * Logs the first refused role table write in a request. Plugins often
+	 * rewrite roles on init or after an update, and the owner should see
+	 * that the write was dropped.
+	 *
+	 * @param int $user_id Temp user id.
+	 * @return void
+	 */
+	private static function log_blocked_role_change( $user_id ) {
+		if ( self::$blocked_roles_logged ) {
+			return;
+		}
+		self::$blocked_roles_logged = true;
+		AuditLog::add(
+			'role_change_blocked',
+			array(
+				'feature'  => 'support',
+				'token_id' => Capabilities::grant_id( $user_id ),
+				'user_id'  => $user_id,
+				'summary'  => 'Blocked a change to role permissions outside plugin activation or update',
 			)
 		);
 	}
@@ -719,6 +768,26 @@ final class CapabilityGuard {
 			return self::keep_network_plugin_active( $value, $old_value );
 		}
 		return self::is_guarded_option( $option, self::level_for( $user_id ), true, $network_id ) ? $old_value : $value;
+	}
+
+	/**
+	 * Stops a temp user creating a protected network option that doesn't
+	 * exist yet, so the update guard has nothing to keep.
+	 *
+	 * @param mixed  $value      Value of the new option.
+	 * @param string $option     Option name.
+	 * @param int    $network_id Network id.
+	 * @return mixed
+	 */
+	public static function block_site_option_add( $value, $option = '', $network_id = 0 ) {
+		$user_id = get_current_user_id();
+		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
+			return $value;
+		}
+		if ( ! self::is_guarded_option( $option, self::level_for( $user_id ), true, $network_id ) ) {
+			return $value;
+		}
+		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
 	}
 
 	/**
@@ -895,7 +964,7 @@ final class CapabilityGuard {
 		$own = self::rules( $user_id )['caps'];
 		foreach ( $roles as $slug => $role ) {
 			$caps = is_array( $role ) && isset( $role['capabilities'] ) && is_array( $role['capabilities'] ) ? $role['capabilities'] : array();
-			if ( array_diff( self::true_caps( $caps ), $own ) ) {
+			if ( ! self::caps_fit( $caps, $own ) ) {
 				unset( $roles[ $slug ] );
 			}
 		}
@@ -903,21 +972,91 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Hides the admin who created the grant from the users list.
+	 * Whether every granted cap in a role's list is one the pass holds.
+	 *
+	 * @param array    $capabilities Cap name to granted flag.
+	 * @param string[] $own          Caps of the custom pass.
+	 * @return bool
+	 */
+	private static function caps_fit( array $capabilities, array $own ) {
+		return array() === array_diff( self::true_caps( $capabilities ), $own );
+	}
+
+	/**
+	 * Notes that a custom pass is creating a user with no role given, so core
+	 * is about to give it default_role. A pass with create_users but not
+	 * promote_users never picks the role, so editable_roles doesn't apply.
+	 *
+	 * @param array    $meta     User meta about to be saved.
+	 * @param \WP_User $user     The user.
+	 * @param bool     $update   Whether this is an update.
+	 * @param array    $userdata Data passed to wp_insert_user().
+	 * @return array
+	 */
+	public static function note_new_user( $meta, $user = null, $update = false, $userdata = array() ) {
+		unset( $user );
+		self::$new_user_role = false;
+		if ( $update || ( is_array( $userdata ) && isset( $userdata['role'] ) ) ) {
+			return $meta;
+		}
+		$user_id = get_current_user_id();
+		if ( Capabilities::is_temp_user( $user_id ) && 'custom' === self::level_for( $user_id ) ) {
+			self::$new_user_role = true;
+		}
+		return $meta;
+	}
+
+	/**
+	 * Gives a user that a custom pass creates subscriber instead of the
+	 * default role, when that role holds caps the pass doesn't. Same rule as
+	 * filter_editable_roles(). Acts once, for the read core makes right after
+	 * note_new_user(); every other read of the option is left alone.
+	 *
+	 * @param mixed $value Stored default role.
+	 * @return mixed
+	 */
+	public static function default_role_for_new_user( $value ) {
+		if ( ! self::$new_user_role ) {
+			return $value;
+		}
+		self::$new_user_role = false;
+		$user_id             = get_current_user_id();
+		if ( ! Capabilities::is_temp_user( $user_id ) || 'custom' !== self::level_for( $user_id ) ) {
+			return $value;
+		}
+		$role = is_string( $value ) && '' !== $value ? get_role( $value ) : null;
+		if ( $role && self::caps_fit( (array) $role->capabilities, self::rules( $user_id )['caps'] ) ) {
+			return $value;
+		}
+		return 'subscriber';
+	}
+
+	/**
+	 * Clears the new user note once the user exists, in case core never read
+	 * default_role.
+	 *
+	 * @return void
+	 */
+	public static function forget_new_user() {
+		self::$new_user_role = false;
+	}
+
+	/**
+	 * Hides the admin who created the grant, and the locked owner when that
+	 * is someone else, from the users list screen and the REST users route.
 	 *
 	 * @param array $args User query args.
 	 * @return array
 	 */
 	public static function hide_owner( $args ) {
 		$user_id = get_current_user_id();
-		if ( ! Capabilities::is_temp_user( $user_id ) ) {
+		if ( ! is_array( $args ) || ! Capabilities::is_temp_user( $user_id ) ) {
 			return $args;
 		}
-		$owner = self::rules( $user_id )['created_by'];
-		if ( $owner > 0 ) {
+		$hidden = array_filter( array( self::rules( $user_id )['created_by'], self::creator_for( $user_id ) ) );
+		if ( $hidden ) {
 			$exclude         = isset( $args['exclude'] ) ? array_map( 'intval', (array) $args['exclude'] ) : array();
-			$exclude[]       = $owner;
-			$args['exclude'] = array_values( array_unique( $exclude ) );
+			$args['exclude'] = array_values( array_unique( array_merge( $exclude, $hidden ) ) );
 		}
 		return $args;
 	}

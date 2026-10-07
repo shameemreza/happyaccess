@@ -178,6 +178,66 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertSame( $expires, WP_Session_Tokens::get_instance( $user_id )->get( $token )['expiration'] );
 	}
 
+	/**
+	 * Logs in an extended one-time grant whose cookie now ends well before the grant.
+	 *
+	 * @return array User id and session token.
+	 */
+	private function extended_login() {
+		// Core drops sessions that ended before the real time, so the clock follows it here.
+		Clock::freeze( time() );
+		list( $id, $user_id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$token = $this->log_in_until( $user_id, Grants::get( $id )['expires_at'] );
+		$this->assertTrue( Grants::extend( $id, DAY_IN_SECONDS ) );
+		return array( $user_id, $token );
+	}
+
+	public function test_enforce_skips_the_cookie_on_plain_http_when_ssl_admin_is_forced() {
+		list( $user_id ) = $this->extended_login();
+		unset( $_SERVER['HTTPS'] );
+		force_ssl_admin( true );
+		try {
+			$issued = $this->issued_cookies( array( Session::class, 'enforce' ) );
+		} finally {
+			force_ssl_admin( false );
+		}
+
+		$this->assertSame( array(), $issued );
+		$this->assertSame( $user_id, get_current_user_id() );
+	}
+
+	public function test_enforce_skips_the_cookie_on_plain_http_when_the_admin_url_is_https() {
+		list( $user_id ) = $this->extended_login();
+		unset( $_SERVER['HTTPS'] );
+		$https = static function ( $url ) {
+			return set_url_scheme( $url, 'https' );
+		};
+		add_filter( 'admin_url', $https );
+		try {
+			$issued = $this->issued_cookies( array( Session::class, 'enforce' ) );
+		} finally {
+			remove_filter( 'admin_url', $https );
+		}
+
+		$this->assertSame( array(), $issued );
+		$this->assertSame( $user_id, get_current_user_id() );
+	}
+
+	public function test_enforce_still_reissues_the_cookie_over_https_when_ssl_admin_is_forced() {
+		list( $user_id, $token ) = $this->extended_login();
+		$_SERVER['HTTPS']        = 'on';
+		force_ssl_admin( true );
+		try {
+			$issued = $this->issued_cookies( array( Session::class, 'enforce' ) );
+		} finally {
+			force_ssl_admin( false );
+			unset( $_SERVER['HTTPS'] );
+		}
+
+		$this->assertSame( array( array( $user_id, $token ) ), $issued );
+	}
+
 	public function test_regenerate_returns_null_for_a_revoked_grant() {
 		list( $id ) = $this->grant_with_user();
 		Grants::revoke( $id );

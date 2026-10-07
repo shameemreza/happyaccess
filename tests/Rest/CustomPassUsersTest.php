@@ -119,4 +119,45 @@ class CustomPassUsersTest extends RestTestCase {
 		$this->assertArrayHasKey( 'administrator', get_editable_roles() );
 		$this->assertTrue( current_user_can( 'promote_user', $temp ) );
 	}
+
+	public function test_users_route_hides_the_creator_from_a_pass_that_lists_users() {
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->custom( array( 'list_users' ) );
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/users' );
+		$request->set_query_params(
+			array(
+				'context'  => 'view',
+				'per_page' => 100,
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$ids = array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+		$this->assertContains( $subscriber, $ids );
+		$this->assertNotContains( $this->owner, $ids );
+	}
+
+	public function test_custom_pass_with_create_users_only_makes_a_subscriber_when_the_default_role_is_beyond_it() {
+		if ( is_multisite() ) {
+			$this->markTestSkipped( 'On a network the users route makes the account with wpmu_create_user and adds it with no role, so default_role is never used.' );
+		}
+		update_option( 'default_role', 'editor' );
+		$this->custom( array( 'create_users', 'list_users' ) );
+
+		$response = $this->users_request(
+			'POST',
+			'',
+			array(
+				'username' => 'defaultrole',
+				'email'    => 'defaultrole@example.org',
+				'password' => 'x-strong-password',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( array( 'subscriber' ), get_user_by( 'login', 'defaultrole' )->roles );
+	}
 }
+

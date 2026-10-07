@@ -64,6 +64,7 @@ final class Privacy {
 		'user_role_changed',
 		'user_role_added',
 		'roles_changed',
+		'role_change_blocked',
 		'privacy_erased',
 		'wc_webhook_created',
 		'wc_key_blocked',

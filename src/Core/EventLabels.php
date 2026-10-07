@@ -69,6 +69,7 @@ final class EventLabels {
 			'user_role_changed'       => __( 'User role changed', 'happyaccess' ),
 			'user_role_added'         => __( 'User role added', 'happyaccess' ),
 			'roles_changed'           => __( 'Role permissions changed', 'happyaccess' ),
+			'role_change_blocked'     => __( 'Role change blocked', 'happyaccess' ),
 			'privacy_erased'          => __( 'Personal data erased', 'happyaccess' ),
 			'wc_webhook_created'      => __( 'Webhook created', 'happyaccess' ),
 			'wc_key_blocked'          => __( 'API key request blocked', 'happyaccess' ),
