@@ -8,14 +8,12 @@ import {
 } from '@wordpress/element';
 import { Button, Notice } from '@wordpress/components';
 import { __, _n, sprintf } from '@wordpress/i18n';
-import {
-	exportActivity,
-	getSettings as fetchSettings,
-	listGrants,
-} from '../api';
+import { exportActivity } from '../api';
+import { useGrants, useSettings } from '../data/DataProvider';
 import { useActivity } from '../hooks/useActivity';
 import { useAnnounce } from '../hooks/useAnnounce';
 import { useNow } from '../hooks/useNow';
+import LoadingLine from '../LoadingLine';
 import {
 	clearQueryToken,
 	isPlainClick,
@@ -24,6 +22,7 @@ import {
 } from '../tabList';
 import ActivityRow from './ActivityRow';
 import {
+	activityKey,
 	countCsvRows,
 	downloadCsv,
 	groupByDay,
@@ -84,40 +83,18 @@ export default function ActivityTab( {
 	const [ search, setSearch ] = useState( '' );
 	const [ page, setPage ] = useState( 1 );
 	const [ openId, setOpenId ] = useState( 0 );
-	const [ grants, setGrants ] = useState( [] );
-	// Until the list arrives, a pass from the URL has no name yet.
-	const [ grantsLoaded, setGrantsLoaded ] = useState( false );
-	const [ retention, setRetention ] = useState( 0 );
+	// Without the list the Who choice still offers everyone and you. Until it
+	// arrives, a pass from the URL has no name yet.
+	const { grants, loading: grantsLoading } = useGrants();
+	const grantsLoaded = ! grantsLoading;
+	const { settings } = useSettings();
+	const keptDays = Number( settings?.privacy?.retention_days );
+	// Without the settings the footer leaves out how long events are kept.
+	const retention = keptDays > 0 ? keptDays : 0;
 	const [ exporting, setExporting ] = useState( false );
 	const [ exportError, setExportError ] = useState( '' );
 	const headingRef = useRef( null );
 	const speak = useRef( false );
-
-	useEffect( () => {
-		let live = true;
-		listGrants()
-			.then(
-				( result ) => live && setGrants( result.items ),
-				() => {
-					// Without the list the Who choice still offers everyone and you.
-				}
-			)
-			.finally( () => live && setGrantsLoaded( true ) );
-		fetchSettings().then(
-			( result ) => {
-				const days = Number( result?.privacy?.retention_days );
-				if ( live && days > 0 ) {
-					setRetention( days );
-				}
-			},
-			() => {
-				// The footer leaves out how long events are kept.
-			}
-		);
-		return () => {
-			live = false;
-		};
-	}, [] );
 
 	// Waits for a pause in typing, so one search is one request.
 	const committed = useRef( '' );
@@ -170,7 +147,7 @@ export default function ActivityTab( {
 
 	// Say how many events a change of filters found, once the list for those
 	// filters is the one on screen. Until then the total is the old one.
-	const requestKey = JSON.stringify( request );
+	const requestKey = activityKey( request );
 	useEffect( () => {
 		if (
 			speak.current &&
@@ -443,14 +420,17 @@ export default function ActivityTab( {
 							</Button>
 						</div>
 					) }
-					{ ! error && 0 === items.length && (
+					{ ! error && 0 === items.length && loading && (
+						<LoadingLine loading className="ha-log__empty">
+							{ __( 'Loading activity.', 'happyaccess' ) }
+						</LoadingLine>
+					) }
+					{ ! error && 0 === items.length && ! loading && (
 						<p className="ha-log__empty">
-							{ loading
-								? __( 'Loading activity.', 'happyaccess' )
-								: __(
-										'No activity matches these filters.',
-										'happyaccess'
-									) }
+							{ __(
+								'No activity matches these filters.',
+								'happyaccess'
+							) }
 						</p>
 					) }
 					<div

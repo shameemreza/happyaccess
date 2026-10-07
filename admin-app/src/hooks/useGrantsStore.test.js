@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
-import { useGrants } from './useGrants';
+import { useGrantsStore } from './useGrantsStore';
 
 vi.mock( '@wordpress/api-fetch' );
 
@@ -31,7 +31,7 @@ afterEach( () => {
 
 it( 'loads the list on mount', async () => {
 	apiFetch.mockResolvedValue( { items: [ grant( 5 ), grant( 6 ) ] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 
 	expect( result.current.loading ).toBe( true );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
@@ -43,7 +43,7 @@ it( 'loads the list on mount', async () => {
 
 it( 'act extend posts the seconds and replaces the item without a refetch', async () => {
 	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ), grant( 6 ) ] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	apiFetch.mockResolvedValueOnce( grant( 5, { seconds_left: 99 } ) );
@@ -62,7 +62,7 @@ it( 'act extend posts the seconds and replaces the item without a refetch', asyn
 
 it( 'act revoke removes the item', async () => {
 	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ), grant( 6 ) ] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	apiFetch.mockResolvedValueOnce( { revoked: true } );
@@ -76,7 +76,7 @@ it( 'act revoke removes the item', async () => {
 
 it( 'create returns the secrets but keeps them out of the list', async () => {
 	apiFetch.mockResolvedValueOnce( { items: [] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	apiFetch.mockResolvedValueOnce(
@@ -100,7 +100,7 @@ it( 'create returns the secrets but keeps them out of the list', async () => {
 
 it( 'rejects with the normalized error when an action fails', async () => {
 	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ) ] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	apiFetch.mockRejectedValueOnce( {
@@ -121,7 +121,7 @@ it( 'rejects with the normalized error when an action fails', async () => {
 
 it( 'sets error when the list fails to load', async () => {
 	apiFetch.mockRejectedValue( { code: 'fetch_error', message: 'offline' } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 	expect( result.current.error.code ).toBe( 'network' );
 } );
@@ -129,7 +129,7 @@ it( 'sets error when the list fails to load', async () => {
 it( 'refreshes every 60 seconds while visible, pauses while hidden and stops on unmount', async () => {
 	vi.useFakeTimers();
 	apiFetch.mockResolvedValue( { items: [] } );
-	const { unmount } = renderHook( () => useGrants() );
+	const { unmount } = renderHook( () => useGrantsStore() );
 	await act( async () => {} );
 	expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 
@@ -160,7 +160,7 @@ it( 'act resume and regenerate post to their routes, and regenerate keeps the se
 	apiFetch.mockResolvedValueOnce( {
 		items: [ grant( 5, { status: 'suspended' } ) ],
 	} );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	apiFetch.mockResolvedValueOnce( grant( 5 ) );
@@ -191,7 +191,7 @@ it( 'act resume and regenerate post to their routes, and regenerate keeps the se
 
 it( 'rejects an unknown action with a normalized error and sends nothing', async () => {
 	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ) ] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	await act( async () => {
@@ -204,7 +204,7 @@ it( 'rejects an unknown action with a normalized error and sends nothing', async
 
 it( 'does not bring back a pass a refresh removed while an action ran', async () => {
 	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ), grant( 6 ) ] } );
-	const { result } = renderHook( () => useGrants() );
+	const { result } = renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	let finish;
@@ -231,7 +231,7 @@ it( 'does not bring back a pass a refresh removed while an action ran', async ()
 
 it( 'refreshes as soon as the tab becomes visible again', async () => {
 	apiFetch.mockResolvedValue( { items: [] } );
-	renderHook( () => useGrants() );
+	renderHook( () => useGrantsStore() );
 	await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
 
 	setVisibility( 'hidden' );

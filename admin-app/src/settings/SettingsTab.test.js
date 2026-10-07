@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import { AnnounceProvider } from '../Announcer';
+import DataProvider from '../data/DataProvider';
 import { settingsFixture } from './fixtures';
 import SettingsTab from './SettingsTab';
 
@@ -19,7 +20,8 @@ function mockServer( initial = settingsFixture(), { revoked } = {} ) {
 	apiFetch.mockReset();
 	apiFetch.mockImplementation( async ( { path, method, data } ) => {
 		if ( '/happyaccess/v1/settings' !== path ) {
-			throw new Error( `Unexpected request ${ path }` );
+			// The data provider also loads the passes and the catalog.
+			return { items: [], groups: [], presets: {} };
 		}
 		if ( 'POST' !== method ) {
 			return server;
@@ -46,7 +48,9 @@ const liveText = () =>
 async function renderTab( props = {} ) {
 	const view = render(
 		<AnnounceProvider>
-			<SettingsTab { ...props } />
+			<DataProvider>
+				<SettingsTab { ...props } />
+			</DataProvider>
 		</AnnounceProvider>
 	);
 	await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
@@ -63,6 +67,72 @@ beforeEach( () => {
 } );
 
 describe( 'Settings tab', () => {
+	describe( 'loading', () => {
+		const slowSettings = ( ms ) => {
+			const serve = apiFetch.getMockImplementation();
+			apiFetch.mockImplementation( ( options ) =>
+				'/happyaccess/v1/settings' === options.path
+					? new Promise( ( resolve ) =>
+							setTimeout( () => resolve( serve( options ) ), ms )
+						)
+					: serve( options )
+			);
+		};
+		const mount = () =>
+			render(
+				<AnnounceProvider>
+					<DataProvider>
+						<SettingsTab />
+					</DataProvider>
+				</AnnounceProvider>
+			);
+		const advance = ( ms ) =>
+			act( async () => {
+				await vi.advanceTimersByTimeAsync( ms );
+			} );
+
+		afterEach( () => {
+			vi.useRealTimers();
+		} );
+
+		it( 'says nothing for a 100 ms load, only a quiet block', async () => {
+			vi.useFakeTimers();
+			slowSettings( 100 );
+			const { container } = mount();
+
+			await advance( 50 );
+			expect(
+				container.querySelector( '.ha-settings__loading .ha-skeleton' )
+			).toBeInTheDocument();
+			expect( screen.queryByText( 'Loading settings' ) ).toBeNull();
+
+			await advance( 400 );
+			expect( screen.queryByText( 'Loading settings' ) ).toBeNull();
+			expect(
+				screen.getByRole( 'heading', { name: 'Safety and privacy' } )
+			).toBeInTheDocument();
+		} );
+
+		it( 'shows "Loading settings" when a 500 ms load runs past 300 ms', async () => {
+			vi.useFakeTimers();
+			slowSettings( 500 );
+			mount();
+
+			await advance( 299 );
+			expect( screen.queryByText( 'Loading settings' ) ).toBeNull();
+			await advance( 1 );
+			expect(
+				screen.getByText( 'Loading settings' )
+			).toBeInTheDocument();
+
+			await advance( 300 );
+			expect( screen.queryByText( 'Loading settings' ) ).toBeNull();
+			expect(
+				screen.getByRole( 'heading', { name: 'Safety and privacy' } )
+			).toBeInTheDocument();
+		} );
+	} );
+
 	it( 'shows the saved values', async () => {
 		mockServer(
 			settingsFixture( {
@@ -603,14 +673,22 @@ describe( 'Settings tab', () => {
 
 	it( 'shows a retry when the settings fail to load', async () => {
 		apiFetch.mockReset();
-		apiFetch.mockRejectedValueOnce( {
-			code: 'rest_forbidden',
-			message: 'Sorry, you are not allowed to do that.',
-			data: { status: 403 },
+		// The app loads other data at the same time, so answer by route.
+		apiFetch.mockImplementation( async ( { path } ) => {
+			if ( '/happyaccess/v1/settings' === path ) {
+				throw {
+					code: 'rest_forbidden',
+					message: 'Sorry, you are not allowed to do that.',
+					data: { status: 403 },
+				};
+			}
+			return { items: [], groups: [], presets: {} };
 		} );
 		render(
 			<AnnounceProvider>
-				<SettingsTab />
+				<DataProvider>
+					<SettingsTab />
+				</DataProvider>
 			</AnnounceProvider>
 		);
 

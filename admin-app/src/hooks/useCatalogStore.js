@@ -2,16 +2,16 @@ import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { getCatalog } from '../api';
 
 /**
- * The permission catalog, loaded once when first wanted and kept for as long
- * as the caller stays mounted.
+ * The permission catalog. It lives in the app-level DataProvider, loads once
+ * and stays for the whole visit.
  *
- * @param {boolean} wanted Whether something needs it yet.
- * @return {Object} { catalog, loading, error, retry }
+ * @param {boolean} enabled Whether to load. Off until setup is done.
+ * @return {Object} { catalog, loading, error, retry, refresh }
  */
-export function useCatalog( wanted ) {
+export function useCatalogStore( enabled = true ) {
 	const [ state, setState ] = useState( {
 		catalog: null,
-		loading: false,
+		loading: true,
 		error: null,
 	} );
 	const started = useRef( false );
@@ -32,6 +32,18 @@ export function useCatalog( wanted ) {
 		}
 	}, [] );
 
+	// A quiet reload that keeps what is on screen, even if it fails.
+	const refresh = useCallback( async () => {
+		try {
+			const catalog = await getCatalog();
+			if ( mounted.current ) {
+				setState( { catalog, loading: false, error: null } );
+			}
+		} catch {
+			// The catalog on screen is still good.
+		}
+	}, [] );
+
 	useEffect( () => {
 		mounted.current = true;
 		return () => {
@@ -40,10 +52,10 @@ export function useCatalog( wanted ) {
 	}, [] );
 
 	useEffect( () => {
-		if ( wanted && ! started.current ) {
+		if ( enabled && ! started.current ) {
 			load();
 		}
-	}, [ wanted, load ] );
+	}, [ enabled, load ] );
 
-	return { ...state, retry: load };
+	return { ...state, retry: load, refresh };
 }

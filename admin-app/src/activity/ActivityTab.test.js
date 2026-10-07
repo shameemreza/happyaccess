@@ -5,6 +5,7 @@ import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import { getSettings, setSettings } from '@wordpress/date';
 import { AnnounceProvider } from '../Announcer';
+import DataProvider from '../data/DataProvider';
 import { grantFixture } from '../support/fixtures';
 import ActivityTab from './ActivityTab';
 import { item, page } from './fixtures';
@@ -87,12 +88,16 @@ function mockServer( { grants = [ grantFixture() ], total } = {} ) {
 
 const activityCalls = () => routes[ '/activity' ] || [];
 const lastActivity = () => activityCalls().at( -1 );
+// The app also loads the default first page when it starts, whatever the tab asks for.
+const withToken = () => activityCalls().filter( ( q ) => q.has( 'token_id' ) );
 
 function setup( props = {} ) {
 	const user = userEvent.setup();
 	const view = render(
 		<AnnounceProvider>
-			<ActivityTab boot={ boot } { ...props } />
+			<DataProvider>
+				<ActivityTab boot={ boot } { ...props } />
+			</DataProvider>
 		</AnnounceProvider>
 	);
 	return { user, ...view };
@@ -269,7 +274,7 @@ describe( 'ActivityTab', () => {
 		setup();
 
 		await waitFor( () =>
-			expect( lastActivity().get( 'token_id' ) ).toBe( '9' )
+			expect( withToken().at( -1 ).get( 'token_id' ) ).toBe( '9' )
 		);
 		await waitFor( () =>
 			expect( screen.getByLabelText( 'Who' ) ).toHaveDisplayValue(
@@ -288,7 +293,7 @@ describe( 'ActivityTab', () => {
 		expect( screen.getByLabelText( 'When' ) ).toHaveDisplayValue(
 			'Last 30 days'
 		);
-		expect( activityCalls() ).toHaveLength( 1 );
+		expect( withToken() ).toHaveLength( 1 );
 	} );
 
 	it( 'says the pass is loading, not Pass #id, until the list arrives', async () => {

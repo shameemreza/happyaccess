@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import { AnnounceProvider } from '../Announcer';
+import DataProvider from '../data/DataProvider';
 import SupportTab from './SupportTab';
 import { grantFixture, NOW } from './fixtures';
 
@@ -120,11 +121,13 @@ function setup( props = {} ) {
 	const onViewActivity = vi.fn();
 	const view = render(
 		<AnnounceProvider>
-			<SupportTab
-				boot={ boot }
-				onViewActivity={ onViewActivity }
-				{ ...props }
-			/>
+			<DataProvider>
+				<SupportTab
+					boot={ boot }
+					onViewActivity={ onViewActivity }
+					{ ...props }
+				/>
+			</DataProvider>
 		</AnnounceProvider>
 	);
 	const live = () =>
@@ -155,6 +158,71 @@ beforeEach( () => {
 
 afterEach( () => {
 	vi.useRealTimers();
+} );
+
+describe( 'loading state', () => {
+	// The list answers after `ms`, on timers the test controls.
+	function slowList( ms ) {
+		mockServer( [ grantFixture() ] );
+		const serve = apiFetch.getMockImplementation();
+		apiFetch.mockImplementation( ( options ) =>
+			'/happyaccess/v1/grants' === options.path
+				? new Promise( ( resolve ) =>
+						setTimeout( () => resolve( serve( options ) ), ms )
+					)
+				: serve( options )
+		);
+	}
+	const advance = ( ms ) =>
+		act( async () => {
+			await vi.advanceTimersByTimeAsync( ms );
+		} );
+
+	beforeEach( () => {
+		vi.useRealTimers();
+		vi.useFakeTimers();
+		vi.setSystemTime( NOW * 1000 );
+	} );
+
+	it( 'shows no loading text for a 100 ms load', async () => {
+		slowList( 100 );
+		const { container } = setup();
+
+		await advance( 99 );
+		expect(
+			container.querySelector( '.ha-support__status .ha-skeleton' )
+		).toBeInTheDocument();
+		expect( screen.queryByText( 'Checking who has access.' ) ).toBeNull();
+		expect( screen.queryByText( 'Loading passes' ) ).toBeNull();
+
+		await advance( 400 );
+		expect( screen.queryByText( 'Checking who has access.' ) ).toBeNull();
+		expect( screen.queryByText( 'Loading passes' ) ).toBeNull();
+		expect(
+			screen.getByText( '1 person has access.' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'shows the loading text when a 500 ms load runs past 300 ms', async () => {
+		slowList( 500 );
+		const { container } = setup();
+
+		await advance( 299 );
+		expect( screen.queryByText( 'Checking who has access.' ) ).toBeNull();
+		expect( screen.queryByText( 'Loading passes' ) ).toBeNull();
+		await advance( 1 );
+		expect(
+			screen.getByText( 'Checking who has access.' )
+		).toBeInTheDocument();
+		expect( screen.getByText( 'Loading passes' ) ).toBeInTheDocument();
+		expect(
+			container.querySelector( '.ha-support__status .ha-skeleton' )
+		).toBeNull();
+
+		await advance( 300 );
+		expect( screen.queryByText( 'Checking who has access.' ) ).toBeNull();
+		expect( screen.queryByText( 'Loading passes' ) ).toBeNull();
+	} );
 } );
 
 describe( 'status line', () => {
@@ -508,7 +576,9 @@ describe( 'refresh key', () => {
 		const user = userEvent.setup();
 		const view = render(
 			<AnnounceProvider>
-				<SupportTab boot={ boot } refreshKey={ 0 } />
+				<DataProvider>
+					<SupportTab boot={ boot } refreshKey={ 0 } />
+				</DataProvider>
 			</AnnounceProvider>
 		);
 		await createPass( user );
@@ -516,7 +586,9 @@ describe( 'refresh key', () => {
 
 		view.rerender(
 			<AnnounceProvider>
-				<SupportTab boot={ boot } refreshKey={ 1 } />
+				<DataProvider>
+					<SupportTab boot={ boot } refreshKey={ 1 } />
+				</DataProvider>
 			</AnnounceProvider>
 		);
 

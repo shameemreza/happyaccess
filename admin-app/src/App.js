@@ -1,6 +1,13 @@
-import { useCallback, useMemo, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import ActivityTab from './activity/ActivityTab';
 import { AnnounceProvider } from './Announcer';
+import DataProvider, { useActivityCache, useGrants } from './data/DataProvider';
 import Header from './Header';
 import SettingsTab from './settings/SettingsTab';
 import Setup from './setup/Setup';
@@ -26,6 +33,30 @@ export function readBoot( win = window ) {
 		);
 	}
 	return win.happyaccessBoot;
+}
+
+/**
+ * Reloads the pass list and the kept Activity pages when Emergency lock ends
+ * every pass, so a tab opened later does not show passes that are gone.
+ *
+ * @param {Object} props       Props.
+ * @param {number} props.count Changes each time the lock runs.
+ * @return {null} Nothing to show.
+ */
+function RefreshOnLock( { count } ) {
+	const { refresh } = useGrants();
+	const activity = useActivityCache();
+	const seen = useRef( count );
+
+	useEffect( () => {
+		if ( count !== seen.current ) {
+			seen.current = count;
+			activity.markStale();
+			refresh();
+		}
+	}, [ count, refresh, activity ] );
+
+	return null;
 }
 
 /**
@@ -102,46 +133,49 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 
 	return (
 		<AnnounceProvider>
-			<Header onLocked={ onLocked } />
-			{ needsSetup ? (
-				<Setup onFinish={ finishSetup } />
-			) : (
-				<>
-					<TabNav
-						tabs={ tabs }
-						current={ active.slug }
-						onSelect={ select }
-					/>
-					{ 'support' === active.slug && (
-						<SupportTab
-							boot={ appBoot }
-							focusOnOpen={ afterSetup }
-							refreshKey={ lockCount }
-							onViewActivity={ openActivity }
+			<DataProvider enabled={ ! needsSetup }>
+				<RefreshOnLock count={ lockCount } />
+				<Header onLocked={ onLocked } />
+				{ needsSetup ? (
+					<Setup onFinish={ finishSetup } />
+				) : (
+					<>
+						<TabNav
+							tabs={ tabs }
+							current={ active.slug }
+							onSelect={ select }
 						/>
-					) }
-					{ 'activity' === active.slug && (
-						<ActivityTab
-							boot={ appBoot }
-							loginReady={ loginReady }
-							onOpenSettings={ openSettings }
-						/>
-					) }
-					{ 'settings' === active.slug && (
-						<SettingsTab onFeaturesChange={ updateFeatures } />
-					) }
-					{ ! [ 'support', 'activity', 'settings' ].includes(
-						active.slug
-					) && (
-						<section
-							className="ha-panel"
-							aria-labelledby="ha-panel-title"
-						>
-							<h2 id="ha-panel-title">{ active.label }</h2>
-						</section>
-					) }
-				</>
-			) }
+						{ 'support' === active.slug && (
+							<SupportTab
+								boot={ appBoot }
+								focusOnOpen={ afterSetup }
+								refreshKey={ lockCount }
+								onViewActivity={ openActivity }
+							/>
+						) }
+						{ 'activity' === active.slug && (
+							<ActivityTab
+								boot={ appBoot }
+								loginReady={ loginReady }
+								onOpenSettings={ openSettings }
+							/>
+						) }
+						{ 'settings' === active.slug && (
+							<SettingsTab onFeaturesChange={ updateFeatures } />
+						) }
+						{ ! [ 'support', 'activity', 'settings' ].includes(
+							active.slug
+						) && (
+							<section
+								className="ha-panel"
+								aria-labelledby="ha-panel-title"
+							>
+								<h2 id="ha-panel-title">{ active.label }</h2>
+							</section>
+						) }
+					</>
+				) }
+			</DataProvider>
 		</AnnounceProvider>
 	);
 }

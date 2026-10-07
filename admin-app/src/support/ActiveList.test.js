@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import { AnnounceProvider } from '../Announcer';
+import DataProvider from '../data/DataProvider';
 import ActiveList from './ActiveList';
 import { grantFixture, NOW } from './fixtures';
 
@@ -34,22 +35,24 @@ function setup( props = {} ) {
 	};
 	const view = render(
 		<AnnounceProvider>
-			<ActiveList
-				grants={ [
-					grantFixture(),
-					grantFixture( {
-						id: 6,
-						label: 'Jordan',
-						status: 'suspended',
-					} ),
-				] }
-				loading={ false }
-				error={ null }
-				now={ NOW }
-				boot={ { maxDays: 30, roles: [] } }
-				{ ...handlers }
-				{ ...props }
-			/>
+			<DataProvider enabled={ false }>
+				<ActiveList
+					grants={ [
+						grantFixture(),
+						grantFixture( {
+							id: 6,
+							label: 'Jordan',
+							status: 'suspended',
+						} ),
+					] }
+					loading={ false }
+					error={ null }
+					now={ NOW }
+					boot={ { maxDays: 30, roles: [] } }
+					{ ...handlers }
+					{ ...props }
+				/>
+			</DataProvider>
 		</AnnounceProvider>
 	);
 	return { user, ...handlers, ...view };

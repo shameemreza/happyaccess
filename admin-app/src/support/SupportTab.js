@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { revokeAll } from '../api';
-import { useGrants } from '../hooks/useGrants';
+import { useGrants } from '../data/DataProvider';
+import { useDelayedFlag } from '../hooks/useDelayedFlag';
 import { useNow } from '../hooks/useNow';
 import ActiveList from './ActiveList';
 import GrantForm from './GrantForm';
+import { LOADING_DELAY } from '../LoadingLine';
 import { timeAgo } from './passFormat';
 import ResultCard from './ResultCard';
 
@@ -49,6 +51,9 @@ export default function SupportTab( {
 } ) {
 	const grants = useGrants();
 	const { refresh } = grants;
+	// A quick load leaves no text, only a quiet block the height of the line.
+	const checking = grants.loading && 0 === grants.grants.length;
+	const showChecking = useDelayedFlag( checking, LOADING_DELAY );
 	const now = useNow();
 	const [ result, setResult ] = useState( null );
 	// Bumped for every new result, so each one gets a fresh card with focus on its heading.
@@ -132,16 +137,19 @@ export default function SupportTab( {
 	// a failed load an empty list says nothing about who has access.
 	let statusText = countLine( live.length );
 	if ( 0 === grants.grants.length ) {
-		statusText = grants.loading
+		statusText = showChecking
 			? __( 'Checking who has access.', 'happyaccess' )
 			: '';
 	}
 
 	return (
 		<div className="ha-support">
-			{ ( statusText || latest ) && (
+			{ ( statusText || latest || checking ) && (
 				<p className="ha-support__status">
-					<strong>{ statusText }</strong>
+					{ checking && ! showChecking && (
+						<span className="ha-skeleton" aria-hidden="true" />
+					) }
+					{ statusText && <strong>{ statusText }</strong> }
 					{ latest && (
 						<span className="ha-support__last">
 							{ ' ' }

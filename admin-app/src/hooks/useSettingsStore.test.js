@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import apiFetch from '@wordpress/api-fetch';
-import { useSettings } from './useSettings';
+import { useSettingsStore } from './useSettingsStore';
 
 vi.mock( '@wordpress/api-fetch' );
 
@@ -14,7 +14,7 @@ it( 'loads, saves and sets up, replacing the settings with each response', async
 		needs_setup: true,
 		security: { max_attempts: 5 },
 	} );
-	const { result } = renderHook( () => useSettings() );
+	const { result } = renderHook( () => useSettingsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 	expect( result.current.settings.needs_setup ).toBe( true );
 
@@ -49,7 +49,7 @@ it( 'loads, saves and sets up, replacing the settings with each response', async
 
 it( 'rejects a failed save and keeps the settings', async () => {
 	apiFetch.mockResolvedValueOnce( { needs_setup: false } );
-	const { result } = renderHook( () => useSettings() );
+	const { result } = renderHook( () => useSettingsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	apiFetch.mockRejectedValueOnce( {
@@ -68,7 +68,7 @@ it( 'rejects a failed save and keeps the settings', async () => {
 
 it( 'sets error when loading fails', async () => {
 	apiFetch.mockRejectedValue( { code: 'fetch_error', message: 'offline' } );
-	const { result } = renderHook( () => useSettings() );
+	const { result } = renderHook( () => useSettingsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 	expect( result.current.error.code ).toBe( 'network' );
 	expect( result.current.settings ).toBeNull();
@@ -76,7 +76,7 @@ it( 'sets error when loading fails', async () => {
 
 it( 'stays saving until every save in flight is done', async () => {
 	apiFetch.mockResolvedValueOnce( { needs_setup: false } );
-	const { result } = renderHook( () => useSettings() );
+	const { result } = renderHook( () => useSettingsStore() );
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 
 	const finish = [];
@@ -106,7 +106,7 @@ it( 'stays saving until every save in flight is done', async () => {
 
 it( 'shows loading again on a retry and clears the error when it works', async () => {
 	apiFetch.mockRejectedValueOnce( { code: 'fetch_error', message: 'x' } );
-	const { result } = renderHook( () => useSettings() );
+	const { result } = renderHook( () => useSettingsStore() );
 	await waitFor( () => expect( result.current.error ).not.toBeNull() );
 
 	let finish;
@@ -130,7 +130,7 @@ it( 'shows loading again on a retry and clears the error when it works', async (
 
 it( 'clears a load error once a save returns the settings', async () => {
 	apiFetch.mockRejectedValueOnce( { code: 'fetch_error', message: 'x' } );
-	const { result } = renderHook( () => useSettings() );
+	const { result } = renderHook( () => useSettingsStore() );
 	await waitFor( () => expect( result.current.error ).not.toBeNull() );
 
 	apiFetch.mockResolvedValueOnce( { needs_setup: false } );

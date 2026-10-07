@@ -7,8 +7,9 @@ import {
 	TextControl,
 } from '@wordpress/components';
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { useSettings } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
-import { useSettings } from '../hooks/useSettings';
+import LoadingLine from '../LoadingLine';
 import { InlineConfirm } from '../support/GrantRow';
 import LoginPreview from './LoginPreview';
 import {
@@ -81,9 +82,9 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 	if ( loading && ! settings ) {
 		return (
 			<section className="ha-settings" aria-busy="true">
-				<p className="ha-settings__loading">
+				<LoadingLine loading className="ha-settings__loading">
 					{ __( 'Loading settings', 'happyaccess' ) }
-				</p>
+				</LoadingLine>
 			</section>
 		);
 	}

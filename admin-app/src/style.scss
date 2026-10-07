@@ -37,6 +37,17 @@
 		box-sizing: border-box;
 	}
 
+	// Holds the place of a loading line until the line's text is due. It is a
+	// quiet block, inside a line that keeps its height, so nothing jumps.
+	.ha-skeleton {
+		display: inline-block;
+		vertical-align: middle;
+		inline-size: min(12em, 60%);
+		block-size: 1em;
+		border-radius: 3px;
+		background: var(--ha-line-soft);
+	}
+
 	.ha-header {
 		display: flex;
 		flex-wrap: wrap;

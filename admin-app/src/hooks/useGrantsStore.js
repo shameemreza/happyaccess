@@ -24,14 +24,17 @@ function replaceItem( list, grant, insert = false ) {
 }
 
 /**
- * The list of current passes, with the actions on them.
+ * The list of current passes, with the actions on them. It lives in the
+ * app-level DataProvider, so the list survives a switch of tabs. It loads
+ * once, then every minute while the browser tab is visible.
  *
  * Plain codes and link keys come back from create and act, but never enter
  * the list state, so they live only where the caller keeps them.
  *
+ * @param {boolean} enabled Whether to load. Off until setup is done.
  * @return {Object} { grants, loading, error, refresh, create, act }
  */
-export function useGrants() {
+export function useGrantsStore( enabled = true ) {
 	const [ grants, setGrants ] = useState( [] );
 	const [ loading, setLoading ] = useState( true );
 	const [ error, setError ] = useState( null );
@@ -60,6 +63,11 @@ export function useGrants() {
 
 	useEffect( () => {
 		mounted.current = true;
+		if ( ! enabled ) {
+			return () => {
+				mounted.current = false;
+			};
+		}
 		refresh();
 		const timer = setInterval( () => {
 			if ( 'visible' === document.visibilityState ) {
@@ -78,7 +86,7 @@ export function useGrants() {
 			clearInterval( timer );
 			document.removeEventListener( 'visibilitychange', onVisibility );
 		};
-	}, [ refresh ] );
+	}, [ refresh, enabled ] );
 
 	const create = useCallback( async ( form ) => {
 		const result = await api.createGrant( form );

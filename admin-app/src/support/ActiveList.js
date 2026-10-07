@@ -1,33 +1,39 @@
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { Button, Notice } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
-import { listActivity } from '../api';
+import { activityKey } from '../activity/activityFormat';
+import { useActivityCache } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
+import LoadingLine from '../LoadingLine';
 import { isPlainClick, tabUrl } from '../tabList';
 import GrantRow, { InlineConfirm } from './GrantRow';
 import { timeAgo } from './passFormat';
 
 const ACTIVITY_REFRESH_MS = 60000;
 
+const LATEST_FILTERS = { per_page: 1, feature: 'support' };
+const LATEST_KEY = activityKey( LATEST_FILTERS );
+
 /**
- * The newest support activity line, fetched on mount and then every minute
- * while the tab is visible.
+ * The newest support activity line. It shows the kept copy at once, loads
+ * again when the kept copy is old or something happened, and then every
+ * minute while the browser tab is visible.
  *
  * @param {number} now   Current Unix time in seconds.
  * @param {string} token Changes when something happened, so the line loads again.
  * @return {string} The line, or an empty string.
  */
 function useLatestLine( now, token ) {
-	const [ item, setItem ] = useState( null );
+	const cache = useActivityCache();
+	const [ item, setItem ] = useState(
+		() => cache.get( LATEST_KEY )?.result.items[ 0 ] || null
+	);
 
 	useEffect( () => {
 		let live = true;
 		const load = async () => {
 			try {
-				const result = await listActivity( {
-					per_page: 1,
-					feature: 'support',
-				} );
+				const result = await cache.load( LATEST_KEY, LATEST_FILTERS );
 				if ( live ) {
 					setItem( result.items[ 0 ] || null );
 				}
@@ -35,7 +41,9 @@ function useLatestLine( now, token ) {
 				// The footer is a nicety. A failure leaves it as it was.
 			}
 		};
-		load();
+		if ( ! cache.isFresh( LATEST_KEY ) ) {
+			load();
+		}
 		const timer = setInterval( () => {
 			if ( 'visible' === document.visibilityState ) {
 				load();
@@ -45,7 +53,7 @@ function useLatestLine( now, token ) {
 			live = false;
 			clearInterval( timer );
 		};
-	}, [ token ] );
+	}, [ token, cache ] );
 
 	if ( ! item ) {
 		return '';
@@ -87,6 +95,7 @@ export default function ActiveList( {
 	onViewActivity,
 } ) {
 	const announce = useAnnounce();
+	const activity = useActivityCache();
 	const [ confirming, setConfirming ] = useState( false );
 	const [ busy, setBusy ] = useState( false );
 	const [ allError, setAllError ] = useState( null );
@@ -97,6 +106,8 @@ export default function ActiveList( {
 
 	const act = async ( id, action, arg ) => {
 		const result = await onAct( id, action, arg );
+		// The action logged an event, so the kept line is out of date.
+		activity.markStale();
 		setActed( ( count ) => count + 1 );
 		if ( 'revoke' === action ) {
 			// The row is gone, so its buttons can't hold focus.
@@ -110,6 +121,7 @@ export default function ActiveList( {
 		setAllError( null );
 		try {
 			await onRevokeAll();
+			activity.markStale();
 			setActed( ( count ) => count + 1 );
 			setConfirming( false );
 			announce( __( 'All access revoked', 'happyaccess' ) );
@@ -196,9 +208,9 @@ export default function ActiveList( {
 			) }
 
 			{ loading && 0 === grants.length && (
-				<p className="ha-active__empty">
+				<LoadingLine loading className="ha-active__empty">
 					{ __( 'Loading passes', 'happyaccess' ) }
-				</p>
+				</LoadingLine>
 			) }
 
 			{ grants.length > 0 && (

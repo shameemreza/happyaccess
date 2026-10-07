@@ -3,11 +3,13 @@ import * as api from '../api';
 
 /**
  * The settings, with save and first-run setup. Both replace the settings
- * with the response, which is the full, clamped result.
+ * with the response, which is the full, clamped result. It lives in the
+ * app-level DataProvider and loads once.
  *
+ * @param {boolean} enabled Whether to load. Off until setup is done.
  * @return {Object} { settings, loading, saving, error, refresh, save, setup }
  */
-export function useSettings() {
+export function useSettingsStore( enabled = true ) {
 	const [ settings, setSettings ] = useState( null );
 	const [ loading, setLoading ] = useState( true );
 	const [ saving, setSaving ] = useState( false );
@@ -37,11 +39,13 @@ export function useSettings() {
 
 	useEffect( () => {
 		mounted.current = true;
-		refresh();
+		if ( enabled ) {
+			refresh();
+		}
 		return () => {
 			mounted.current = false;
 		};
-	}, [ refresh ] );
+	}, [ refresh, enabled ] );
 
 	const write = useCallback( async ( call ) => {
 		pending.current++;

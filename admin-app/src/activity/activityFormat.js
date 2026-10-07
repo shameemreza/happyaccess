@@ -105,6 +105,40 @@ export function rangeFilters( when, from, to, today ) {
 }
 
 /**
+ * The first page the Activity tab asks for: every kind of event, the last
+ * seven days, no one picked. The PHP page preloads this exact request.
+ *
+ * @param {number} now Unix time in seconds.
+ * @return {Object} The request filters.
+ */
+export function defaultActivityRequest( now ) {
+	return {
+		feature: '',
+		...rangeFilters( '7', '', '', siteDay( now ) ),
+		page: 1,
+		per_page: PER_PAGE,
+	};
+}
+
+/**
+ * A key for a set of activity filters. Empty values are left out, as they are
+ * from the request, and the order of the fields does not matter.
+ *
+ * @param {Object} filters Activity filters.
+ * @return {string} The key.
+ */
+export function activityKey( filters ) {
+	return JSON.stringify(
+		Object.entries( filters )
+			.filter(
+				( [ , value ] ) =>
+					'' !== value && null !== value && undefined !== value
+			)
+			.sort( ( [ a ], [ b ] ) => ( a < b ? -1 : 1 ) )
+	);
+}
+
+/**
  * @param {Object} item Item from the REST list.
  * @return {boolean} Whether a site admin did this, rather than a pass.
  */

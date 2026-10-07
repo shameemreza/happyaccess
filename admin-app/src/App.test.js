@@ -48,6 +48,9 @@ beforeEach( () => {
 			}
 			return settingsOnServer;
 		}
+		if ( '/happyaccess/v1/catalog' === path ) {
+			return { groups: [], presets: {} };
+		}
 		if ( path.startsWith( '/happyaccess/v1/activity/summary' ) ) {
 			return { logins: 2, changes: 4, minutes: null, ips: [] };
 		}
@@ -409,6 +412,103 @@ describe( 'App shell', () => {
 			<App boot={ boot( { needsSetup: true } ) } />
 		);
 		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+} );
+
+describe( 'data kept between tabs', () => {
+	// GET requests so far, by path without the namespace.
+	const gets = ( route ) =>
+		apiFetch.mock.calls.filter(
+			( [ options ] ) =>
+				( ! options.method || 'GET' === options.method ) &&
+				options.path.replace( '/happyaccess/v1', '' ) === route
+		).length;
+	const goTo = ( user, name ) =>
+		user.click( screen.getByRole( 'link', { name } ) );
+
+	it( 'does not fetch the passes, settings or catalog again when tabs change', async () => {
+		grantsOnServer = [ grantFixture( { id: 9 } ) ];
+		const user = userEvent.setup();
+		render( <App boot={ boot() } /> );
+		await screen.findByText( 'Acme Plugin Support' );
+
+		await goTo( user, 'Settings' );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+		await goTo( user, 'Support access' );
+		await screen.findByText( 'Acme Plugin Support' );
+		await goTo( user, 'Activity' );
+		await screen.findByText( /^Showing 0 of 0 events/ );
+		await goTo( user, 'Support access' );
+		await goTo( user, 'Settings' );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+		await goTo( user, 'Support access' );
+		await screen.findByText( 'Acme Plugin Support' );
+
+		expect( gets( '/grants' ) ).toBe( 1 );
+		expect( gets( '/settings' ) ).toBe( 1 );
+		expect( gets( '/catalog' ) ).toBe( 1 );
+	} );
+
+	it( 'does not fetch the first Activity page or the latest line again within seconds', async () => {
+		const user = userEvent.setup();
+		render( <App boot={ boot() } /> );
+		await screen.findByRole( 'heading', { name: 'Who has access' } );
+
+		await goTo( user, 'Activity' );
+		await screen.findByText( /^Showing 0 of 0 events/ );
+		await goTo( user, 'Support access' );
+		await goTo( user, 'Activity' );
+		await goTo( user, 'Support access' );
+
+		const activityGets = apiFetch.mock.calls
+			.map( ( [ options ] ) => options.path )
+			.filter( ( path ) =>
+				path.startsWith( '/happyaccess/v1/activity?' )
+			);
+		// One for the first page, shared by the app and the tab, and one for the Support footer.
+		expect( activityGets ).toHaveLength( 2 );
+	} );
+
+	it( 'keeps secrets out of the shared data: a pass made earlier shows no code after a tab switch', async () => {
+		const user = userEvent.setup();
+		apiFetch.mockImplementation( async ( options ) => {
+			if (
+				'POST' === options.method &&
+				'/happyaccess/v1/grants' === options.path
+			) {
+				grantsOnServer = [
+					grantFixture( { id: 12, label: 'Vendor' } ),
+				];
+				return {
+					...grantsOnServer[ 0 ],
+					code: '4829 1375',
+					link_url: 'https://yourstore.test/wp-login.php?k=Qm3x',
+					code_url: 'https://yourstore.test/wp-login.php?step=code',
+					message: 'Here is temporary access.',
+					emailed: false,
+				};
+			}
+			return { items: grantsOnServer, groups: [], presets: {} };
+		} );
+		render( <App boot={ boot() } /> );
+		await user.type(
+			await screen.findByLabelText( 'Who is it for' ),
+			'Vendor'
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Create support pass' } )
+		);
+		await screen.findByRole( 'heading', {
+			name: 'Access is ready for Vendor',
+		} );
+		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
+
+		await goTo( user, 'Settings' );
+		await goTo( user, 'Support access' );
+
+		expect( await screen.findAllByText( 'Vendor' ) ).not.toHaveLength( 0 );
+		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
+		expect( document.body.textContent ).not.toContain( 'Qm3x' );
 	} );
 } );
 

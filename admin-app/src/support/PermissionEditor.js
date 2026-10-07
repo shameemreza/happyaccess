@@ -7,6 +7,7 @@ import {
 } from '@wordpress/components';
 import { __, _n, isRTL, sprintf } from '@wordpress/i18n';
 import { Icon, chevronDown, chevronLeft, chevronRight } from '@wordpress/icons';
+import LoadingLine from '../LoadingLine';
 
 const PRESET_NAMES = () => ( {
 	administrator: __( 'Administrator', 'happyaccess' ),
@@ -73,10 +74,12 @@ export default function PermissionEditor( {
 		);
 	}
 	if ( ! groups ) {
-		return (
-			<p className="ha-editor__loading" role="status">
-				{ loading ? __( 'Loading permissions', 'happyaccess' ) : '' }
-			</p>
+		return loading ? (
+			<LoadingLine loading className="ha-editor__loading" role="status">
+				{ __( 'Loading permissions', 'happyaccess' ) }
+			</LoadingLine>
+		) : (
+			<p className="ha-editor__loading" role="status" />
 		);
 	}
 

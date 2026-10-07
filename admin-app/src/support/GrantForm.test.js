@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import { AnnounceProvider } from '../Announcer';
+import DataProvider from '../data/DataProvider';
 import GrantForm from './GrantForm';
 import { catalog } from './fixtures';
 
@@ -86,7 +87,9 @@ function setup( props = {} ) {
 	const onCreated = vi.fn();
 	const view = render(
 		<AnnounceProvider>
-			<GrantForm boot={ boot } onCreated={ onCreated } { ...props } />
+			<DataProvider>
+				<GrantForm boot={ boot } onCreated={ onCreated } { ...props } />
+			</DataProvider>
 		</AnnounceProvider>
 	);
 	return { user, onCreated, ...view };

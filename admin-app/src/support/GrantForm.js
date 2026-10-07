@@ -20,12 +20,12 @@ import {
 } from '@wordpress/date';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { createGrant } from '../api';
+import { useCatalog } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import { useNow } from '../hooks/useNow';
 import MoreOptions from './MoreOptions';
 import PassPreview from './PassPreview';
 import PermissionEditor from './PermissionEditor';
-import { useCatalog } from './useCatalog';
 
 const DAY_MS = 86400000;
 const MIN_MS = 3600000;
@@ -223,12 +223,7 @@ export default function GrantForm( {
 
 	const isCustom = 'custom' === form.level;
 	// Loads on the first visit to Custom and stays for as long as the form does.
-	const {
-		catalog,
-		loading,
-		error: catalogError,
-		retry,
-	} = useCatalog( isCustom );
+	const { catalog, loading, error: catalogError, retry } = useCatalog();
 
 	const presets = catalog ? catalog.presets : {};
 	const baseKey = presets[ form.base ]
