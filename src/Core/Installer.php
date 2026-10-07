@@ -22,6 +22,12 @@ final class Installer {
 
 	const LOCK_TTL = 300;
 
+	/**
+	 * Seconds a lock may sit in the future, from clock drift between servers,
+	 * and still count as held.
+	 */
+	const LOCK_SKEW = 60;
+
 	const LEGACY_CODE_MAX_AGE = 7 * DAY_IN_SECONDS;
 
 	const LEGACY_CRON_HOOKS = array( 'happyaccess_cleanup_expired', 'happyaccess_cleanup_attempts' );
@@ -221,6 +227,14 @@ final class Installer {
 	}
 
 	/**
+	 * What this request wrote into the lock row, or an empty string when it
+	 * holds no lock. Release removes a row only when it still has this value.
+	 *
+	 * @var string
+	 */
+	private static $lock_value = '';
+
+	/**
 	 * Brings the current site to DB_VERSION. Safe to run more than once. Only
 	 * one request runs it at a time; the others return without doing anything.
 	 *
@@ -284,7 +298,10 @@ final class Installer {
 			return 'write_failed';
 		}
 
-		self::drop_legacy_tables();
+		// A table that can't be dropped is harmless once its plain codes are gone, so only a failed blanking stops the upgrade.
+		if ( ! self::drop_legacy_tables() && ! self::blank_legacy_codes() ) {
+			return 'legacy_codes_remain';
+		}
 		update_option( 'happyaccess_db_version', self::DB_VERSION );
 
 		if ( $is_upgrade ) {
@@ -326,17 +343,21 @@ final class Installer {
 	}
 
 	/**
-	 * Takes the migration lock: an options row holding the time it was taken.
-	 * A lock younger than LOCK_TTL seconds belongs to a running request. An
-	 * older one is left over from a crash and is taken over.
+	 * Takes the migration lock: an options row holding the time it was taken
+	 * and a random owner mark. A lock younger than LOCK_TTL seconds belongs to
+	 * a running request, and so does one up to LOCK_SKEW seconds in the future.
+	 * An older one, or one further ahead, is left over from a crash and is
+	 * taken over.
 	 *
 	 * @return bool Whether this request now holds the lock.
 	 */
 	private static function acquire_lock() {
 		global $wpdb;
 		$now   = Clock::now();
-		$added = self::insert_option_once( self::LOCK_OPTION, (string) $now );
+		$mine  = $now . ':' . wp_generate_password( 12, false );
+		$added = self::insert_option_once( self::LOCK_OPTION, $mine );
 		if ( 1 === $added ) {
+			self::$lock_value = $mine;
 			return true;
 		}
 		if ( false === $added ) {
@@ -346,8 +367,9 @@ final class Installer {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Read past the options cache.
 		$held = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::LOCK_OPTION ) );
 		if ( null !== $held ) {
+			// The leading number is the time; older locks hold only that.
 			$age = $now - (int) $held;
-			if ( $age >= 0 && $age < self::LOCK_TTL ) {
+			if ( $age >= -self::LOCK_SKEW && $age < self::LOCK_TTL ) {
 				return false;
 			}
 			// Remove only the stale row we read, never a lock another request just took over.
@@ -356,18 +378,28 @@ final class Installer {
 			self::forget_option( self::LOCK_OPTION );
 		}
 
-		return 1 === self::insert_option_once( self::LOCK_OPTION, (string) $now );
+		if ( 1 === self::insert_option_once( self::LOCK_OPTION, $mine ) ) {
+			self::$lock_value = $mine;
+			return true;
+		}
+		return false;
 	}
 
 	/**
-	 * Releases the migration lock.
+	 * Releases the migration lock, only when the row is still the one this
+	 * request wrote. A request that ran past LOCK_TTL may have lost its lock
+	 * to another, and must not remove that one.
 	 *
 	 * @return void
 	 */
 	private static function release_lock() {
 		global $wpdb;
+		if ( '' === self::$lock_value ) {
+			return;
+		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Lock row.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s", self::LOCK_OPTION ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::LOCK_OPTION, self::$lock_value ) );
+		self::$lock_value = '';
 		self::forget_option( self::LOCK_OPTION );
 	}
 
@@ -651,15 +683,35 @@ final class Installer {
 	/**
 	 * Drops tables that 1.1.0 doesn't use.
 	 *
-	 * @return void
+	 * @return bool Whether every table is gone.
 	 */
 	private static function drop_legacy_tables() {
 		global $wpdb;
+		$dropped = true;
 		foreach ( self::LEGACY_TABLES as $name ) {
 			$table = self::table( $name );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed table names.
-			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+			if ( false === $wpdb->query( "DROP TABLE IF EXISTS {$table}" ) ) {
+				$dropped = false;
+			}
 		}
+		return $dropped;
+	}
+
+	/**
+	 * Empties the plain codes in the 1.0.x share table, for the case where the
+	 * table itself can't be dropped.
+	 *
+	 * @return bool Whether the codes are gone.
+	 */
+	private static function blank_legacy_codes() {
+		global $wpdb;
+		$table = self::table( 'otp_shares' );
+		$previous = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed table name; the column is NOT NULL.
+		$result = $wpdb->query( "UPDATE {$table} SET otp_code = ''" );
+		$wpdb->suppress_errors( $previous );
+		return false !== $result;
 	}
 
 	/**

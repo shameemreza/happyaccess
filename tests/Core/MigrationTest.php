@@ -444,6 +444,59 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( (string) ( 1790000000 - 60 ), $this->lock_value(), 'The holder keeps its lock.' );
 	}
 
+	public function test_a_lock_a_little_in_the_future_still_counts_as_held() {
+		$this->set_lock( 1790000000 + 30 );
+
+		Installer::migrate();
+
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( (string) ( 1790000000 + 30 ), $this->lock_value(), 'The holder keeps its lock.' );
+	}
+
+	public function test_a_lock_far_in_the_future_is_taken_over() {
+		$this->set_lock( 1790000000 + 61 );
+
+		Installer::migrate();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertNull( $this->lock_value() );
+	}
+
+	public function test_release_leaves_a_lock_another_request_took_over() {
+		global $wpdb;
+		$other = '1790000000:another-request';
+		// Runs after the migration steps and before the lock is released.
+		add_action(
+			'delete_transient_' . Installer::FAILED_TRANSIENT,
+			static function () use ( $wpdb, $other ) {
+				$wpdb->update( $wpdb->options, array( 'option_value' => $other ), array( 'option_name' => Installer::LOCK_OPTION ) );
+				wp_cache_delete( Installer::LOCK_OPTION, 'options' );
+			}
+		);
+
+		Installer::migrate();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( $other, $this->lock_value(), 'A request releases only the lock it took.' );
+	}
+
+	public function test_the_lock_value_carries_an_owner_mark() {
+		Installer::migrate();
+		$this->assertNull( $this->lock_value() );
+		$first = null;
+		add_action(
+			'delete_transient_' . Installer::FAILED_TRANSIENT,
+			function () use ( &$first ) {
+				$first = $this->lock_value();
+			}
+		);
+		HappyAccess_Test_Legacy_Schema::drop_all();
+		HappyAccess_Test_Legacy_Schema::create();
+		delete_option( 'happyaccess_db_version' );
+		Installer::migrate();
+		$this->assertMatchesRegularExpression( '/^1790000000:[A-Za-z0-9]{8,}$/', (string) $first );
+	}
+
 	public function test_a_stale_lock_is_taken_over() {
 		$this->set_lock( 1790000000 - 301 );
 
@@ -523,5 +576,84 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( Clock::mysql( 1790000000 + 2 * DAY_IN_SECONDS ), $this->token( 'short' )['expires_at'] );
 		$this->assertSame( Clock::mysql( 1790000000 + 20 * DAY_IN_SECONDS ), $this->token( 'link-only' )['expires_at'], 'Rows without a code keep their expiry.' );
 		$this->assertTrue( Codes::verify_code( '444444', $this->token( 'long' )['code_hash'] ) );
+	}
+
+	/**
+	 * Makes statements that touch the given table fail.
+	 *
+	 * @param string $verb  First word of the statement.
+	 * @param string $table Table name fragment.
+	 * @return callable The filter, to remove later.
+	 */
+	private function break_statements( $verb, $table ) {
+		$filter = static function ( $query ) use ( $verb, $table ) {
+			$query = (string) $query;
+			return 0 === stripos( ltrim( $query ), $verb ) && false !== strpos( $query, $table ) ? 'this is not valid sql' : $query;
+		};
+		add_filter( 'query', $filter );
+		return $filter;
+	}
+
+	private function seed_share() {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'happyaccess_otp_shares',
+			array(
+				'token_id'   => 1,
+				'otp_code'   => '246810',
+				'share_hash' => 'abc',
+				'expires_at' => Clock::mysql( 1790000000 + DAY_IN_SECONDS ),
+				'created_at' => Clock::mysql(),
+			)
+		);
+	}
+
+	private function share_codes() {
+		global $wpdb;
+		// get_col() turns an empty string into null, so read whole rows.
+		return wp_list_pluck( $wpdb->get_results( 'SELECT otp_code FROM ' . $wpdb->prefix . 'happyaccess_otp_shares' ), 'otp_code' );
+	}
+
+	public function test_a_failed_drop_blanks_the_plain_share_codes() {
+		global $wpdb;
+		$this->seed_share();
+		$filter   = $this->break_statements( 'DROP', 'otp_shares' );
+		$suppress = $wpdb->suppress_errors( true );
+
+		Installer::migrate();
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $filter );
+		$this->assertTrue( Installer::table_exists( 'otp_shares' ), 'The drop was blocked.' );
+		$this->assertSame( array( '' ), $this->share_codes(), 'No plain code is left behind.' );
+		$this->assertFalse( Installer::table_exists( 'magic_links' ), 'The other legacy table still goes.' );
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertFalse( get_transient( Installer::FAILED_TRANSIENT ) );
+	}
+
+	public function test_a_failed_drop_and_failed_blanking_is_a_failed_migration() {
+		global $wpdb;
+		$this->seed_share();
+		$drop     = $this->break_statements( 'DROP', 'otp_shares' );
+		$blank    = $this->break_statements( 'UPDATE', 'otp_shares' );
+		$suppress = $wpdb->suppress_errors( true );
+
+		Installer::migrate();
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $drop );
+		remove_filter( 'query', $blank );
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ), 'The version stays so a later request retries.' );
+		$this->assertSame( 'legacy_codes_remain', get_transient( Installer::FAILED_TRANSIENT ) );
+		$this->assertNull( $this->lock_value() );
+	}
+
+	public function test_a_clean_drop_removes_the_share_table() {
+		$this->seed_share();
+
+		Installer::migrate();
+
+		$this->assertFalse( Installer::table_exists( 'otp_shares' ) );
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
 	}
 }
