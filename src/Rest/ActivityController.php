@@ -289,11 +289,18 @@ final class ActivityController {
 	 */
 	private static function filters( \WP_REST_Request $request ) {
 		$filters = array(
-			'event'    => (string) $request->get_param( 'event' ),
-			'user_id'  => (int) $request->get_param( 'user_id' ),
-			'token_id' => (int) $request->get_param( 'token_id' ),
-			'search'   => (string) $request->get_param( 'search' ),
+			'event'  => (string) $request->get_param( 'event' ),
+			'search' => (string) $request->get_param( 'search' ),
 		);
+
+		// An id of 0 means "rows with no user" or "no pass", so it filters only when the request sent it.
+		$sent = $request->get_query_params();
+		foreach ( array( 'user_id', 'token_id' ) as $key ) {
+			$id = (int) $request->get_param( $key );
+			if ( $id > 0 || array_key_exists( $key, $sent ) ) {
+				$filters[ $key ] = $id;
+			}
+		}
 
 		$feature = (string) $request->get_param( 'feature' );
 		if ( 'admin' === $feature ) {

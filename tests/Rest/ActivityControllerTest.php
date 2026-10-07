@@ -252,6 +252,19 @@ class ActivityControllerTest extends RestTestCase {
 		$this->assertEqualsCanonicalizing( array( '203.0.113.1', '203.0.113.2', '203.0.113.3' ), $data['ips'] );
 	}
 
+	public function test_user_id_zero_filters_only_when_the_request_sends_it() {
+		AuditLog::add( 'plugin_upgraded', array( 'feature' => 'core', 'user_id' => 0 ) );
+		AuditLog::add( 'login_success', array( 'user_id' => 5 ) );
+		$total = static function ( $response ) {
+			return $response->get_data()['total'];
+		};
+
+		$this->assertSame( 2, $total( $this->get( '/activity' ) ) );
+		$this->assertSame( 1, $total( $this->get( '/activity', array( 'user_id' => 0 ) ) ) );
+		$this->assertSame( 1, $total( $this->get( '/activity', array( 'user_id' => 5 ) ) ) );
+		$this->assertSame( 2, $total( $this->get( '/activity', array( 'token_id' => 0 ) ) ) );
+	}
+
 	public function test_summary_lists_at_most_five_ips() {
 		for ( $i = 1; $i <= 7; $i++ ) {
 			$_SERVER['REMOTE_ADDR'] = '203.0.113.' . $i;

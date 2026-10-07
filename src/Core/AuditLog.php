@@ -16,6 +16,23 @@ defined( 'ABSPATH' ) || exit;
 final class AuditLog {
 
 	/**
+	 * Longest summary, in characters.
+	 */
+	const SUMMARY_MAX = 500;
+
+	/**
+	 * Meta keys whose values are replaced before they are stored, matched
+	 * whole and without regard to case. A key such as "keys", which lists
+	 * setting names, is not on the list and keeps its value.
+	 */
+	const SECRET_META_KEYS = array( 'code', 'key', 'token', 'secret' );
+
+	/**
+	 * What a redacted value becomes.
+	 */
+	const REDACTED = '[redacted]';
+
+	/**
 	 * Adds an entry.
 	 *
 	 * @param string $event Event key, for example "login".
@@ -47,6 +64,8 @@ final class AuditLog {
 			$ip = ClientIp::anonymize( $ip );
 		}
 
+		$meta = is_array( $args['meta'] ) ? self::redact( $args['meta'] ) : array();
+
 		$agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? self::clip_bytes( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 255 ) : '';
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Custom table.
@@ -59,14 +78,31 @@ final class AuditLog {
 				'user_id'    => absint( $args['user_id'] ),
 				'ip_address' => $ip,
 				'user_agent' => $agent,
-				'summary'    => sanitize_text_field( (string) $args['summary'] ),
-				'metadata'   => empty( $args['meta'] ) ? null : wp_json_encode( $args['meta'] ),
+				'summary'    => self::clip_chars( sanitize_text_field( (string) $args['summary'] ), self::SUMMARY_MAX ),
+				'metadata'   => empty( $meta ) ? null : wp_json_encode( $meta ),
 				'created_at' => Clock::mysql(),
 			),
 			array( '%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s' )
 		);
 
 		return $ok ? (int) $wpdb->insert_id : 0;
+	}
+
+	/**
+	 * Replaces the value of every secret-looking meta key, at any depth.
+	 *
+	 * @param array $meta Meta array.
+	 * @return array
+	 */
+	private static function redact( array $meta ) {
+		foreach ( $meta as $key => $value ) {
+			if ( is_string( $key ) && in_array( strtolower( $key ), self::SECRET_META_KEYS, true ) ) {
+				$meta[ $key ] = self::REDACTED;
+			} elseif ( is_array( $value ) ) {
+				$meta[ $key ] = self::redact( $value );
+			}
+		}
+		return $meta;
 	}
 
 	/**
@@ -101,6 +137,11 @@ final class AuditLog {
 	 * Pass `features` as a list of feature keys, or `event_in` as a list of
 	 * event keys. An empty list means no filter; a non-empty list with no valid
 	 * key matches nothing.
+	 *
+	 * A user_id or token_id of 0 filters for rows with no user or no pass when
+	 * the key is given; leave the key out, or pass null, for no filter. The
+	 * since and until bounds are UTC datetimes as "Y-m-d H:i:s"; a bound in
+	 * any other form matches nothing.
 	 *
 	 * @param array $filters feature, features, event, event_in, user_id, token_id, search, since, until, page, per_page.
 	 * @return array items, total, page, per_page.
@@ -186,8 +227,8 @@ final class AuditLog {
 				'features' => array(),
 				'event'    => '',
 				'event_in' => array(),
-				'user_id'  => 0,
-				'token_id' => 0,
+				'user_id'  => null,
+				'token_id' => null,
 				'search'   => '',
 				'since'    => '',
 				'until'    => '',
@@ -225,11 +266,11 @@ final class AuditLog {
 				$where[] = '1 = 0';
 			}
 		}
-		if ( $f['user_id'] ) {
+		if ( null !== $f['user_id'] ) {
 			$where[]  = 'user_id = %d';
 			$params[] = absint( $f['user_id'] );
 		}
-		if ( $f['token_id'] ) {
+		if ( null !== $f['token_id'] ) {
 			$where[]  = 'token_id = %d';
 			$params[] = absint( $f['token_id'] );
 		}
@@ -238,16 +279,36 @@ final class AuditLog {
 			$where[]  = 'summary LIKE %s';
 			$params[] = '%' . $wpdb->esc_like( $search ) . '%';
 		}
-		if ( '' !== $f['since'] ) {
-			$where[]  = 'created_at >= %s';
-			$params[] = sanitize_text_field( $f['since'] );
-		}
-		if ( '' !== $f['until'] ) {
-			$where[]  = 'created_at <= %s';
-			$params[] = sanitize_text_field( $f['until'] );
+		foreach ( array(
+			'since' => '>=',
+			'until' => '<=',
+		) as $bound => $operator ) {
+			if ( '' === $f[ $bound ] || null === $f[ $bound ] ) {
+				continue;
+			}
+			if ( self::is_utc_datetime( $f[ $bound ] ) ) {
+				$where[]  = 'created_at ' . $operator . ' %s';
+				$params[] = $f[ $bound ];
+			} else {
+				$where[] = '1 = 0';
+			}
 		}
 
 		return array( implode( ' AND ', $where ), $params );
+	}
+
+	/**
+	 * Whether a value is a real UTC datetime written as "Y-m-d H:i:s".
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function is_utc_datetime( $value ) {
+		if ( ! is_string( $value ) ) {
+			return false;
+		}
+		$date = \DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', $value, new \DateTimeZone( 'UTC' ) );
+		return false !== $date && $date->format( 'Y-m-d H:i:s' ) === $value;
 	}
 
 	/**
