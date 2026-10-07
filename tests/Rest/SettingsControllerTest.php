@@ -560,6 +560,31 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( array(), $this->settings_rows() );
 	}
 
+	public function test_a_failed_secret_write_still_logs_the_settings_that_were_saved() {
+		global $wpdb;
+		$filter   = $this->break_option_writes( self::SECRET );
+		$suppress = $wpdb->suppress_errors( true );
+
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'privacy'              => array( 'retention_days' => 90 ),
+				'recaptcha_secret_key' => 'sk_live_value',
+			)
+		);
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $filter );
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 90, Settings::get( 'privacy.retention_days' ) );
+		$rows = $this->settings_rows();
+		$this->assertCount( 1, $rows, 'The saved part of the change is logged once.' );
+		$this->assertStringContainsString( 'privacy.retention_days', wp_json_encode( $rows ) );
+		$this->assertStringNotContainsString( 'recaptcha_secret_key', wp_json_encode( $rows ) );
+		$this->assertStringNotContainsString( 'sk_live_value', wp_json_encode( $rows ) );
+	}
+
 	public function test_saving_the_same_values_again_is_not_an_error() {
 		$this->request( 'POST', '/settings', array( 'privacy' => array( 'retention_days' => 90 ) ) );
 		$response = $this->request( 'POST', '/settings', array( 'privacy' => array( 'retention_days' => 90 ) ) );

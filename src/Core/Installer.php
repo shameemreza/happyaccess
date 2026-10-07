@@ -706,6 +706,10 @@ final class Installer {
 	 */
 	private static function blank_legacy_codes() {
 		global $wpdb;
+		// The share table is the only one with plain codes; if it is already gone, nothing is left to blank.
+		if ( ! self::table_exists( 'otp_shares' ) ) {
+			return true;
+		}
 		$table    = self::table( 'otp_shares' );
 		$previous = $wpdb->suppress_errors( true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Fixed table name; the column is NOT NULL.

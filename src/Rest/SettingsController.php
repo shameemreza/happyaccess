@@ -341,6 +341,10 @@ final class SettingsController {
 			return self::save_error();
 		}
 		if ( null !== $secret && ! self::write_secret( $secret ) ) {
+			// The other settings were stored, so the log still records them, without the secret.
+			if ( ! $log_first ) {
+				self::log_change( array_values( array_diff( $keys, array( 'security.recaptcha_secret_key' ) ) ) );
+			}
 			return self::save_error();
 		}
 		if ( ! $log_first ) {

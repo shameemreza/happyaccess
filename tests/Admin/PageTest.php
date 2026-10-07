@@ -128,6 +128,27 @@ class PageTest extends WP_UnitTestCase {
 		$this->assertSame( 'HappyAccess', $found[0][0] );
 	}
 
+	public function test_a_manager_who_cannot_list_users_gets_the_menu_under_profile() {
+		add_role(
+			'ha_settings_only',
+			'Settings only',
+			array(
+				'read'           => true,
+				'manage_options' => true,
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'ha_settings_only' ) ) );
+		$this->assertTrue( current_user_can( Capabilities::MANAGE ) );
+		$this->assertFalse( current_user_can( 'list_users' ) );
+
+		Page::add_menu();
+
+		remove_role( 'ha_settings_only' );
+		$slugs = wp_list_pluck( isset( $GLOBALS['submenu']['profile.php'] ) ? $GLOBALS['submenu']['profile.php'] : array(), 2 );
+		$this->assertContains( Page::SLUG, $slugs );
+		$this->assertNotSame( '', Page::hook_suffix() );
+	}
+
 	public function test_a_temp_user_does_not_get_the_menu() {
 		$made = Grants::create( array( 'label' => 'Agent' ) );
 		wp_set_current_user( TempUsers::get_or_create( Grants::get( $made['id'] ) ) );

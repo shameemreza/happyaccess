@@ -631,6 +631,21 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertFalse( get_transient( Installer::FAILED_TRANSIENT ) );
 	}
 
+	public function test_a_failed_magic_links_drop_with_the_share_table_gone_still_finishes() {
+		global $wpdb;
+		$this->seed_share();
+		$filter   = $this->break_statements( 'DROP', 'magic_links' );
+		$suppress = $wpdb->suppress_errors( true );
+
+		Installer::migrate();
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $filter );
+		$this->assertFalse( Installer::table_exists( 'otp_shares' ), 'The share table went, so no plain code is left.' );
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertFalse( get_transient( Installer::FAILED_TRANSIENT ) );
+	}
+
 	public function test_a_failed_drop_and_failed_blanking_is_a_failed_migration() {
 		global $wpdb;
 		$this->seed_share();
