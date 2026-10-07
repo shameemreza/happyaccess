@@ -266,8 +266,10 @@ describe( 'ActivityTab', () => {
 		await waitFor( () =>
 			expect( lastActivity().get( 'token_id' ) ).toBe( '9' )
 		);
-		expect( screen.getByLabelText( 'Who' ) ).toHaveDisplayValue(
-			'Pass #9'
+		await waitFor( () =>
+			expect( screen.getByLabelText( 'Who' ) ).toHaveDisplayValue(
+				'Pass #9'
+			)
 		);
 		expect(
 			await screen.findByRole( 'region', {
@@ -282,6 +284,36 @@ describe( 'ActivityTab', () => {
 			'Last 30 days'
 		);
 		expect( activityCalls() ).toHaveLength( 1 );
+	} );
+
+	it( 'says the pass is loading, not Pass #id, until the list arrives', async () => {
+		let release;
+		const held = new Promise( ( resolve ) => ( release = resolve ) );
+		const serve = apiFetch.getMockImplementation();
+		apiFetch.mockImplementation( async ( options ) => {
+			if ( options.path.endsWith( '/grants' ) ) {
+				await held;
+			}
+			return serve( options );
+		} );
+		window.history.replaceState(
+			{},
+			'',
+			'/wp-admin/users.php?page=happyaccess&tab=activity&token=5'
+		);
+		setup();
+
+		expect( screen.getByLabelText( 'Who' ) ).toHaveDisplayValue(
+			'Loading pass'
+		);
+		expect( screen.queryByText( 'Pass #5' ) ).not.toBeInTheDocument();
+
+		release();
+		await waitFor( () =>
+			expect( screen.getByLabelText( 'Who' ) ).toHaveDisplayValue(
+				'Acme Plugin Support'
+			)
+		);
 	} );
 
 	it( 'uses the pass name once the list has loaded', async () => {

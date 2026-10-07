@@ -12,6 +12,23 @@ const NO_FEATURES = {};
 const DEFAULT_BOOT = { features: NO_FEATURES, needsSetup: false };
 
 /**
+ * The boot data the PHP page prints, with a console warning when it is
+ * missing, since the app then starts with every feature off.
+ *
+ * @param {Object} win The window to read from.
+ * @return {Object|undefined} window.happyaccessBoot.
+ */
+export function readBoot( win = window ) {
+	if ( ! win.happyaccessBoot ) {
+		// eslint-disable-next-line no-console
+		console.warn(
+			'HappyAccess: window.happyaccessBoot is missing, so the admin app starts with its defaults.'
+		);
+	}
+	return win.happyaccessBoot;
+}
+
+/**
  * The app shell: header, then either the setup screen or the tabs.
  *
  * @param {Object}  props            Props.

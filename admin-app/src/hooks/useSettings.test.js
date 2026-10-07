@@ -73,3 +73,69 @@ it( 'sets error when loading fails', async () => {
 	expect( result.current.error.code ).toBe( 'network' );
 	expect( result.current.settings ).toBeNull();
 } );
+
+it( 'stays saving until every save in flight is done', async () => {
+	apiFetch.mockResolvedValueOnce( { needs_setup: false } );
+	const { result } = renderHook( () => useSettings() );
+	await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+	const finish = [];
+	apiFetch.mockImplementation(
+		() => new Promise( ( resolve ) => finish.push( resolve ) )
+	);
+	let first;
+	let second;
+	act( () => {
+		first = result.current.save( { a: 1 } );
+		second = result.current.save( { b: 2 } );
+	} );
+	expect( result.current.saving ).toBe( true );
+
+	await act( async () => {
+		finish[ 0 ]( { needs_setup: false } );
+		await first;
+	} );
+	expect( result.current.saving ).toBe( true );
+
+	await act( async () => {
+		finish[ 1 ]( { needs_setup: false } );
+		await second;
+	} );
+	expect( result.current.saving ).toBe( false );
+} );
+
+it( 'shows loading again on a retry and clears the error when it works', async () => {
+	apiFetch.mockRejectedValueOnce( { code: 'fetch_error', message: 'x' } );
+	const { result } = renderHook( () => useSettings() );
+	await waitFor( () => expect( result.current.error ).not.toBeNull() );
+
+	let finish;
+	apiFetch.mockImplementationOnce(
+		() => new Promise( ( resolve ) => ( finish = resolve ) )
+	);
+	let retry;
+	act( () => {
+		retry = result.current.refresh();
+	} );
+	expect( result.current.loading ).toBe( true );
+
+	await act( async () => {
+		finish( { needs_setup: false } );
+		await retry;
+	} );
+	expect( result.current.loading ).toBe( false );
+	expect( result.current.error ).toBeNull();
+	expect( result.current.settings ).toEqual( { needs_setup: false } );
+} );
+
+it( 'clears a load error once a save returns the settings', async () => {
+	apiFetch.mockRejectedValueOnce( { code: 'fetch_error', message: 'x' } );
+	const { result } = renderHook( () => useSettings() );
+	await waitFor( () => expect( result.current.error ).not.toBeNull() );
+
+	apiFetch.mockResolvedValueOnce( { needs_setup: false } );
+	await act( async () => {
+		await result.current.setup( { features: {}, consent: true } );
+	} );
+	expect( result.current.error ).toBeNull();
+} );

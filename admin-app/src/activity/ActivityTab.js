@@ -85,6 +85,8 @@ export default function ActivityTab( {
 	const [ page, setPage ] = useState( 1 );
 	const [ openId, setOpenId ] = useState( 0 );
 	const [ grants, setGrants ] = useState( [] );
+	// Until the list arrives, a pass from the URL has no name yet.
+	const [ grantsLoaded, setGrantsLoaded ] = useState( false );
 	const [ retention, setRetention ] = useState( 0 );
 	const [ exporting, setExporting ] = useState( false );
 	const [ exportError, setExportError ] = useState( '' );
@@ -93,12 +95,14 @@ export default function ActivityTab( {
 
 	useEffect( () => {
 		let live = true;
-		listGrants().then(
-			( result ) => live && setGrants( result.items ),
-			() => {
-				// Without the list the Who choice still offers everyone and you.
-			}
-		);
+		listGrants()
+			.then(
+				( result ) => live && setGrants( result.items ),
+				() => {
+					// Without the list the Who choice still offers everyone and you.
+				}
+			)
+			.finally( () => live && setGrantsLoaded( true ) );
 		fetchSettings().then(
 			( result ) => {
 				const days = Number( result?.privacy?.retention_days );
@@ -183,13 +187,16 @@ export default function ActivityTab( {
 
 	const passId = who.startsWith( 'pass:' ) ? Number( who.slice( 5 ) ) : 0;
 	const picked = grants.find( ( grant ) => grant.id === passId );
-	const passLabel = picked
-		? picked.label
-		: sprintf(
-				/* translators: %d: the id of a support pass that was revoked. */
-				__( 'Pass #%d', 'happyaccess' ),
-				passId
-			);
+	let passLabel = __( 'Loading pass', 'happyaccess' );
+	if ( picked ) {
+		passLabel = picked.label;
+	} else if ( grantsLoaded ) {
+		passLabel = sprintf(
+			/* translators: %d: the id of a support pass that was revoked. */
+			__( 'Pass #%d', 'happyaccess' ),
+			passId
+		);
+	}
 
 	const chips = [
 		[ '', __( 'All', 'happyaccess' ) ],

@@ -13,8 +13,11 @@ export function useSettings() {
 	const [ saving, setSaving ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const mounted = useRef( true );
+	// Saves in flight. `saving` stays true until the last one is done.
+	const pending = useRef( 0 );
 
 	const refresh = useCallback( async () => {
+		setLoading( true );
 		try {
 			const result = await api.getSettings();
 			if ( mounted.current ) {
@@ -41,15 +44,19 @@ export function useSettings() {
 	}, [ refresh ] );
 
 	const write = useCallback( async ( call ) => {
+		pending.current++;
 		setSaving( true );
 		try {
 			const result = await call();
 			if ( mounted.current ) {
 				setSettings( result );
+				// The reply holds the full settings, so an old load error is stale.
+				setError( null );
 			}
 			return result;
 		} finally {
-			if ( mounted.current ) {
+			pending.current--;
+			if ( mounted.current && 0 === pending.current ) {
 				setSaving( false );
 			}
 		}

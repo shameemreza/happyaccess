@@ -4,6 +4,11 @@ import * as api from './api';
 
 vi.mock( '@wordpress/api-fetch' );
 
+// Read before any test runs, since mocks are cleared between tests.
+const registered = apiFetch.use.mock.calls.map(
+	( [ middleware ] ) => middleware
+);
+
 const base = '/happyaccess/v1';
 
 beforeEach( () => {
@@ -215,8 +220,99 @@ describe( 'errors', () => {
 		expect( error.status ).toBe( 0 );
 		expect( error.message ).toMatch( /could not reach the server/i );
 
-		apiFetch.mockRejectedValue( new TypeError( 'Failed to fetch' ) );
-		const second = await api.getSettings().catch( ( e ) => e );
-		expect( second.code ).toBe( 'network' );
+		apiFetch.mockRejectedValue( {
+			code: 'offline_error',
+			message: 'Unable to connect.',
+		} );
+		const offline = await api.getSettings().catch( ( e ) => e );
+		expect( offline.code ).toBe( 'network' );
+	} );
+
+	it( 'does not blame the network for a bug in the app', async () => {
+		apiFetch.mockRejectedValue(
+			new TypeError( "Cannot read properties of undefined (reading 'x')" )
+		);
+		const error = await api.getSettings().catch( ( e ) => e );
+		expect( error ).toEqual( {
+			code: 'unknown',
+			message: 'Something went wrong. Try again.',
+			status: 0,
+		} );
+	} );
+
+	it( 'keeps the HTTP status of a reply that is not JSON', () => {
+		expect(
+			api.normalizeError( {
+				code: 'invalid_json',
+				message:
+					'The server sent a reply the app could not read (HTTP 500).',
+				data: { status: 500 },
+			} )
+		).toMatchObject( { code: 'invalid_json', status: 500 } );
+	} );
+} );
+
+describe( 'keepStatus middleware', () => {
+	const reply = ( status, body ) => ( {
+		status,
+		ok: status >= 200 && status < 300,
+		text: async () => body,
+	} );
+	const ours = { path: base + '/grants', method: 'GET' };
+
+	it( 'is registered with apiFetch', () => {
+		expect( registered ).toContain( api.keepStatus );
+	} );
+
+	it( 'leaves requests that are not ours alone', async () => {
+		const next = vi.fn().mockResolvedValue( 'core' );
+		const options = { path: '/wp/v2/users/me' };
+		await expect( api.keepStatus( options, next ) ).resolves.toBe( 'core' );
+		expect( next ).toHaveBeenCalledWith( options );
+	} );
+
+	it( 'asks for the raw reply and parses JSON itself', async () => {
+		const next = vi.fn().mockResolvedValue( reply( 200, '{"items":[]}' ) );
+		await expect( api.keepStatus( ours, next ) ).resolves.toEqual( {
+			items: [],
+		} );
+		expect( next ).toHaveBeenCalledWith( { ...ours, parse: false } );
+
+		next.mockResolvedValue( reply( 204, '' ) );
+		await expect( api.keepStatus( ours, next ) ).resolves.toBeNull();
+	} );
+
+	it( 'throws a WP_Error body as it came', async () => {
+		const body = {
+			code: 'rest_cookie_invalid_nonce',
+			message: 'Cookie check failed',
+			data: { status: 403 },
+		};
+		const next = vi
+			.fn()
+			.mockRejectedValue( reply( 403, JSON.stringify( body ) ) );
+		await expect( api.keepStatus( ours, next ) ).rejects.toEqual( body );
+	} );
+
+	it( 'throws invalid_json with the status when the body is not JSON', async () => {
+		const next = vi
+			.fn()
+			.mockRejectedValue( reply( 500, '<html>Fatal error</html>' ) );
+		await expect( api.keepStatus( ours, next ) ).rejects.toMatchObject( {
+			code: 'invalid_json',
+			data: { status: 500 },
+		} );
+
+		next.mockResolvedValue( reply( 200, 'Notice: oops {"items":[]}' ) );
+		await expect( api.keepStatus( ours, next ) ).rejects.toMatchObject( {
+			code: 'invalid_json',
+			data: { status: 200 },
+		} );
+	} );
+
+	it( 'passes a network failure through', async () => {
+		const failure = { code: 'fetch_error', message: 'offline' };
+		const next = vi.fn().mockRejectedValue( failure );
+		await expect( api.keepStatus( ours, next ) ).rejects.toBe( failure );
 	} );
 } );

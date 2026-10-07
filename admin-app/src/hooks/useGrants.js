@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 import * as api from '../api';
 
 const REFRESH_MS = 60000;
@@ -12,11 +13,14 @@ function withoutSecrets( grant ) {
 	return clean;
 }
 
-function replaceItem( list, grant ) {
+// A new pass goes to the top. An action only updates a pass still listed,
+// so it can't bring back one a refresh removed while it ran.
+function replaceItem( list, grant, insert = false ) {
 	const clean = withoutSecrets( grant );
-	return list.some( ( item ) => item.id === clean.id )
-		? list.map( ( item ) => ( item.id === clean.id ? clean : item ) )
-		: [ clean, ...list ];
+	if ( list.some( ( item ) => item.id === clean.id ) ) {
+		return list.map( ( item ) => ( item.id === clean.id ? clean : item ) );
+	}
+	return insert ? [ clean, ...list ] : list;
 }
 
 /**
@@ -62,9 +66,17 @@ export function useGrants() {
 				refresh();
 			}
 		}, REFRESH_MS );
+		// Passes may have ended while the tab was in the background.
+		const onVisibility = () => {
+			if ( 'visible' === document.visibilityState ) {
+				refresh();
+			}
+		};
+		document.addEventListener( 'visibilitychange', onVisibility );
 		return () => {
 			mounted.current = false;
 			clearInterval( timer );
+			document.removeEventListener( 'visibilitychange', onVisibility );
 		};
 	}, [ refresh ] );
 
@@ -72,7 +84,7 @@ export function useGrants() {
 		const result = await api.createGrant( form );
 		version.current++;
 		if ( mounted.current ) {
-			setGrants( ( list ) => replaceItem( list, result ) );
+			setGrants( ( list ) => replaceItem( list, result, true ) );
 		}
 		return result;
 	}, [] );
@@ -96,7 +108,15 @@ export function useGrants() {
 				result = await api.revokeGrant( id );
 				break;
 			default:
-				throw new Error( `Unknown action: ${ action }` );
+				// Same shape as a server error, so callers can show `message`.
+				throw {
+					code: 'unknown_action',
+					message: __(
+						'Something went wrong. Try again.',
+						'happyaccess'
+					),
+					status: 0,
+				};
 		}
 
 		version.current++;

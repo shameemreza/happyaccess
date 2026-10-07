@@ -155,3 +155,94 @@ it( 'refreshes every 60 seconds while visible, pauses while hidden and stops on 
 	expect( apiFetch ).toHaveBeenCalledTimes( 3 );
 	expect( vi.getTimerCount() ).toBe( 0 );
 } );
+
+it( 'act resume and regenerate post to their routes, and regenerate keeps the secrets out of the list', async () => {
+	apiFetch.mockResolvedValueOnce( {
+		items: [ grant( 5, { status: 'suspended' } ) ],
+	} );
+	const { result } = renderHook( () => useGrants() );
+	await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+	apiFetch.mockResolvedValueOnce( grant( 5 ) );
+	await act( async () => {
+		await result.current.act( 5, 'resume' );
+	} );
+	expect( apiFetch.mock.calls[ 1 ][ 0 ] ).toMatchObject( {
+		path: '/happyaccess/v1/grants/5/resume',
+		method: 'POST',
+	} );
+	expect( result.current.grants[ 0 ].status ).toBe( 'active' );
+
+	apiFetch.mockResolvedValueOnce(
+		grant( 5, { code: '12345678', link_url: 'https://x/?k=2' } )
+	);
+	let made;
+	await act( async () => {
+		made = await result.current.act( 5, 'regenerate', true );
+	} );
+	expect( apiFetch.mock.calls[ 2 ][ 0 ] ).toMatchObject( {
+		path: '/happyaccess/v1/grants/5/regenerate',
+		method: 'POST',
+		data: { send_email: true },
+	} );
+	expect( made.code ).toBe( '12345678' );
+	expect( result.current.grants ).toEqual( [ grant( 5 ) ] );
+} );
+
+it( 'rejects an unknown action with a normalized error and sends nothing', async () => {
+	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ) ] } );
+	const { result } = renderHook( () => useGrants() );
+	await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+	await act( async () => {
+		await expect(
+			result.current.act( 5, 'explode' )
+		).rejects.toMatchObject( { code: 'unknown_action', status: 0 } );
+	} );
+	expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+} );
+
+it( 'does not bring back a pass a refresh removed while an action ran', async () => {
+	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ), grant( 6 ) ] } );
+	const { result } = renderHook( () => useGrants() );
+	await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+	let finish;
+	apiFetch.mockImplementationOnce(
+		() => new Promise( ( resolve ) => ( finish = resolve ) )
+	);
+	let pending;
+	act( () => {
+		pending = result.current.act( 5, 'suspend' );
+	} );
+
+	apiFetch.mockResolvedValueOnce( { items: [ grant( 6 ) ] } );
+	await act( async () => {
+		await result.current.refresh();
+	} );
+	expect( result.current.grants.map( ( g ) => g.id ) ).toEqual( [ 6 ] );
+
+	await act( async () => {
+		finish( grant( 5, { status: 'suspended' } ) );
+		await pending;
+	} );
+	expect( result.current.grants.map( ( g ) => g.id ) ).toEqual( [ 6 ] );
+} );
+
+it( 'refreshes as soon as the tab becomes visible again', async () => {
+	apiFetch.mockResolvedValue( { items: [] } );
+	renderHook( () => useGrants() );
+	await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+
+	setVisibility( 'hidden' );
+	act( () => {
+		document.dispatchEvent( new Event( 'visibilitychange' ) );
+	} );
+	expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+
+	setVisibility( 'visible' );
+	await act( async () => {
+		document.dispatchEvent( new Event( 'visibilitychange' ) );
+	} );
+	expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+} );

@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
-import App from './App';
+import App, { readBoot } from './App';
 import { settingsFixture } from './settings/fixtures';
 import { grantFixture } from './support/fixtures';
 
@@ -394,5 +394,24 @@ describe( 'App shell', () => {
 			<App boot={ boot( { needsSetup: true } ) } />
 		);
 		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+} );
+
+describe( 'readBoot', () => {
+	it( 'warns in the console when the page printed no boot data', () => {
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		expect( readBoot( {} ) ).toBeUndefined();
+		expect( warn ).toHaveBeenCalledWith(
+			expect.stringContaining( 'happyaccessBoot' )
+		);
+		warn.mockRestore();
+	} );
+
+	it( 'returns the boot data without a warning when it is there', () => {
+		const warn = vi.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const printed = { features: {} };
+		expect( readBoot( { happyaccessBoot: printed } ) ).toBe( printed );
+		expect( warn ).not.toHaveBeenCalled();
+		warn.mockRestore();
 	} );
 } );

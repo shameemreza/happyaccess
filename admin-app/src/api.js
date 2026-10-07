@@ -1,7 +1,8 @@
 import apiFetch from '@wordpress/api-fetch';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 const BASE = '/happyaccess/v1';
+const NETWORK_CODES = [ 'fetch_error', 'offline_error' ];
 
 /**
  * Turns whatever apiFetch rejected with into { code, message, status }.
@@ -12,15 +13,22 @@ const BASE = '/happyaccess/v1';
  */
 export function normalizeError( error ) {
 	const code = error && typeof error.code === 'string' ? error.code : '';
-	const isNetwork = ! code || 'fetch_error' === code;
 
-	if ( isNetwork ) {
+	if ( NETWORK_CODES.includes( code ) ) {
 		return {
 			code: 'network',
 			message: __(
 				'Could not reach the server. Check your connection and try again.',
 				'happyaccess'
 			),
+			status: 0,
+		};
+	}
+	if ( ! code ) {
+		// A thrown Error (a bug in the app, not the connection) has no code.
+		return {
+			code: 'unknown',
+			message: __( 'Something went wrong. Try again.', 'happyaccess' ),
 			status: 0,
 		};
 	}
@@ -35,6 +43,66 @@ export function normalizeError( error ) {
 		status: Number.isFinite( status ) ? status : 0,
 	};
 }
+
+const isResponse = ( value ) =>
+	!! value &&
+	'function' === typeof value.text &&
+	'number' === typeof value.status;
+
+async function readJson( response ) {
+	if ( 204 === response.status ) {
+		return null;
+	}
+	const text = await response.text();
+	if ( '' === text && response.ok ) {
+		return null;
+	}
+	try {
+		return JSON.parse( text );
+	} catch {
+		throw {
+			code: 'invalid_json',
+			message: sprintf(
+				/* translators: %d: HTTP status code, like 500. */
+				__(
+					'The server sent a reply the app could not read (HTTP %d).',
+					'happyaccess'
+				),
+				response.status
+			),
+			data: { status: response.status },
+		};
+	}
+}
+
+/**
+ * apiFetch middleware for our own routes. It reads the reply itself, so a
+ * body that is not JSON (a PHP fatal error page, a firewall block) keeps its
+ * HTTP status. A WP_Error body is thrown as it came, so the nonce retry in
+ * apiFetch still sees its code.
+ *
+ * @param {Object}                                options apiFetch options.
+ * @param {(options: Object) => Promise<unknown>} next    The next middleware.
+ * @return {Promise} The parsed body.
+ */
+export function keepStatus( options, next ) {
+	const path = String( options.path || '' );
+	if ( false === options.parse || ! path.startsWith( BASE + '/' ) ) {
+		return next( options );
+	}
+	return next( { ...options, parse: false } ).then(
+		( response ) =>
+			isResponse( response ) ? readJson( response ) : response,
+		async ( error ) => {
+			if ( ! isResponse( error ) ) {
+				throw error;
+			}
+			throw await readJson( error );
+		}
+	);
+}
+
+apiFetch.use( keepStatus );
 
 async function request( path, method = 'GET', data ) {
 	const options = { path: BASE + path, method };
