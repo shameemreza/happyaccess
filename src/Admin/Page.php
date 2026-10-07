@@ -98,10 +98,15 @@ final class Page {
 	/**
 	 * Adds the page under Users, for people who can manage HappyAccess.
 	 *
+	 * Core shows the Users menu to anyone with list_users, but add_users_page()
+	 * picks its parent by edit_users. A site admin on a network lacks edit_users,
+	 * so the page would land under a Profile menu they never see.
+	 *
 	 * @return void
 	 */
 	public static function add_menu() {
-		$hook = add_users_page(
+		$hook = add_submenu_page(
+			current_user_can( 'list_users' ) ? 'users.php' : 'profile.php',
 			__( 'HappyAccess', 'happyaccess' ),
 			__( 'HappyAccess', 'happyaccess' ),
 			Capabilities::MANAGE,

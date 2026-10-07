@@ -179,6 +179,8 @@ final class TempUsers {
 
 	/**
 	 * Whether a user id is a live temp user of this grant on this site.
+	 * On a network, deleting a user from a site only removes it from that
+	 * site, so the account must still be a member here.
 	 *
 	 * @param int   $user_id User id.
 	 * @param array $grant   Grant with id.
@@ -186,6 +188,9 @@ final class TempUsers {
 	 */
 	private static function usable( $user_id, array $grant ) {
 		if ( $user_id < 1 || false === get_userdata( $user_id ) || ! self::belongs_to_grant( $user_id, $grant ) ) {
+			return false;
+		}
+		if ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) {
 			return false;
 		}
 		$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
