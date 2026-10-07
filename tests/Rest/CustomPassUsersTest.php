@@ -159,5 +159,49 @@ class CustomPassUsersTest extends RestTestCase {
 		$this->assertSame( 201, $response->get_status() );
 		$this->assertSame( array( 'subscriber' ), get_user_by( 'login', 'defaultrole' )->roles );
 	}
-}
 
+	/**
+	 * Runs a GET on the core users routes.
+	 *
+	 * @param string $path  Path after /wp/v2/users.
+	 * @param array  $query Query params.
+	 * @return WP_REST_Response
+	 */
+	private function users_get( $path, array $query = array() ) {
+		$request = new WP_REST_Request( 'GET', '/wp/v2/users' . $path );
+		$request->set_query_params( $query );
+		return rest_do_request( $request );
+	}
+
+	public function test_include_cannot_bring_the_creator_back_for_a_temp_user() {
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->custom( array( 'list_users' ) );
+
+		$only   = $this->users_get( '', array( 'include' => array( $this->owner ) ) );
+		$mixed  = $this->users_get( '', array( 'include' => array( $this->owner, $subscriber ) ) );
+
+		$this->assertSame( 200, $only->get_status() );
+		$this->assertSame( array(), $only->get_data() );
+		$this->assertSame( array( $subscriber ), array_map( 'intval', wp_list_pluck( $mixed->get_data(), 'id' ) ) );
+	}
+
+	public function test_the_single_user_route_hides_the_creator_from_a_temp_user() {
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->custom( array( 'list_users' ) );
+
+		$hidden = $this->users_get( '/' . $this->owner );
+		$this->assertSame( 404, $hidden->get_status() );
+		$this->assertSame( 'rest_user_invalid_id', $hidden->as_error()->get_error_code() );
+		$this->assertSame( 200, $this->users_get( '/' . $subscriber )->get_status() );
+	}
+
+	public function test_an_admin_still_sees_the_creator_on_both_routes() {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$this->custom( array( 'list_users' ) );
+		wp_set_current_user( $admin );
+
+		$listed = $this->users_get( '', array( 'include' => array( $this->owner ) ) );
+		$this->assertSame( array( $this->owner ), array_map( 'intval', wp_list_pluck( $listed->get_data(), 'id' ) ) );
+		$this->assertSame( 200, $this->users_get( '/' . $this->owner )->get_status() );
+	}
+}

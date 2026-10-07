@@ -132,4 +132,12 @@ class OwnerTest extends WP_UnitTestCase {
 
 		$this->assertSame( $real, Grants::owner_id( array( 'created_by' => 0 ) ) );
 	}
+
+	public function test_an_unmarked_leftover_with_a_grant_link_is_never_the_owner() {
+		$this->hide_admins_before( $this->first_admin );
+		update_user_meta( $this->first_admin, 'happyaccess_token_id', 42 );
+
+		$this->assertSame( $this->second_admin, Grants::owner_id( array( 'created_by' => 0 ) ) );
+		$this->assertSame( $this->second_admin, Grants::owner_id( array( 'created_by' => $this->first_admin ) ) );
+	}
 }

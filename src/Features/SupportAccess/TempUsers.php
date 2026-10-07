@@ -463,7 +463,7 @@ final class TempUsers {
 					'order'      => 'ASC',
 					'number'     => 1,
 					'exclude'    => array( $exclude ),
-					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One lookup at uninstall.
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One row per account being removed, at cleanup or uninstall.
 					'meta_query' => array(
 						'relation' => 'AND',
 						array(

@@ -236,6 +236,7 @@ final class CapabilityGuard {
 		add_filter( 'all_plugins', array( __CLASS__, 'hide_plugin' ) );
 		add_filter( 'users_list_table_query_args', array( __CLASS__, 'hide_owner' ) );
 		add_filter( 'rest_user_query', array( __CLASS__, 'hide_owner' ) );
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'hide_owner_route' ), 10, 3 );
 		add_filter( 'editable_roles', array( __CLASS__, 'filter_editable_roles' ), PHP_INT_MAX );
 		add_filter( 'insert_user_meta', array( __CLASS__, 'note_new_user' ), PHP_INT_MAX, 4 );
 		add_filter( 'option_default_role', array( __CLASS__, 'default_role_for_new_user' ), PHP_INT_MAX );
@@ -1053,12 +1054,53 @@ final class CapabilityGuard {
 		if ( ! is_array( $args ) || ! Capabilities::is_temp_user( $user_id ) ) {
 			return $args;
 		}
-		$hidden = array_filter( array( self::rules( $user_id )['created_by'], self::creator_for( $user_id ) ) );
+		$hidden = self::hidden_users( $user_id );
 		if ( $hidden ) {
 			$exclude         = isset( $args['exclude'] ) ? array_map( 'intval', (array) $args['exclude'] ) : array();
 			$args['exclude'] = array_values( array_unique( array_merge( $exclude, $hidden ) ) );
+			// WP_User_Query applies include before exclude, so the hidden ids come out of include too.
+			if ( ! empty( $args['include'] ) ) {
+				$include         = array_values( array_diff( array_map( 'intval', (array) $args['include'] ), $hidden ) );
+				$args['include'] = $include ? $include : array( 0 );
+			}
 		}
 		return $args;
+	}
+
+	/**
+	 * Answers a temp user's request for a hidden account on the single user
+	 * REST route as if the account didn't exist.
+	 *
+	 * @param mixed            $result  Response so far, null to go on.
+	 * @param \WP_REST_Server  $server  REST server.
+	 * @param \WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public static function hide_owner_route( $result, $server = null, $request = null ) {
+		unset( $server );
+		if ( null !== $result || ! $request instanceof \WP_REST_Request ) {
+			return $result;
+		}
+		$prefix = '/wp/v2/users/';
+		$route  = untrailingslashit( (string) $request->get_route() );
+		if ( 0 !== strpos( $route, $prefix ) || ! ctype_digit( substr( $route, strlen( $prefix ) ) ) ) {
+			return $result;
+		}
+		$user_id = get_current_user_id();
+		if ( ! Capabilities::is_temp_user( $user_id ) || ! in_array( (int) substr( $route, strlen( $prefix ) ), self::hidden_users( $user_id ), true ) ) {
+			return $result;
+		}
+		return new \WP_Error( 'rest_user_invalid_id', __( 'Invalid user ID.', 'happyaccess' ), array( 'status' => 404 ) );
+	}
+
+	/**
+	 * Accounts a temp user must not see: the grant's creator and the locked owner.
+	 *
+	 * @param int $user_id Temp user id.
+	 * @return int[]
+	 */
+	private static function hidden_users( $user_id ) {
+		return array_values( array_unique( array_filter( array( self::rules( $user_id )['created_by'], self::creator_for( $user_id ) ) ) ) );
 	}
 
 	/**

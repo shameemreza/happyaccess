@@ -304,14 +304,16 @@ final class Grants {
 	/**
 	 * Who should get a grant's emails and the content of its temp user: the
 	 * creator, or the lowest-ID administrator when the creator is gone, lacks
-	 * manage_options, or is a temp user themselves.
+	 * manage_options, or is a temp user themselves. Accounts with the temp
+	 * marker or a grant link, even a leftover one, are never chosen.
 	 *
 	 * @param array $grant Grant with created_by.
 	 * @return int User id, 0 when no administrator is left.
 	 */
 	public static function owner_id( array $grant ) {
 		$creator = isset( $grant['created_by'] ) ? (int) $grant['created_by'] : 0;
-		if ( $creator > 0 && false !== get_userdata( $creator ) && ! Capabilities::is_temp_user( $creator ) && user_can( $creator, 'manage_options' ) ) {
+		if ( $creator > 0 && false !== get_userdata( $creator ) && ! Capabilities::is_temp_user( $creator )
+			&& '' === (string) get_user_meta( $creator, 'happyaccess_token_id', true ) && user_can( $creator, 'manage_options' ) ) {
 			return $creator;
 		}
 
@@ -324,8 +326,13 @@ final class Grants {
 				'fields'     => 'ID',
 				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One row, only when the creator can't be used.
 				'meta_query' => array(
+					'relation' => 'AND',
 					array(
 						'key'     => 'happyaccess_temp_user',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => 'happyaccess_token_id',
 						'compare' => 'NOT EXISTS',
 					),
 				),

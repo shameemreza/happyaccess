@@ -78,6 +78,8 @@ class CatalogTest extends WP_UnitTestCase {
 	}
 
 	public function test_every_cap_item_says_whether_it_runs_on_trust() {
+		// Roles added by earlier tests stay in memory after their rollback, so read the stored roles again.
+		wp_roles()->for_site();
 		add_role(
 			'seo',
 			'SEO',

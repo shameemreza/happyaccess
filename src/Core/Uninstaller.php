@@ -160,7 +160,7 @@ final class Uninstaller {
 	 */
 	private static function linked_user_ids() {
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall lookup by marker meta.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall lookup by the marker and pass link meta.
 		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key IN ( %s, %s )", 'happyaccess_temp_user', 'happyaccess_token_id' ) );
 		return array_map( 'intval', (array) $ids );
 	}
@@ -230,19 +230,6 @@ final class Uninstaller {
 	}
 
 	/**
-	 * Takes the role and every capability off a temp user, so an account that
-	 * can't be deleted right now can do nothing.
-	 *
-	 * @param int $user_id User id.
-	 * @return void
-	 */
-	private static function strip( $user_id ) {
-		$user = new \WP_User( $user_id );
-		$user->set_role( '' );
-		$user->remove_all_caps();
-	}
-
-	/**
 	 * Deletes one temp user from this site, and from the network when no other
 	 * site uses the account. Its content goes to someone else. With nobody to
 	 * give it to, the account stays, without a role, and keeps its posts.
@@ -268,7 +255,7 @@ final class Uninstaller {
 	 * @return void
 	 */
 	private static function keep( $user_id ) {
-		self::strip( $user_id );
+		TempUsers::strip( $user_id );
 		self::$kept[ $user_id ] = true;
 	}
 
