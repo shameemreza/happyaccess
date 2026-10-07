@@ -233,7 +233,7 @@ final class TempUsers {
 	 * @param int|null $reassign Who gets the user's posts and links, or null.
 	 * @return bool
 	 */
-	private static function remove_user( $user_id, $reassign ) {
+	public static function remove_user( $user_id, $reassign ) {
 		if ( ! function_exists( 'wp_delete_user' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/user.php';
 		}

@@ -26,6 +26,11 @@ final class Uninstaller {
 	const TABLES = array( 'tokens', 'logs', 'attempts', 'challenges' );
 
 	/**
+	 * User meta that marks and locates a temp user.
+	 */
+	const IDENTITY_META = array( 'happyaccess_temp_user', 'happyaccess_token_id', 'happyaccess_blog_id' );
+
+	/**
 	 * Revokes passes and clears events on every site, then deletes the data of
 	 * the sites that asked for it. The data comes second because user meta is
 	 * shared across a network: removing it early would hide the temp users of
@@ -38,11 +43,14 @@ final class Uninstaller {
 		self::each_site(
 			static function ( $site_id ) use ( &$delete ) {
 				// Read the choice before anything is deleted: the settings option is part of the data.
-				$delete[ $site_id ] = (bool) Settings::get( 'privacy.delete_on_uninstall', false );
+				$delete[ $site_id ] = self::delete_requested();
 				self::end_passes();
 				self::clear_events();
 			}
 		);
+
+		// Before any meta is swept, so an account can't lose its marker and stay behind as a normal user.
+		self::delete_stranded_users();
 
 		self::each_site(
 			static function ( $site_id ) use ( $delete ) {
@@ -106,6 +114,19 @@ final class Uninstaller {
 	}
 
 	/**
+	 * Whether this site asked for its data to be deleted. A database that
+	 * never reached 1.1.0 has no settings option yet, so the 1.0.6 choice counts.
+	 *
+	 * @return bool
+	 */
+	private static function delete_requested() {
+		if ( false === get_option( Settings::OPTION, false ) ) {
+			return (bool) get_option( 'happyaccess_delete_on_uninstall', false );
+		}
+		return (bool) Settings::get( 'privacy.delete_on_uninstall', false );
+	}
+
+	/**
 	 * Revokes every pass and deletes every temp user left on the site,
 	 * including accounts that no grant row points to anymore.
 	 *
@@ -116,31 +137,43 @@ final class Uninstaller {
 			Grants::revoke_all( 'plugin_deleted' );
 		}
 
-		$inheritor = self::inheritor();
 		foreach ( self::leftover_temp_users() as $user_id ) {
-			self::delete_user( $user_id, $inheritor );
+			self::delete_user( $user_id );
 		}
 	}
 
 	/**
-	 * Ids of temp users that belong to this site, found by their meta. A user
-	 * with no recorded site counts for the site it is found on.
+	 * Ids of every user that carries the temp user marker or a pass link.
+	 * Usermeta is shared across a network, so these come from all sites.
+	 *
+	 * @return int[]
+	 */
+	private static function linked_user_ids() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall lookup by marker meta.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key IN ( %s, %s )", 'happyaccess_temp_user', 'happyaccess_token_id' ) );
+		return array_map( 'intval', (array) $ids );
+	}
+
+	/**
+	 * Ids of temp users that belong to this site. A user with the marker and
+	 * no recorded site counts for the site it is found on. A user with only a
+	 * pass link counts when the link points at a grant row of this site, or
+	 * when the site has no grants table anymore.
 	 *
 	 * @return int[]
 	 */
 	private static function leftover_temp_users() {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Uninstall lookup by marker meta.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s", 'happyaccess_temp_user' ) );
-
 		$found = array();
-		foreach ( (array) $ids as $user_id ) {
-			$user_id = (int) $user_id;
-			if ( ! Capabilities::is_temp_user( $user_id ) || false === get_userdata( $user_id ) ) {
+		foreach ( self::linked_user_ids() as $user_id ) {
+			if ( false === get_userdata( $user_id ) ) {
 				continue;
 			}
 			$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
 			if ( 0 !== $blog_id && get_current_blog_id() !== $blog_id ) {
+				continue;
+			}
+			if ( ! Capabilities::is_temp_user( $user_id ) && ! self::link_matches_this_site( $user_id, $blog_id ) ) {
 				continue;
 			}
 			$found[] = $user_id;
@@ -149,57 +182,128 @@ final class Uninstaller {
 	}
 
 	/**
-	 * The administrator who inherits a temp user's content, so removing the
-	 * account never removes posts.
+	 * Whether a user's pass link, with no marker, belongs to this site's grants.
+	 * Grant ids repeat across the sites of a network, so there the user must
+	 * name this site.
 	 *
+	 * @param int $user_id User id.
+	 * @param int $blog_id Site recorded on the user, 0 when none.
+	 * @return bool
+	 */
+	private static function link_matches_this_site( $user_id, $blog_id ) {
+		$token_id = (int) get_user_meta( $user_id, 'happyaccess_token_id', true );
+		if ( $token_id < 1 || ( is_multisite() && 0 === $blog_id ) ) {
+			return false;
+		}
+		return ! Installer::table_exists( 'tokens' ) || null !== Grants::get( $token_id );
+	}
+
+	/**
+	 * Deletes the temp users that no site pass could remove: accounts of a
+	 * deleted site, accounts on more than one site, and ones with a site id
+	 * that matches nothing. Runs after every site is done and before the meta
+	 * sweep.
+	 *
+	 * @return void
+	 */
+	private static function delete_stranded_users() {
+		foreach ( self::linked_user_ids() as $user_id ) {
+			if ( false === get_userdata( $user_id ) ) {
+				continue;
+			}
+			if ( ! Capabilities::is_temp_user( $user_id ) ) {
+				// A pass link alone is only proof once the site it names is gone.
+				$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
+				if ( ! is_multisite() || $blog_id < 1 || null !== get_site( $blog_id ) ) {
+					continue;
+				}
+			}
+			self::delete_everywhere( $user_id );
+		}
+	}
+
+	/**
+	 * Who gets a temp user's posts and links: the owner of its pass, or the
+	 * first administrator who is not a temp user.
+	 *
+	 * @param int $user_id The user being deleted.
 	 * @return int|null User id, or null when the site has no other administrator.
 	 */
-	private static function inheritor() {
-		$admins = get_users(
-			array(
-				'role'    => 'administrator',
-				'fields'  => 'ID',
-				'orderby' => 'ID',
-				'order'   => 'ASC',
-				'number'  => 20,
-			)
-		);
-		foreach ( $admins as $user_id ) {
-			if ( ! Capabilities::is_temp_user( (int) $user_id ) ) {
-				return (int) $user_id;
+	private static function reassign_target( $user_id ) {
+		$token_id = (int) get_user_meta( $user_id, 'happyaccess_token_id', true );
+		$grant    = ( $token_id > 0 && Installer::table_exists( 'tokens' ) ) ? Grants::get( $token_id ) : null;
+		if ( null !== $grant ) {
+			$owner = Grants::owner_id( $grant );
+			if ( $owner > 0 && $owner !== $user_id ) {
+				return $owner;
 			}
 		}
-		return null;
+
+		$admins = get_users(
+			array(
+				'role'       => 'administrator',
+				'fields'     => 'ID',
+				'orderby'    => 'ID',
+				'order'      => 'ASC',
+				'number'     => 1,
+				'exclude'    => array( $user_id ),
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One lookup at uninstall.
+				'meta_query' => array(
+					'relation' => 'AND',
+					array(
+						'key'     => 'happyaccess_temp_user',
+						'compare' => 'NOT EXISTS',
+					),
+					array(
+						'key'     => 'happyaccess_token_id',
+						'compare' => 'NOT EXISTS',
+					),
+				),
+			)
+		);
+		return empty( $admins ) ? null : (int) $admins[0];
 	}
 
 	/**
 	 * Deletes one temp user from this site, and from the network when no other
-	 * site uses the account.
+	 * site uses the account. Its content goes to someone else.
 	 *
-	 * @param int      $user_id   User id.
-	 * @param int|null $reassign  Who gets the user's content.
+	 * @param int $user_id User id.
 	 * @return void
 	 */
-	private static function delete_user( $user_id, $reassign ) {
+	private static function delete_user( $user_id ) {
 		TempUsers::destroy_sessions( $user_id );
 		TempUsers::delete_wc_api_keys( $user_id );
+		TempUsers::remove_user( $user_id, self::reassign_target( $user_id ) );
+	}
 
-		if ( is_multisite() ) {
-			if ( ! function_exists( 'wpmu_delete_user' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/ms.php';
-			}
-			$other_blogs = array_diff( array_keys( (array) get_blogs_of_user( $user_id ) ), array( get_current_blog_id() ) );
-			remove_user_from_blog( $user_id, get_current_blog_id(), $reassign );
-			if ( empty( $other_blogs ) ) {
-				wpmu_delete_user( $user_id );
-			}
+	/**
+	 * Deletes a temp user from every site it belongs to, then from the network.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	private static function delete_everywhere( $user_id ) {
+		if ( ! is_multisite() ) {
+			self::delete_user( $user_id );
 			return;
 		}
-
-		if ( ! function_exists( 'wp_delete_user' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
+		if ( ! function_exists( 'wpmu_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/ms.php';
 		}
-		wp_delete_user( $user_id, $reassign );
+
+		TempUsers::destroy_sessions( $user_id );
+		foreach ( array_keys( (array) get_blogs_of_user( $user_id ) ) as $blog_id ) {
+			switch_to_blog( (int) $blog_id );
+			try {
+				TempUsers::delete_wc_api_keys( $user_id );
+				// Taking the account off the site first hands its posts to the reassign target; wpmu_delete_user alone would delete them.
+				remove_user_from_blog( $user_id, (int) $blog_id, self::reassign_target( $user_id ) );
+			} finally {
+				restore_current_blog();
+			}
+		}
+		wpmu_delete_user( $user_id );
 	}
 
 	/**
@@ -253,16 +357,28 @@ final class Uninstaller {
 
 	/**
 	 * Deletes every happyaccess_ user meta key. On multisite the table is
-	 * shared, so the keys go for every site.
+	 * shared, so the keys go for every site. An account that still has the temp
+	 * user marker, because it could not be deleted, keeps its marker and links
+	 * so it never turns into a normal account.
 	 *
 	 * @return void
 	 */
 	private static function delete_user_meta() {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall sweep.
-		$keys = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE meta_key LIKE %s", $wpdb->esc_like( 'happyaccess_' ) . '%' ) );
-		foreach ( (array) $keys as $key ) {
-			delete_metadata( 'user', 0, $key, '', true );
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT user_id, meta_key FROM {$wpdb->usermeta} WHERE meta_key LIKE %s", $wpdb->esc_like( 'happyaccess_' ) . '%' ), ARRAY_A );
+
+		$marked = array();
+		foreach ( $rows as $row ) {
+			if ( 'happyaccess_temp_user' === $row['meta_key'] ) {
+				$marked[ (int) $row['user_id'] ] = true;
+			}
+		}
+		foreach ( $rows as $row ) {
+			if ( isset( $marked[ (int) $row['user_id'] ] ) && in_array( $row['meta_key'], self::IDENTITY_META, true ) ) {
+				continue;
+			}
+			delete_user_meta( (int) $row['user_id'], $row['meta_key'] );
 		}
 	}
 

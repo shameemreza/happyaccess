@@ -6,6 +6,8 @@
  */
 
 use HappyAccess\Core\AuditLog;
+use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Clock;
 use HappyAccess\Core\Cron;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
@@ -166,6 +168,174 @@ class UninstallerTest extends WP_UnitTestCase {
 				)
 			)
 		);
+	}
+
+	public function test_the_1_0_6_choice_to_delete_is_honored_when_there_is_no_new_settings_option() {
+		delete_option( Settings::OPTION );
+		update_option( 'happyaccess_delete_on_uninstall', 1 );
+
+		Uninstaller::run();
+
+		foreach ( Uninstaller::TABLES as $name ) {
+			$this->assertFalse( Installer::table_exists( $name ), $name . ' table is still there' );
+		}
+	}
+
+	public function test_the_1_0_6_choice_to_keep_is_honored_when_there_is_no_new_settings_option() {
+		delete_option( Settings::OPTION );
+		update_option( 'happyaccess_delete_on_uninstall', 0 );
+
+		Uninstaller::run();
+
+		foreach ( Uninstaller::TABLES as $name ) {
+			$this->assertTrue( Installer::table_exists( $name ), $name . ' table was dropped' );
+		}
+		$this->assertSame( '0', (string) get_option( 'happyaccess_delete_on_uninstall' ) );
+	}
+
+	public function test_the_new_settings_option_wins_over_the_1_0_6_option() {
+		update_option( 'happyaccess_delete_on_uninstall', 1 );
+		$this->delete_data( false );
+
+		Uninstaller::run();
+
+		$this->assertTrue( Installer::table_exists( 'tokens' ) );
+	}
+
+	public function test_remove_user_is_a_public_helper_the_uninstaller_can_reuse() {
+		$this->assertTrue( ( new ReflectionMethod( TempUsers::class, 'remove_user' ) )->isPublic() );
+	}
+
+	/**
+	 * Makes a temp user whose grant already ended, so only the leftover sweep can find it.
+	 *
+	 * @param bool $keep_marker Whether the happyaccess_temp_user marker stays.
+	 * @return array Grant id and user id.
+	 */
+	private function ended_pass_with_user( $keep_marker ) {
+		global $wpdb;
+		list( $id, $user_id ) = $this->pass_with_user( 'Ended' );
+		$wpdb->update( Installer::table( 'tokens' ), array( 'revoked_at' => Clock::mysql() ), array( 'id' => $id ) );
+		Grants::flush_cache();
+		if ( ! $keep_marker ) {
+			delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		}
+		return array( $id, $user_id );
+	}
+
+	public function test_a_user_with_only_a_token_id_pointing_at_a_grant_row_is_deleted() {
+		list( , $user_id ) = $this->ended_pass_with_user( false );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+	}
+
+	public function test_a_user_with_only_a_token_id_is_deleted_when_the_grants_table_is_gone() {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user_id, 'happyaccess_token_id', 987654 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', get_current_blog_id() );
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . Installer::table( 'tokens' ) );
+		$this->assertFalse( Installer::table_exists( 'tokens' ) );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+	}
+
+	public function test_a_user_with_a_token_id_that_matches_no_grant_row_is_kept() {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user_id, 'happyaccess_token_id', 987654 );
+
+		Uninstaller::run();
+
+		$this->assertNotFalse( get_userdata( $user_id ) );
+	}
+
+	public function test_a_leftover_temp_users_posts_go_to_the_pass_owner() {
+		$owner = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $owner );
+		list( , $user_id ) = $this->ended_pass_with_user( true );
+		$post_id           = self::factory()->post->create( array( 'post_author' => $user_id ) );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertNotFalse( get_post( $post_id ) );
+		$this->assertSame( $owner, (int) get_post( $post_id )->post_author );
+	}
+
+	public function test_posts_of_a_temp_user_with_no_grant_go_to_a_real_administrator() {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		$post_id = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		// A second marked administrator with a low id must never be picked.
+		$decoy = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $decoy, 'happyaccess_temp_user', 1 );
+
+		Uninstaller::run();
+
+		$this->assertNotFalse( get_post( $post_id ) );
+		$author = (int) get_post( $post_id )->post_author;
+		$this->assertNotSame( $user_id, $author );
+		$this->assertNotSame( $decoy, $author );
+		$this->assertTrue( user_can( $author, 'manage_options' ) );
+		$this->assertFalse( Capabilities::is_temp_user( $author ) );
+	}
+
+	public function test_a_marked_user_of_another_site_id_is_deleted_on_a_single_site() {
+		if ( is_multisite() ) {
+			$this->markTestSkipped( 'Single site only.' );
+		}
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', 4242 );
+		$this->delete_data( true );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_a_temp_user_whose_site_was_deleted_is_removed_and_never_stranded() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$this->delete_data( true );
+		$site_id = self::factory()->blog->create();
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', $site_id );
+		$kept = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_delete_site( $site_id );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertNotFalse( get_userdata( $kept ) );
+	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_a_temp_user_that_belongs_to_two_sites_is_deleted_not_left_as_a_normal_account() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$this->delete_data( true );
+		$site_id = self::factory()->blog->create();
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		add_user_to_blog( $site_id, $user_id, 'administrator' );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', $site_id );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $user_id ) );
 	}
 
 	/**
