@@ -228,6 +228,7 @@ final class CapabilityGuard {
 		}
 		add_filter( 'all_plugins', array( __CLASS__, 'hide_plugin' ) );
 		add_filter( 'users_list_table_query_args', array( __CLASS__, 'hide_owner' ) );
+		add_filter( 'editable_roles', array( __CLASS__, 'filter_editable_roles' ), PHP_INT_MAX );
 		add_action( 'activate_plugin', array( __CLASS__, 'plugin_work_started' ), 10, 2 );
 		add_filter( 'upgrader_pre_install', array( __CLASS__, 'upgrade_work_started' ) );
 		add_action( 'activated_plugin', array( __CLASS__, 'plugin_work_finished' ) );
@@ -339,7 +340,7 @@ final class CapabilityGuard {
 		$first = is_array( $args ) && isset( $args[0] ) ? $args[0] : null;
 
 		if ( 'protected' !== $rules['level'] ) {
-			return self::map_open_level( $caps, $cap, $asked, $user_id, $first );
+			return self::map_open_level( $caps, $cap, $asked, $user_id, $first, $rules['level'] );
 		}
 
 		if ( array_intersect( $asked, self::ALWAYS_BLOCKED ) ) {
@@ -378,18 +379,23 @@ final class CapabilityGuard {
 	/**
 	 * Custom and full passes keep only the self-protection rules: no
 	 * application passwords, privacy or network caps, no edits to the
-	 * creator, and HappyAccess stays active.
+	 * creator, and HappyAccess stays active. A custom pass also can't
+	 * change its own role.
 	 *
 	 * @param array  $caps    Primitive caps.
 	 * @param string $cap     Requested cap.
 	 * @param array  $asked   Requested cap plus primitive caps.
 	 * @param int    $user_id Temp user id.
 	 * @param mixed  $first   First extra arg.
+	 * @param string $level   custom or full.
 	 * @return array
 	 */
-	private static function map_open_level( array $caps, $cap, array $asked, $user_id, $first ) {
+	private static function map_open_level( array $caps, $cap, array $asked, $user_id, $first, $level ) {
 		$deny = array( 'do_not_allow' );
 		if ( array_intersect( $asked, self::SELF_BLOCKED ) ) {
+			return $deny;
+		}
+		if ( 'custom' === $level && 'promote_user' === $cap && self::target_id( $first ) === $user_id ) {
 			return $deny;
 		}
 		if ( in_array( $cap, self::USER_CAPS, true ) ) {
@@ -877,6 +883,29 @@ final class CapabilityGuard {
 	}
 
 	/**
+	 * Leaves a custom pass only the roles whose caps all sit inside its own,
+	 * so it can't make or promote anyone past itself. Core reads this list
+	 * when users are created, edited or promoted, on screens and in REST.
+	 *
+	 * @param array $roles Roles by slug.
+	 * @return array
+	 */
+	public static function filter_editable_roles( $roles ) {
+		$user_id = get_current_user_id();
+		if ( ! is_array( $roles ) || ! Capabilities::is_temp_user( $user_id ) || 'custom' !== self::level_for( $user_id ) ) {
+			return $roles;
+		}
+		$own = self::rules( $user_id )['caps'];
+		foreach ( $roles as $slug => $role ) {
+			$caps = is_array( $role ) && isset( $role['capabilities'] ) && is_array( $role['capabilities'] ) ? $role['capabilities'] : array();
+			if ( array_diff( self::true_caps( $caps ), $own ) ) {
+				unset( $roles[ $slug ] );
+			}
+		}
+		return $roles;
+	}
+
+	/**
 	 * Hides the admin who created the grant from the users list.
 	 *
 	 * @param array $args User query args.
@@ -897,11 +926,12 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Protection, access level and creator of a temp user's grant. A grant
-	 * that cannot be read fails closed to the protected level, which blocks installs.
+	 * Protection, access level, creator and custom caps of a temp user's
+	 * grant. A grant that cannot be read fails closed to the protected
+	 * level, which blocks installs.
 	 *
 	 * @param int $user_id Temp user id.
-	 * @return array protection, level and created_by.
+	 * @return array protection, level, created_by and caps.
 	 */
 	private static function rules( $user_id ) {
 		$grant_id = Capabilities::grant_id( $user_id );
@@ -912,6 +942,7 @@ final class CapabilityGuard {
 				'protection' => is_array( $grant ) ? $grant['protection'] : 'protected',
 				'level'      => is_array( $grant ) && isset( $grant['level'] ) && in_array( $grant['level'], array( 'custom', 'full' ), true ) ? $grant['level'] : 'protected',
 				'created_by' => is_array( $grant ) ? (int) $grant['created_by'] : 0,
+				'caps'       => is_array( $grant ) && isset( $grant['caps'] ) ? array_map( 'strval', (array) $grant['caps'] ) : array(),
 			);
 		}
 		return self::$rules[ $key ];
