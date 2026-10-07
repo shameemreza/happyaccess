@@ -19,7 +19,17 @@ class CustomPassUsersTest extends RestTestCase {
 		AccountGuard::register();
 	}
 
+	/**
+	 * Makes a custom pass as the owner. On a network only a super admin holds
+	 * the user management caps, so only they can give them to a pass.
+	 *
+	 * @param array $caps Caps for the pass.
+	 * @return int Temp user id.
+	 */
 	private function custom( array $caps ) {
+		if ( is_multisite() ) {
+			grant_super_admin( $this->owner );
+		}
 		return $this->as_temp_user(
 			array(
 				'level'        => 'custom',
@@ -47,7 +57,19 @@ class CustomPassUsersTest extends RestTestCase {
 		$this->assertFalse( current_user_can( 'promote_user', $temp ) );
 	}
 
+	/**
+	 * On a network, site admins create users only when the network allows it.
+	 *
+	 * @return void
+	 */
+	private function site_admins_add_users() {
+		if ( is_multisite() ) {
+			update_site_option( 'add_new_users', 1 );
+		}
+	}
+
 	public function test_custom_pass_cannot_create_an_administrator() {
+		$this->site_admins_add_users();
 		$this->custom( array( 'create_users', 'list_users' ) );
 
 		$response = $this->users_request(
@@ -66,6 +88,7 @@ class CustomPassUsersTest extends RestTestCase {
 	}
 
 	public function test_custom_pass_can_create_a_subscriber() {
+		$this->site_admins_add_users();
 		$this->custom( array( 'create_users', 'list_users' ) );
 
 		$response = $this->users_request(

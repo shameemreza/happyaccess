@@ -248,8 +248,35 @@ class TempUsersTest extends WP_UnitTestCase {
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 		wp_delete_user( $user_id );
 
-		$this->assertFalse( TempUsers::delete( $grant ) );
+		if ( is_multisite() ) {
+			// On a network wp_delete_user() only takes the account off this site, so delete() removes it from the network.
+			$this->assertTrue( TempUsers::delete( $grant ) );
+			$this->assertFalse( get_userdata( $user_id ) );
+		} else {
+			$this->assertFalse( TempUsers::delete( $grant ) );
+		}
 		$this->assertSame( '0', (string) $wpdb->get_var( 'SELECT user_id FROM ' . Installer::table( 'tokens' ) . ' WHERE id = 7' ) );
+	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_delete_keeps_an_account_another_site_uses_on_the_network() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$site_id          = self::factory()->blog->create();
+		$grant            = $this->grant();
+		$user_id          = TempUsers::create( $grant );
+		$grant['user_id'] = $user_id;
+		$post_id          = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		add_user_to_blog( $site_id, $user_id, 'subscriber' );
+
+		$this->assertTrue( TempUsers::delete( $grant ) );
+		$this->assertFalse( is_user_member_of_blog( $user_id, get_current_blog_id() ) );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertTrue( is_user_member_of_blog( $user_id, $site_id ) );
+		$this->assertSame( $this->owner, (int) get_post( $post_id )->post_author );
 	}
 
 	private function ensure_api_keys_table() {

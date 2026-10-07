@@ -33,13 +33,29 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		return TempUsers::get_or_create( Grants::get( $made['id'] ) );
 	}
 
+	/**
+	 * On a network, site admins activate plugins only when the network turns on the Plugins menu for them.
+	 *
+	 * @return void
+	 */
+	private function site_admins_manage_plugins() {
+		if ( is_multisite() ) {
+			update_site_option( 'menu_items', array( 'plugins' => '1' ) );
+		}
+	}
+
 	public function test_normal_admin_is_untouched() {
+		if ( is_multisite() ) {
+			// On a network core keeps these caps for super admins.
+			grant_super_admin( $this->owner );
+		}
 		foreach ( array( 'create_users', 'edit_plugins', 'install_plugins', 'manage_options' ) as $cap ) {
 			$this->assertTrue( user_can( $this->owner, $cap ), $cap );
 		}
 	}
 
 	public function test_protected_admin_blocks_the_always_list_but_allows_work() {
+		$this->site_admins_manage_plugins();
 		$temp = $this->temp();
 		foreach ( array( 'create_users', 'promote_users', 'delete_users', 'edit_plugins', 'edit_themes', 'edit_files', Capabilities::MANAGE ) as $cap ) {
 			$this->assertFalse( user_can( $temp, $cap ), $cap );
@@ -50,6 +66,7 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 	}
 
 	public function test_default_grant_blocks_installs_but_allows_activation() {
+		$this->site_admins_manage_plugins();
 		$temp = $this->temp();
 		foreach ( array( 'install_plugins', 'upload_plugins', 'update_plugins', 'delete_plugins', 'install_themes', 'update_core' ) as $cap ) {
 			$this->assertFalse( user_can( $temp, $cap ), $cap );
@@ -60,7 +77,8 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 	public function test_allow_installs_restores_install_caps() {
 		$temp = $this->temp( array( 'allow_installs' => true ) );
 		foreach ( array( 'install_plugins', 'update_core' ) as $cap ) {
-			$this->assertTrue( user_can( $temp, $cap ), $cap );
+			// On a network core keeps installs and updates for super admins, and a pass is never one.
+			$this->assertSame( ! is_multisite(), user_can( $temp, $cap ), $cap );
 		}
 	}
 
@@ -70,10 +88,12 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( user_can( $temp, 'edit_user', $temp ) );
 		$this->assertFalse( user_can( $temp, 'edit_user', $this->owner ) );
 		$this->assertFalse( user_can( $temp, 'delete_user', $this->other_admin ) );
-		$this->assertTrue( user_can( $temp, 'edit_user', $customer ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), user_can( $temp, 'edit_user', $customer ) );
 	}
 
 	public function test_cannot_deactivate_happyaccess_but_can_other_plugins() {
+		$this->site_admins_manage_plugins();
 		$temp = $this->temp();
 		$this->assertFalse( user_can( $temp, 'deactivate_plugin', HAPPYACCESS_PLUGIN_BASENAME ) );
 		$this->assertTrue( user_can( $temp, 'deactivate_plugin', 'hello.php' ) );
@@ -151,10 +171,11 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( user_can( $temp, 'edit_users', $this->owner ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', $this->other_admin ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', $temp ) );
-		$this->assertTrue( user_can( $temp, 'edit_users', $customer ) );
-		$this->assertTrue( user_can( $temp, 'edit_users', get_userdata( $customer ) ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), user_can( $temp, 'edit_users', $customer ) );
+		$this->assertSame( ! is_multisite(), user_can( $temp, 'edit_users', get_userdata( $customer ) ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', get_userdata( $this->owner ) ) );
-		$this->assertTrue( user_can( $temp, 'edit_users' ) );
+		$this->assertSame( ! is_multisite(), user_can( $temp, 'edit_users' ) );
 	}
 
 	public function test_options_page_groups_are_removed_for_temp_users() {
@@ -436,7 +457,8 @@ class CapabilityGuardTest extends WP_UnitTestCase {
 		$manager    = self::factory()->user->create( array( 'role' => 'shop_manager_test' ) );
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', $manager ) );
-		$this->assertTrue( user_can( $temp, 'edit_users', $subscriber ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), user_can( $temp, 'edit_users', $subscriber ) );
 		$this->assertFalse( user_can( $temp, 'edit_users', 999999 ) );
 	}
 

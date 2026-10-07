@@ -313,9 +313,17 @@ class PrivacyTest extends WP_UnitTestCase {
 		Capabilities::register();
 		CapabilityGuard::register();
 		$temp = TempUsers::get_or_create( $this->grant_by_label( 'Acme' ) );
-		$this->assertTrue( user_can( $this->user, 'export_others_personal_data' ) );
+		// On a network core gives both privacy caps to network admins only.
+		$this->assertSame( ! is_multisite(), user_can( $this->user, 'export_others_personal_data' ) );
 		$this->assertFalse( user_can( $temp, 'export_others_personal_data' ) );
 		$this->assertFalse( user_can( $temp, 'erase_others_personal_data' ) );
+		if ( is_multisite() ) {
+			// The guard, not only core, denies them: even a temp user made super admin can't use them.
+			grant_super_admin( $temp );
+			$this->assertFalse( user_can( $temp, 'export_others_personal_data' ) );
+			$this->assertFalse( user_can( $temp, 'erase_others_personal_data' ) );
+			revoke_super_admin( $temp );
+		}
 	}
 
 	public function test_erase_as_a_temp_user_changes_nothing() {

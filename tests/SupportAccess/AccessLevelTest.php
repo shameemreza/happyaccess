@@ -163,6 +163,32 @@ class AccessLevelTest extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_user_management_caps_need_a_super_admin_on_a_network() {
+		$admin = get_current_user_id();
+		foreach ( array( 'create_users', 'edit_users' ) as $cap ) {
+			$args = array(
+				'label'        => 'Acme',
+				'level'        => 'custom',
+				'caps'         => array( $cap ),
+				'confirm_full' => true,
+			);
+			if ( is_multisite() ) {
+				try {
+					Grants::create( $args );
+					$this->fail( 'A site admin on a network gave ' . $cap );
+				} catch ( \InvalidArgumentException $e ) {
+					$this->assertSame( "You can't give a permission you don't have: " . $cap, $e->getMessage() );
+				}
+				grant_super_admin( $admin );
+			}
+			$made = Grants::create( $args );
+			$this->assertContains( $cap, Grants::get( $made['id'] )['caps'], $cap );
+			if ( is_multisite() ) {
+				revoke_super_admin( $admin );
+			}
+		}
+	}
+
 	public function test_custom_with_a_trust_cap_needs_the_trust_tick() {
 		foreach ( array( null, false, '1', 1 ) as $confirm ) {
 			$args = array(

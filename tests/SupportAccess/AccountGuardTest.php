@@ -52,7 +52,8 @@ class AccountGuardTest extends WP_UnitTestCase {
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		$editor     = self::factory()->user->create( array( 'role' => 'editor' ) );
 		$manager    = self::factory()->user->create( array( 'role' => 'shop_manager_test' ) );
-		$this->assertTrue( user_can( $this->temp, 'edit_user', $subscriber ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), user_can( $this->temp, 'edit_user', $subscriber ) );
 		$this->assertFalse( user_can( $this->temp, 'edit_user', $editor ) );
 		$this->assertFalse( user_can( $this->temp, 'edit_users', $manager ) );
 		// Deleting users stays blocked for everyone (delete_users is in ALWAYS_BLOCKED).

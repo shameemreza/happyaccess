@@ -435,6 +435,10 @@ class AdminWatchTest extends WP_UnitTestCase {
 	}
 
 	public function test_custom_pass_with_trust_is_flagged_during_plugin_work() {
+		if ( is_multisite() ) {
+			// Site admins on a network hold activate_plugins only when the Plugins menu is on for them.
+			update_site_option( 'menu_items', array( 'plugins' => '1' ) );
+		}
 		$temp = $this->custom_temp( array( 'activate_plugins' ) );
 		wp_set_current_user( $temp );
 		CapabilityGuard::plugin_work_started();

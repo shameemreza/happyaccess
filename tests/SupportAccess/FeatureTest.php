@@ -110,6 +110,7 @@ class FeatureTest extends WP_UnitTestCase {
 	/**
 	 * Records, for each user, the sessions that still existed when the user was about to be deleted.
 	 * Deleting a user wipes its session meta anyway, so only this moment proves the sessions were destroyed.
+	 * On a network the account leaves the site first, and core fires remove_user_from_blog, not delete_user.
 	 *
 	 * @param array $seen Receives user id => session list.
 	 * @return callable The hook, so the caller can remove it.
@@ -118,8 +119,17 @@ class FeatureTest extends WP_UnitTestCase {
 		$spy = function ( $user_id ) use ( &$seen ) {
 			$seen[ (int) $user_id ] = WP_Session_Tokens::get_instance( $user_id )->get_all();
 		};
-		add_action( 'delete_user', $spy, 0 );
+		add_action( $this->delete_hook(), $spy, 0 );
 		return $spy;
+	}
+
+	/**
+	 * The first hook core fires when a temp user is removed.
+	 *
+	 * @return string
+	 */
+	private function delete_hook() {
+		return is_multisite() ? 'remove_user_from_blog' : 'delete_user';
 	}
 
 	public function test_on_disable_ends_every_pass_and_destroys_their_sessions() {
@@ -135,7 +145,7 @@ class FeatureTest extends WP_UnitTestCase {
 		$seen = array();
 		$spy  = $this->spy_sessions_before_delete( $seen );
 		Feature::on_disable();
-		remove_action( 'delete_user', $spy, 0 );
+		remove_action( $this->delete_hook(), $spy, 0 );
 		$this->assertSame( 'revoked', Grants::get( $one['id'] )['status'] );
 		$this->assertSame( 'revoked', Grants::get( $two['id'] )['status'] );
 		$this->assertSame( $ids, array_keys( $seen ) );
@@ -152,7 +162,7 @@ class FeatureTest extends WP_UnitTestCase {
 		$seen = array();
 		$spy  = $this->spy_sessions_before_delete( $seen );
 		AdminBar::emergency_lock();
-		remove_action( 'delete_user', $spy, 0 );
+		remove_action( $this->delete_hook(), $spy, 0 );
 		$this->assertSame( array( $user_id => array() ), $seen );
 	}
 }

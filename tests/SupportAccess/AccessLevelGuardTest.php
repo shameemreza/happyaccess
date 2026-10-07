@@ -55,6 +55,28 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * On a network, site admins activate plugins only when the network turns on the Plugins menu for them.
+	 *
+	 * @return void
+	 */
+	private function site_admins_manage_plugins() {
+		if ( is_multisite() ) {
+			update_site_option( 'menu_items', array( 'plugins' => '1' ) );
+		}
+	}
+
+	/**
+	 * On a network only a super admin holds edit_users, so only they can give it to a pass.
+	 *
+	 * @return void
+	 */
+	private function owner_may_give_edit_users() {
+		if ( is_multisite() ) {
+			grant_super_admin( $this->owner );
+		}
+	}
+
 	private function custom( array $caps ) {
 		return $this->become(
 			array(
@@ -66,11 +88,13 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 	}
 
 	public function test_full_drops_protected_rules_but_keeps_self_protection() {
+		$this->site_admins_manage_plugins();
 		$temp = $this->full();
 		$this->assertSame( 'full', CapabilityGuard::level_for( $temp ) );
-		$this->assertTrue( current_user_can( 'install_plugins' ) );
-		$this->assertTrue( current_user_can( 'create_users' ) );
-		$this->assertTrue( current_user_can( 'edit_user', $this->other_admin ) );
+		// On a network core keeps installs and user management for super admins, and a pass is never one.
+		$this->assertSame( ! is_multisite(), current_user_can( 'install_plugins' ) );
+		$this->assertSame( ! is_multisite(), current_user_can( 'create_users' ) );
+		$this->assertSame( ! is_multisite(), current_user_can( 'edit_user', $this->other_admin ) );
 		$this->assertFalse( current_user_can( 'edit_user', $this->owner ) );
 		$this->assertFalse( current_user_can( 'delete_user', $this->owner ) );
 		$this->assertFalse( current_user_can( 'promote_user', $this->owner ) );
@@ -172,10 +196,12 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 
 	public function test_custom_with_edit_users_edits_a_subscriber_email_but_not_the_creator() {
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->owner_may_give_edit_users();
 		$this->custom( array( 'edit_users' ) );
 		$creator_email = get_userdata( $this->owner )->user_email;
 
-		$this->assertTrue( current_user_can( 'edit_user', $subscriber ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), current_user_can( 'edit_user', $subscriber ) );
 		$this->assertFalse( current_user_can( 'edit_user', $this->owner ) );
 
 		wp_update_user(
@@ -225,7 +251,8 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( current_user_can( 'edit_user', $fallback ) );
 		$this->assertFalse( current_user_can( 'delete_user', $fallback ) );
 		$this->assertFalse( AccountGuard::block_reset( true, $fallback ) );
-		$this->assertTrue( current_user_can( 'edit_user', $this->other_admin ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), current_user_can( 'edit_user', $this->other_admin ) );
 	}
 
 	public function test_deleted_creator_locks_the_fallback_owner() {
@@ -236,7 +263,8 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		Grants::flush_cache();
 		$fallback = $this->fallback_owner();
 		$this->assertFalse( current_user_can( 'edit_user', $fallback ) );
-		$this->assertTrue( current_user_can( 'edit_user', $this->other_admin ) );
+		// On a network core lets only network admins edit other users.
+		$this->assertSame( ! is_multisite(), current_user_can( 'edit_user', $this->other_admin ) );
 		$this->assertTrue( AccountGuard::block_reset( true, $creator ) );
 		$this->assertFalse( AccountGuard::block_reset( true, $fallback ) );
 	}
@@ -244,6 +272,7 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 	public function test_custom_cannot_edit_the_fallback_owners_email() {
 		$fallback = $this->fallback_owner();
 		$email    = get_userdata( $fallback )->user_email;
+		$this->owner_may_give_edit_users();
 		$this->become(
 			array(
 				'level'        => 'custom',
@@ -276,7 +305,8 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 	public function test_legacy_allow_installs_keeps_the_protected_rules() {
 		$temp = $this->become( array( 'allow_installs' => true ) );
 		$this->assertSame( 'protected', CapabilityGuard::level_for( $temp ) );
-		$this->assertTrue( current_user_can( 'install_plugins' ) );
+		// On a network core keeps installs for super admins, and a pass is never one.
+		$this->assertSame( ! is_multisite(), current_user_can( 'install_plugins' ) );
 		$this->assertFalse( current_user_can( 'create_users' ) );
 	}
 
@@ -564,6 +594,7 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 	public function test_custom_role_table_writes_during_plugin_work_are_kept_and_logged() {
 		global $wpdb;
 		$key  = $wpdb->prefix . 'user_roles';
+		$this->site_admins_manage_plugins();
 		$temp = $this->custom( array( 'activate_plugins' ) );
 
 		CapabilityGuard::plugin_work_started();
@@ -606,6 +637,7 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 
 	public function test_custom_with_activate_plugins_changes_the_list_but_keeps_happyaccess() {
 		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
+		$this->site_admins_manage_plugins();
 		$this->custom( array( 'activate_plugins' ) );
 
 		update_option( 'active_plugins', array( 'hello.php' ) );
