@@ -72,11 +72,29 @@ final class ClientIp {
 			if ( '' === $rightmost ) {
 				$rightmost = $ip;
 			}
-			if ( false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			if ( self::is_public( $ip ) ) {
 				return $ip;
 			}
 		}
 		return $rightmost;
+	}
+
+	/**
+	 * Whether an IP can belong to one client on the public internet. Private,
+	 * reserved and carrier-grade NAT (100.64.0.0/10) addresses are not.
+	 * PHP 8.2 and later also know the other special-purpose ranges.
+	 *
+	 * @param string $ip A valid, normalized IP.
+	 * @return bool
+	 */
+	private static function is_public( $ip ) {
+		$flags = defined( 'FILTER_FLAG_GLOBAL_RANGE' ) ? constant( 'FILTER_FLAG_GLOBAL_RANGE' ) : FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
+		if ( false === filter_var( $ip, FILTER_VALIDATE_IP, $flags ) ) {
+			return false;
+		}
+		$long = false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ? false : ip2long( $ip );
+		// 100.64.0.0/10: the top 10 bits are 0110 0100 01.
+		return false === $long || ( $long & 0xFFC00000 ) !== 0x64400000;
 	}
 
 	/**
