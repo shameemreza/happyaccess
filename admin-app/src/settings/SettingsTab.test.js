@@ -74,7 +74,7 @@ describe( 'Settings tab', () => {
 
 		expect(
 			screen.getByLabelText( 'Wrong codes before a pause' )
-		).toHaveDisplayValue( '5 tries, then 15 minutes' );
+		).toHaveDisplayValue( '5 tries, then 30 minutes' );
 		expect(
 			screen.getByLabelText( 'Keep activity for' )
 		).toHaveDisplayValue( '90 days' );
@@ -142,7 +142,7 @@ describe( 'Settings tab', () => {
 
 		await user.selectOptions(
 			screen.getByLabelText( 'Wrong codes before a pause' ),
-			'3 tries, then 30 minutes'
+			'10 tries, then 15 minutes'
 		);
 		await user.selectOptions(
 			screen.getByLabelText( 'Default pass length' ),
@@ -165,13 +165,46 @@ describe( 'Settings tab', () => {
 		await waitFor( () => expect( posts ).toHaveLength( 1 ) );
 		expect( posts[ 0 ] ).toEqual( {
 			security: {
-				max_attempts: 3,
-				lockout_duration: 1800,
+				max_attempts: 10,
+				lockout_duration: 900,
 				proxy_header: 'HTTP_CF_CONNECTING_IP',
 			},
 			support: { default_duration: 604800 },
 			privacy: { anonymize_ip: true, logging: false },
 		} );
+	} );
+
+	it( 'offers the server default first, so a fresh install does not show Custom', async () => {
+		await renderTab();
+
+		const options = within(
+			screen.getByLabelText( 'Wrong codes before a pause' )
+		)
+			.getAllByRole( 'option' )
+			.map( ( option ) => option.textContent );
+		expect( options ).toEqual( [
+			'5 tries, then 30 minutes',
+			'3 tries, then 30 minutes',
+			'10 tries, then 15 minutes',
+		] );
+	} );
+
+	it( 'keeps a stored custom pair selectable after a preset is picked', async () => {
+		mockServer(
+			settingsFixture( {
+				security: { max_attempts: 7, lockout_duration: 1200 },
+			} )
+		);
+		const user = userEvent.setup();
+		await renderTab();
+		const select = screen.getByLabelText( 'Wrong codes before a pause' );
+
+		await user.selectOptions( select, '3 tries, then 30 minutes' );
+		expect( select ).toHaveDisplayValue( '3 tries, then 30 minutes' );
+		await user.selectOptions( select, 'Custom (7 tries, 20 minutes)' );
+
+		expect( select ).toHaveDisplayValue( 'Custom (7 tries, 20 minutes)' );
+		expect( saveButton() ).toBeDisabled();
 	} );
 
 	it( 'shows a stored pair and a stored day count that are not presets, and leaves them alone', async () => {
@@ -417,6 +450,51 @@ describe( 'Settings tab', () => {
 				).not.toBeInTheDocument()
 			);
 			expect( screen.getByLabelText( 'Secret key' ) ).toHaveValue( '' );
+		} );
+
+		it( 'Remove drops a secret that was typed but not saved', async () => {
+			mockServer(
+				settingsFixture( {
+					security: { recaptcha_enabled: true },
+					recaptcha_secret_set: true,
+				} )
+			);
+			const user = userEvent.setup();
+			await renderTab();
+
+			await user.type( screen.getByLabelText( 'Secret key' ), 'typed' );
+			await user.click(
+				screen.getByRole( 'button', { name: 'Remove' } )
+			);
+
+			await waitFor( () =>
+				expect( screen.getByLabelText( 'Secret key' ) ).toHaveValue(
+					''
+				)
+			);
+			expect( saveButton() ).toBeDisabled();
+			expect( posts ).toEqual( [ { recaptcha_secret_key: '' } ] );
+		} );
+
+		it( 'does not send a typed secret when reCAPTCHA is switched off before saving', async () => {
+			mockServer(
+				settingsFixture( {
+					security: { recaptcha_enabled: true },
+				} )
+			);
+			const user = userEvent.setup();
+			await renderTab();
+
+			await user.type( screen.getByLabelText( 'Secret key' ), 'typed' );
+			await user.click(
+				screen.getByRole( 'switch', { name: 'reCAPTCHA' } )
+			);
+			await user.click( saveButton() );
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( {
+				security: { recaptcha_enabled: false },
+			} );
 		} );
 
 		it( 'sends a typed secret with Save changes, then clears the field', async () => {

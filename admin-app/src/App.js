@@ -60,10 +60,9 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 	// Keeps the boot data the page printed in step, for anything that reads it.
 	const updateFeatures = useCallback( ( next ) => {
 		setFeatures( { ...next } );
-		const printed = window.happyaccessBoot;
-		if ( printed ) {
-			printed.features = Object.assign( printed.features || {}, next );
-		}
+		const printed = window.happyaccessBoot || {};
+		printed.features = Object.assign( printed.features || {}, next );
+		window.happyaccessBoot = printed;
 	}, [] );
 
 	const finishSetup = useCallback(

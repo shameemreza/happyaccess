@@ -14,7 +14,7 @@ export function settingsFixture( overrides = {} ) {
 		security: {
 			max_attempts: 5,
 			attempt_window: 900,
-			lockout_duration: 900,
+			lockout_duration: 1800,
 			site_code_cap: 30,
 			proxy_header: '',
 			recaptcha_enabled: false,

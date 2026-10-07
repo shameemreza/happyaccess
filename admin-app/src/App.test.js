@@ -351,6 +351,24 @@ describe( 'App shell', () => {
 		delete window.happyaccessBoot;
 	} );
 
+	it( 'creates the printed boot features when the page had none', async () => {
+		delete window.happyaccessBoot;
+		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
+		const user = userEvent.setup();
+		render( <App boot={ boot() } /> );
+		await user.click(
+			await screen.findByRole( 'switch', { name: 'Support access' } )
+		);
+		await user.click( screen.getByRole( 'button', { name: 'Turn off' } ) );
+
+		await waitFor( () =>
+			expect( window.happyaccessBoot.features ).toMatchObject( {
+				support_access: false,
+			} )
+		);
+		delete window.happyaccessBoot;
+	} );
+
 	it( 'has one polite live region', () => {
 		const { container } = render( <App boot={ boot() } /> );
 

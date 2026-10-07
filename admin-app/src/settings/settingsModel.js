@@ -4,7 +4,8 @@ const DAY = 86400;
 const HOUR = 3600;
 
 /**
- * The pairs of "wrong codes" and pause length that the select offers.
+ * The pairs of "wrong codes" and pause length that the select offers. The
+ * first is the server default.
  *
  * @return {Array} Options with `tries` and `seconds`.
  */
@@ -12,8 +13,8 @@ export function getLockoutPairs() {
 	return [
 		{
 			tries: 5,
-			seconds: 900,
-			label: __( '5 tries, then 15 minutes', 'happyaccess' ),
+			seconds: 1800,
+			label: __( '5 tries, then 30 minutes', 'happyaccess' ),
 		},
 		{
 			tries: 3,
@@ -36,11 +37,11 @@ export function getLockoutPairs() {
 export const pairValue = ( tries, seconds ) => `${ tries }:${ seconds }`;
 
 /**
- * The lockout select options. A stored pair that matches none of the
- * presets shows as a "Custom" option and stays as it is.
+ * The lockout select options. Pass the saved pair, not the edited one, so a
+ * stored pair that matches no preset stays selectable as a "Custom" option.
  *
- * @param {number} tries   Stored `security.max_attempts`.
- * @param {number} seconds Stored `security.lockout_duration`.
+ * @param {number} tries   Saved `security.max_attempts`.
+ * @param {number} seconds Saved `security.lockout_duration`.
  * @return {Array<{value: string, label: string}>} Select options.
  */
 export function lockoutOptions( tries, seconds ) {

@@ -125,9 +125,11 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 
 	const supportOn = !! saved( 'features.support_access' );
 	const patch = buildPatch( edits );
-	const dirty = Object.keys( edits ).length > 0 || '' !== secretInput;
-	const secretSet = !! settings.recaptcha_secret_set;
 	const recaptchaOn = !! val( 'security.recaptcha_enabled' );
+	// A typed secret only counts while reCAPTCHA is on.
+	const secretToSend = recaptchaOn ? secretInput : '';
+	const dirty = Object.keys( edits ).length > 0 || '' !== secretToSend;
+	const secretSet = !! settings.recaptcha_secret_set;
 
 	const tries = Number( val( 'security.max_attempts' ) );
 	const pause = Number( val( 'security.lockout_duration' ) );
@@ -179,6 +181,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 		try {
 			const result = await save( { recaptcha_secret_key: '' } );
 			finish( result );
+			setSecretInput( '' );
 			announce( __( 'reCAPTCHA secret key removed', 'happyaccess' ) );
 		} catch ( e ) {
 			setSaveError( e );
@@ -194,8 +197,8 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 		}
 		setSaveError( null );
 		const body = { ...patch };
-		if ( '' !== secretInput ) {
-			body.recaptcha_secret_key = secretInput;
+		if ( '' !== secretToSend ) {
+			body.recaptcha_secret_key = secretToSend;
 		}
 		try {
 			const result = await save( body );
@@ -323,7 +326,12 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 									'happyaccess'
 								) }
 								value={ pairValue( tries, pause ) }
-								options={ lockoutOptions( tries, pause ) }
+								options={ lockoutOptions(
+									Number( saved( 'security.max_attempts' ) ),
+									Number(
+										saved( 'security.lockout_duration' )
+									)
+								) }
 								onChange={ ( value ) => {
 									const [ nextTries, nextPause ] = value
 										.split( ':' )
