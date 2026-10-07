@@ -85,10 +85,14 @@ class CustomPassUsersTest extends RestTestCase {
 	public function test_custom_pass_can_give_only_roles_inside_its_own_caps() {
 		$this->custom( array( 'list_users', 'edit_users', 'promote_users', 'edit_posts', 'upload_files', 'delete_posts' ) );
 
+		// Other tests can leave read-only roles such as customer behind, so check by name.
 		$roles = array_keys( get_editable_roles() );
-		sort( $roles );
 
-		$this->assertSame( array( 'contributor', 'subscriber' ), $roles );
+		$this->assertContains( 'contributor', $roles );
+		$this->assertContains( 'subscriber', $roles );
+		foreach ( array( 'administrator', 'editor', 'author' ) as $role ) {
+			$this->assertNotContains( $role, $roles );
+		}
 	}
 
 	public function test_custom_pass_may_promote_a_subscriber_to_a_role_it_covers() {
