@@ -91,6 +91,28 @@ export function tabUrl( slug, args = {} ) {
 }
 
 /**
+ * @return {number} The pass id in the current URL's `token` arg, or 0.
+ */
+export function readQueryToken() {
+	const token = parseInt(
+		new URLSearchParams( window.location.search ).get( 'token' ) || '',
+		10
+	);
+	return token > 0 ? token : 0;
+}
+
+/**
+ * Takes `token` out of the address bar once the Activity tab has used it.
+ */
+export function clearQueryToken() {
+	window.history.replaceState(
+		window.history.state,
+		'',
+		tabUrl( 'activity' )
+	);
+}
+
+/**
  * Picks the starting tab: the URL first, then the remembered one, then the first shown.
  *
  * @param {Array} visibleTabs Tabs this site shows.

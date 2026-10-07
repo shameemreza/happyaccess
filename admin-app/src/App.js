@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from '@wordpress/element';
+import ActivityTab from './activity/ActivityTab';
 import { AnnounceProvider } from './Announcer';
 import Header from './Header';
 import SupportTab from './support/SupportTab';
@@ -43,6 +44,7 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 		( token ) => select( 'activity', token ? { token } : {} ),
 		[ select ]
 	);
+	const openSettings = useCallback( () => select( 'settings' ), [ select ] );
 	const onLocked = useCallback( () => setLockCount( ( n ) => n + 1 ), [] );
 
 	const active = tabs.find( ( tab ) => tab.slug === current ) || tabs[ 0 ];
@@ -59,13 +61,21 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 						current={ active.slug }
 						onSelect={ select }
 					/>
-					{ 'support' === active.slug ? (
+					{ 'support' === active.slug && (
 						<SupportTab
 							boot={ boot }
 							refreshKey={ lockCount }
 							onViewActivity={ openActivity }
 						/>
-					) : (
+					) }
+					{ 'activity' === active.slug && (
+						<ActivityTab
+							boot={ boot }
+							loginReady={ loginReady }
+							onOpenSettings={ openSettings }
+						/>
+					) }
+					{ ! [ 'support', 'activity' ].includes( active.slug ) && (
 						<section
 							className="ha-panel"
 							aria-labelledby="ha-panel-title"

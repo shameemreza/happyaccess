@@ -30,6 +30,9 @@ beforeEach( () => {
 			grantsOnServer = [];
 			return { revoked };
 		}
+		if ( path.startsWith( '/happyaccess/v1/activity/summary' ) ) {
+			return { logins: 2, changes: 4, minutes: null, ips: [] };
+		}
 		if ( path.startsWith( '/happyaccess/v1/activity' ) ) {
 			return { items: [], total: 0, page: 1, per_page: 1 };
 		}
@@ -214,16 +217,21 @@ describe( 'App shell', () => {
 		expect(
 			screen.getByRole( 'link', { name: 'Activity' } )
 		).toHaveAttribute( 'aria-current', 'page' );
+		// The Activity tab picks that pass, then takes the token out of the URL.
+		expect( await screen.findByLabelText( 'Who' ) ).toHaveDisplayValue(
+			'Acme Plugin Support'
+		);
+		expect(
+			apiFetch.mock.calls.some(
+				( [ options ] ) =>
+					options.path.startsWith( '/happyaccess/v1/activity?' ) &&
+					options.path.includes( 'token_id=9' )
+			)
+		).toBe( true );
 		const params = new URLSearchParams( window.location.search );
 		expect( params.get( 'tab' ) ).toBe( 'activity' );
-		expect( params.get( 'token' ) ).toBe( '9' );
+		expect( params.has( 'token' ) ).toBe( false );
 		expect( params.get( 'page' ) ).toBe( 'happyaccess' );
-
-		// Choosing a tab by hand drops the token.
-		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
-		expect(
-			new URLSearchParams( window.location.search ).has( 'token' )
-		).toBe( false );
 	} );
 
 	it( 'ends every pass from the header and refreshes the list', async () => {
