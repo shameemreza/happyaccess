@@ -155,12 +155,12 @@
 			transition: inset-inline-start 0.15s;
 		}
 
-		.ha-switch[data-state="mixed"] & {
+		&[data-state="mixed"] {
 			inset-inline-start: 11px;
 			background: #fff;
 		}
 
-		.ha-switch[data-state="on"] & {
+		&[data-state="on"] {
 			inset-inline-start: 20px;
 			background: #fff;
 		}

@@ -111,6 +111,36 @@ describe( 'PermissionEditor', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'starts with every group collapsed', () => {
+		render( <Harness /> );
+
+		screen
+			.getAllByRole( 'button', { expanded: false } )
+			.forEach( ( button ) =>
+				expect( button ).toHaveAttribute( 'aria-expanded', 'false' )
+			);
+		expect(
+			screen.queryAllByRole( 'button', { expanded: true } )
+		).toHaveLength( 0 );
+		expect( screen.queryAllByRole( 'checkbox' ) ).toHaveLength( 0 );
+	} );
+
+	it( 'puts the knob at the end and white when all are on, in the middle when some, at the start and dark when none', async () => {
+		const user = userEvent.setup();
+		render( <Harness start="shop_manager" /> );
+		const knob = ( name ) =>
+			screen
+				.getByRole( 'switch', { name } )
+				.querySelector( '.ha-switch__knob' );
+
+		expect( knob( 'Store' ).dataset.state ).toBe( 'on' );
+		expect( knob( 'Content' ).dataset.state ).toBe( 'mixed' );
+		expect( knob( 'Plugins and updates' ).dataset.state ).toBe( 'off' );
+
+		await user.click( screen.getByRole( 'switch', { name: 'Store' } ) );
+		expect( knob( 'Store' ).dataset.state ).toBe( 'off' );
+	} );
+
 	it( 'expands a group to its caps, each with the raw cap name', async () => {
 		const user = userEvent.setup();
 		render( <Harness start="editor" /> );

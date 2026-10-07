@@ -39,7 +39,7 @@ export default function PermissionEditor( {
 	onBaseChange,
 	onCapsChange,
 } ) {
-	const [ openId, setOpenId ] = useState( 'store' );
+	const [ openId, setOpenId ] = useState( '' );
 	const [ query, setQuery ] = useState( '' );
 
 	const groups = catalog ? catalog.groups : null;
@@ -211,7 +211,10 @@ export default function PermissionEditor( {
 									aria-label={ group.label }
 									onClick={ toggleGroup }
 								>
-									<span className="ha-switch__knob" />
+									<span
+										className="ha-switch__knob"
+										data-state={ state }
+									/>
 								</button>
 							</div>
 							{ open && (

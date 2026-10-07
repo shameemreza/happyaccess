@@ -126,6 +126,32 @@ function buildMenuLookups( menus ) {
 const isTwelveHour = () =>
 	/a/i.test( String( getSettings().formats.time ).replace( /\\./g, '' ) );
 
+// A site timezone is only worth naming when it is not the browser's own.
+function timezoneNote( timezone ) {
+	if ( ! timezone ) {
+		return '';
+	}
+	let browser = '';
+	try {
+		browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	} catch {
+		browser = '';
+	}
+	if ( timezone === browser ) {
+		return '';
+	}
+	const offset = /^([+-])(\d{1,2}):?(\d{2})?$/.exec( timezone );
+	if ( offset ) {
+		const minutes =
+			( '-' === offset[ 1 ] ? -1 : 1 ) *
+			( Number( offset[ 2 ] ) * 60 + Number( offset[ 3 ] || 0 ) );
+		if ( minutes === -new Date().getTimezoneOffset() ) {
+			return '';
+		}
+	}
+	return ` (${ timezone })`;
+}
+
 const naive = ( ms ) => siteDate( NAIVE_FORMAT, new Date( ms ) );
 
 /**
@@ -240,6 +266,7 @@ export default function GrantForm( {
 				: defaultCustomMs
 		);
 	}
+	const zoneNote = timezoneNote( timezone );
 	const endText = dateI18n( END_FORMAT, new Date( endMs ) );
 	const endsLine =
 		'1' === form.duration
@@ -557,7 +584,7 @@ export default function GrantForm( {
 					) }
 					<span className="ha-help" data-testid="ha-ends">
 						{ endsLine }
-						{ timezone ? ` (${ timezone })` : '' }
+						{ zoneNote }
 					</span>
 				</fieldset>
 
@@ -708,7 +735,7 @@ export default function GrantForm( {
 				<PassPreview
 					label={ form.label }
 					levelName={ levelName }
-					validUntil={ endText }
+					validUntil={ endText + zoneNote }
 				/>
 
 				{ error && (

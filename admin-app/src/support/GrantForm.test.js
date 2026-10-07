@@ -61,6 +61,12 @@ function mockApi( { createResult = created, createError = null } = {} ) {
 	} );
 }
 
+// The browser's timezone, as the form sees it.
+const browserZone = ( zone ) =>
+	vi
+		.spyOn( Intl.DateTimeFormat.prototype, 'resolvedOptions' )
+		.mockReturnValue( { timeZone: zone } );
+
 const grantCalls = () =>
 	apiFetch.mock.calls.filter( ( [ options ] ) => 'POST' === options.method );
 const lastBody = () => grantCalls().at( -1 )[ 0 ].data;
@@ -259,6 +265,7 @@ describe( 'GrantForm time and preview', () => {
 	it( 'shows the typed label and the end time for 3 days, in the site timezone', async () => {
 		vi.useFakeTimers( { toFake: [ 'Date' ] } );
 		vi.setSystemTime( new Date( '2026-10-06T16:40:00Z' ) );
+		browserZone( 'Asia/Dhaka' );
 		const { user } = setup();
 
 		expect( screen.getByText( 'Who is it for?' ) ).toBeInTheDocument();
@@ -271,7 +278,7 @@ describe( 'GrantForm time and preview', () => {
 			screen.getByText( 'Administrator (protected)' )
 		).toBeInTheDocument();
 		expect(
-			screen.getByText( 'Valid until Fri, Oct 9, 4:40 pm' )
+			screen.getByText( 'Valid until Fri, Oct 9, 4:40 pm (UTC)' )
 		).toBeInTheDocument();
 		expect( screen.getByTestId( 'ha-ends' ) ).toHaveTextContent(
 			'Ends Fri, Oct 9, 4:40 pm (UTC)'
@@ -284,6 +291,7 @@ describe( 'GrantForm time and preview', () => {
 	it( 'updates the preview for the duration and the level', async () => {
 		vi.useFakeTimers( { toFake: [ 'Date' ] } );
 		vi.setSystemTime( new Date( '2026-10-06T16:40:00Z' ) );
+		browserZone( 'UTC' );
 		const { user } = setup();
 
 		await user.click( screen.getByRole( 'button', { name: '1 day' } ) );
@@ -328,6 +336,41 @@ describe( 'GrantForm time and preview', () => {
 		await user.click( createButton() );
 		await waitFor( () => expect( grantCalls() ).toHaveLength( 1 ) );
 		expect( lastBody().duration ).toBe( 10 * 86400 );
+	} );
+} );
+
+describe( 'GrantForm timezone note', () => {
+	const ends = () => screen.getByTestId( 'ha-ends' ).textContent;
+	const until = () =>
+		document.querySelector( '.ha-preview__until' ).textContent;
+
+	it( 'names the site timezone only when it differs from the browser', () => {
+		browserZone( 'Asia/Dhaka' );
+		setup( { boot: { ...boot, timezone: 'Asia/Dhaka' } } );
+		expect( ends() ).not.toContain( '(' );
+		expect( until() ).not.toContain( '(' );
+	} );
+
+	it( 'adds the name to both the ends line and the preview when it differs', () => {
+		browserZone( 'America/New_York' );
+		setup( { boot: { ...boot, timezone: 'Asia/Dhaka' } } );
+		expect( ends() ).toMatch( /^Ends .+ \(Asia\/Dhaka\)$/ );
+		expect( until() ).toMatch( /^Valid until .+ \(Asia\/Dhaka\)$/ );
+	} );
+
+	it( 'leaves out an offset that matches the browser, like +00:00 on a UTC machine', () => {
+		browserZone( 'UTC' );
+		vi.spyOn( Date.prototype, 'getTimezoneOffset' ).mockReturnValue( 0 );
+		setup( { boot: { ...boot, timezone: '+00:00' } } );
+		expect( ends() ).not.toContain( '(' );
+		expect( until() ).not.toContain( '(' );
+	} );
+
+	it( 'names an offset timezone that differs from the browser', () => {
+		browserZone( 'UTC' );
+		vi.spyOn( Date.prototype, 'getTimezoneOffset' ).mockReturnValue( 0 );
+		setup( { boot: { ...boot, timezone: '+06:00' } } );
+		expect( ends() ).toMatch( /\(\+06:00\)$/ );
 	} );
 } );
 
