@@ -297,4 +297,86 @@ class SettingsControllerTest extends RestTestCase {
 	public function test_lock_with_no_passes_returns_zero() {
 		$this->assertSame( array( 'revoked' => 0 ), $this->request( 'POST', '/lock' )->get_data() );
 	}
+
+	public function test_save_cannot_turn_support_access_on_before_setup() {
+		Settings::update( array( 'features' => array( 'support_access' => false ) ) );
+
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'features' => array( 'support_access' => true ),
+				'security' => array( 'max_attempts' => 9 ),
+			)
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_consent_required', $response->get_data()['code'] );
+		$this->assertSame( 'Please confirm before giving anyone access.', $response->get_data()['message'] );
+		$this->assertFalse( Settings::get( 'features.support_access' ) );
+		$this->assertSame( 5, Settings::get( 'security.max_attempts' ) );
+	}
+
+	public function test_save_turns_support_access_on_after_setup() {
+		Settings::update(
+			array(
+				'features' => array( 'support_access' => false ),
+				'support'  => array( 'consent_given_at' => '2026-01-01 00:00:00' ),
+			)
+		);
+
+		$response = $this->request( 'POST', '/settings', array( 'features' => array( 'support_access' => true ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( Settings::get( 'features.support_access' ) );
+	}
+
+	public function test_save_that_leaves_support_access_on_needs_no_consent() {
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'features' => array( 'support_access' => true ),
+				'security' => array( 'max_attempts' => 9 ),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 9, Settings::get( 'security.max_attempts' ) );
+	}
+
+	public function test_non_string_nested_secret_keeps_the_stored_secret() {
+		update_option( self::SECRET, 'sk_live_abc123', false );
+
+		foreach ( array( array( 'x' ), 123, null, true ) as $bad ) {
+			$response = $this->request( 'POST', '/settings', array( 'security' => array( 'recaptcha_secret_key' => $bad ) ) );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( 'sk_live_abc123', get_option( self::SECRET ), wp_json_encode( $bad ) );
+		}
+	}
+
+	/**
+	 * One pass that is still current and one that ran out but was never revoked.
+	 *
+	 * @return void
+	 */
+	private function one_current_and_one_expired() {
+		Grants::create( array( 'label' => 'Old', 'duration' => 3600 ) );
+		Clock::freeze( 1790000000 + 7200 );
+		Grants::create( array( 'label' => 'Now' ) );
+	}
+
+	public function test_lock_counts_only_current_passes() {
+		$this->one_current_and_one_expired();
+
+		$this->assertSame( array( 'revoked' => 1 ), $this->request( 'POST', '/lock' )->get_data() );
+	}
+
+	public function test_turning_support_access_off_counts_only_current_passes() {
+		$this->one_current_and_one_expired();
+
+		$data = $this->request( 'POST', '/settings', array( 'features' => array( 'support_access' => false ) ) )->get_data();
+
+		$this->assertSame( 1, $data['revoked'] );
+	}
 }

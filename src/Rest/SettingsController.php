@@ -153,10 +153,11 @@ final class SettingsController {
 	}
 
 	/**
-	 * POST /settings.
+	 * POST /settings. Before setup records consent, a save can't turn
+	 * Support Access on, so the first-run screen stays the only way in.
 	 *
 	 * @param \WP_REST_Request $request Request.
-	 * @return \WP_REST_Response
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function save_settings( \WP_REST_Request $request ) {
 		$changes = array();
@@ -168,9 +169,18 @@ final class SettingsController {
 		}
 		unset( $changes['support']['consent_given_at'], $changes['support']['consent_user_id'] );
 
+		$turns_on = ! Features::is_enabled( 'support_access' )
+			&& isset( $changes['features'] )
+			&& array_key_exists( 'support_access', $changes['features'] )
+			&& rest_sanitize_boolean( $changes['features']['support_access'] );
+		if ( $turns_on && '' === (string) Settings::get( 'support.consent_given_at' ) ) {
+			return self::consent_error();
+		}
+
 		// The secret may come at the top level or inside the security group.
+		// A nested value that isn't text is ignored, so it can't clear the stored secret.
 		$secret = $request->get_param( 'recaptcha_secret_key' );
-		if ( null === $secret && isset( $changes['security']['recaptcha_secret_key'] ) ) {
+		if ( null === $secret && isset( $changes['security']['recaptcha_secret_key'] ) && is_string( $changes['security']['recaptcha_secret_key'] ) ) {
 			$secret = self::sanitize_secret( $changes['security']['recaptcha_secret_key'] );
 		}
 		unset( $changes['security']['recaptcha_secret_key'] );
@@ -196,11 +206,7 @@ final class SettingsController {
 
 		$support_on = array_key_exists( 'support_access', $features ) ? (bool) $features['support_access'] : Features::is_enabled( 'support_access' );
 		if ( $support_on && true !== $request->get_param( 'consent' ) ) {
-			return new \WP_Error(
-				'happyaccess_consent_required',
-				__( 'Please confirm before giving anyone access.', 'happyaccess' ),
-				array( 'status' => 400 )
-			);
+			return self::consent_error();
 		}
 
 		// Finishing setup always records who did it and when, or the first-run screen would show again.
@@ -232,12 +238,28 @@ final class SettingsController {
 	}
 
 	/**
-	 * POST /lock.
+	 * POST /lock. Reports the passes that were current, as the settings
+	 * save does, though the lock also ends expired rows not yet revoked.
 	 *
 	 * @return \WP_REST_Response
 	 */
 	public static function lock() {
-		return rest_ensure_response( array( 'revoked' => (int) AdminBar::emergency_lock() ) );
+		$current = count( Grants::list_current() );
+		AdminBar::emergency_lock();
+		return rest_ensure_response( array( 'revoked' => $current ) );
+	}
+
+	/**
+	 * The error for turning Support Access on before consent is recorded.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function consent_error() {
+		return new \WP_Error(
+			'happyaccess_consent_required',
+			__( 'Please confirm before giving anyone access.', 'happyaccess' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	/**
