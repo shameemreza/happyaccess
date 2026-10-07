@@ -17,14 +17,10 @@ defined( 'ABSPATH' ) || exit;
  * allowed, but the site owner is told: one log entry and one email for each
  * account, once per request. The same goes for a full pass, or a custom pass
  * that runs on trust, giving a role admin-level caps or pointing the default
- * role at such a role. HappyAccess's own writes never trigger it.
+ * role at such a role. Admin-level means any cap in Catalog::TRUST.
+ * HappyAccess's own writes never trigger it.
  */
 final class AdminWatch {
-
-	/**
-	 * Caps that make an account or a role admin-level.
-	 */
-	const ADMIN_CAPS = array( 'manage_options', 'promote_users', 'edit_users' );
 
 	/**
 	 * User ids already flagged during this request.
@@ -229,7 +225,7 @@ final class AdminWatch {
 	 * @return string[]
 	 */
 	private static function admin_caps_in( array $capabilities ) {
-		return array_values( array_intersect( self::ADMIN_CAPS, CapabilityGuard::true_caps( $capabilities ) ) );
+		return array_values( array_intersect( Catalog::TRUST, CapabilityGuard::true_caps( $capabilities ) ) );
 	}
 
 	/**
@@ -340,7 +336,7 @@ final class AdminWatch {
 		if ( ! $user ) {
 			return false;
 		}
-		foreach ( self::ADMIN_CAPS as $cap ) {
+		foreach ( Catalog::TRUST as $cap ) {
 			if ( ! empty( $user->allcaps[ $cap ] ) || user_can( $user, $cap ) ) {
 				return true;
 			}

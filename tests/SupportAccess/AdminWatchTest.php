@@ -261,7 +261,8 @@ class AdminWatchTest extends WP_UnitTestCase {
 	public function test_adding_another_role_writes_nothing() {
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $this->temp );
-		( new WP_User( $subscriber ) )->add_role( 'editor' );
+		// Editors hold unfiltered_html, which is admin-level, so use author.
+		( new WP_User( $subscriber ) )->add_role( 'author' );
 
 		$this->assertCount( 0, $this->rows( 'admin_account_created' ) );
 	}
@@ -414,7 +415,7 @@ class AdminWatchTest extends WP_UnitTestCase {
 
 	public function test_full_pass_pointing_default_role_at_an_admin_role_logs_and_emails() {
 		wp_set_current_user( $this->temp );
-		update_option( 'default_role', 'editor' );
+		update_option( 'default_role', 'author' );
 		$this->assertCount( 0, $this->rows( 'admin_role_granted' ) );
 
 		update_option( 'default_role', 'administrator' );
@@ -467,5 +468,23 @@ class AdminWatchTest extends WP_UnitTestCase {
 
 		$this->assertCount( 0, $this->rows( 'admin_role_granted' ) );
 		$this->assertCount( 0, $this->sent() );
+	}
+
+	public function test_a_role_gaining_install_plugins_is_flagged() {
+		wp_set_current_user( $this->temp );
+		$this->add_role_cap( 'editor', 'install_plugins' );
+
+		$rows = $this->rows( 'admin_role_granted' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'editor', $rows[0]['meta']['role'] );
+		$this->assertSame( array( 'install_plugins' ), $rows[0]['meta']['caps'] );
+	}
+
+	public function test_a_user_with_only_unfiltered_html_is_admin_level() {
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'unfiltered_html' => true ) );
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'htmlperson', 'user_pass' => 'x', 'role' => 'happyaccess_promoter' ) );
+
+		$this->assertCount( 1, $this->rows( 'admin_account_created' ) );
 	}
 }
