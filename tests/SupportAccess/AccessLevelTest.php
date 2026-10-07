@@ -349,4 +349,24 @@ class AccessLevelTest extends WP_UnitTestCase {
 			$this->assertSame( array(), Grants::get( $id )['caps'] );
 		}
 	}
+
+	public function test_a_role_that_is_not_text_throws_the_role_message_without_a_warning() {
+		foreach ( array( 'protected', 'full' ) as $level ) {
+			foreach ( array( array( 'administrator' ), 7 ) as $role ) {
+				try {
+					Grants::create(
+						array(
+							'label'        => 'Acme',
+							'level'        => $level,
+							'role'         => $role,
+							'confirm_full' => true,
+						)
+					);
+					$this->fail( 'A non-text role was accepted on ' . $level . '.' );
+				} catch ( \InvalidArgumentException $e ) {
+					$this->assertSame( 'The role does not exist.', $e->getMessage(), $level );
+				}
+			}
+		}
+	}
 }

@@ -98,7 +98,11 @@ final class Grants {
 			throw new \InvalidArgumentException( __( 'The access level is not valid.', 'happyaccess' ) );
 		}
 
-		$role = isset( $args['role'] ) && '' !== (string) $args['role'] ? (string) $args['role'] : 'administrator';
+		$role = isset( $args['role'] ) && '' !== $args['role'] ? $args['role'] : 'administrator';
+		if ( ! is_string( $role ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+			throw new \InvalidArgumentException( __( 'The role does not exist.', 'happyaccess' ) );
+		}
 		if ( 'protected' === $level ) {
 			if ( ! array_key_exists( $role, wp_roles()->roles ) ) {
 				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
@@ -733,18 +737,14 @@ final class Grants {
 			}
 		}
 		self::retry_orphans();
-		ActivityTracker::quietly(
-			static function () {
-				return TempUsers::delete_unlinked( Clock::now() - HOUR_IN_SECONDS );
-			}
-		);
 		return $count;
 	}
 
 	/**
 	 * Deletes temp users that outlived their revoked grant, for example after
-	 * a failed delete in revoke(), and strips leftover accounts whose marker
-	 * is gone but whose grant link points at a revoked grant.
+	 * a failed delete in revoke(), then sweeps the other leftover accounts of
+	 * this site (TempUsers::sweep_leftovers()). Posts always go to someone;
+	 * an account nobody can inherit from stays, stripped.
 	 *
 	 * @return int How many users were deleted.
 	 */
@@ -762,60 +762,24 @@ final class Grants {
 			}
 			$deleted = ActivityTracker::quietly(
 				static function () use ( $grant ) {
-					return TempUsers::delete( $grant );
+					if ( false === get_userdata( $grant['user_id'] ) ) {
+						// Already gone: this clears the stale link.
+						return TempUsers::delete( $grant );
+					}
+					return TempUsers::owned_by_grant( $grant['user_id'], $grant ) && TempUsers::retire( $grant['user_id'], $grant );
 				}
 			);
 			if ( $deleted ) {
 				++$count;
 			}
 		}
-		self::strip_unmarked_leftovers();
+		$count += (int) ActivityTracker::quietly(
+			static function () {
+				return TempUsers::sweep_leftovers( Clock::now() - HOUR_IN_SECONDS );
+			}
+		);
 		self::flush_cache();
 		return $count;
-	}
-
-	/**
-	 * Strips the role and caps of accounts on this site that lost the temp
-	 * user marker but still carry a link to a revoked grant. Only HappyAccess
-	 * writes that link. An account with no role here is skipped, so a
-	 * stripped one is not found again.
-	 *
-	 * @return void
-	 */
-	private static function strip_unmarked_leftovers() {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Cron cleanup, 50 rows at most.
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT t.user_id, t.meta_value FROM {$wpdb->usermeta} t
-				INNER JOIN {$wpdb->usermeta} c ON c.user_id = t.user_id AND c.meta_key = %s
-				LEFT JOIN {$wpdb->usermeta} m ON m.user_id = t.user_id AND m.meta_key = %s
-				WHERE t.meta_key = %s AND m.umeta_id IS NULL ORDER BY t.user_id ASC LIMIT %d",
-				$wpdb->get_blog_prefix() . 'capabilities',
-				'happyaccess_temp_user',
-				'happyaccess_token_id',
-				50
-			),
-			ARRAY_A
-		);
-
-		foreach ( (array) $rows as $row ) {
-			$user_id = (int) $row['user_id'];
-			$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
-			// Grant ids repeat across a network, so the link must name this site there.
-			if ( $blog_id > 0 ? get_current_blog_id() !== $blog_id : is_multisite() ) {
-				continue;
-			}
-			$grant = self::get( (int) $row['meta_value'] );
-			if ( null === $grant || 0 === $grant['revoked_at'] ) {
-				continue;
-			}
-			ActivityTracker::quietly(
-				static function () use ( $user_id ) {
-					TempUsers::strip( $user_id );
-				}
-			);
-		}
 	}
 
 	/**

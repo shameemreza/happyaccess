@@ -230,82 +230,6 @@ final class Uninstaller {
 	}
 
 	/**
-	 * Who gets a temp user's posts and links: the owner of its pass, or the
-	 * first administrator who is not a temp user.
-	 *
-	 * @param int $user_id The user being deleted.
-	 * @return int|null User id, or null when the site has no other administrator.
-	 */
-	private static function reassign_target( $user_id ) {
-		$token_id = (int) get_user_meta( $user_id, 'happyaccess_token_id', true );
-		$grant    = ( $token_id > 0 && Installer::table_exists( 'tokens' ) ) ? Grants::get( $token_id ) : null;
-		if ( null !== $grant ) {
-			$owner = Grants::owner_id( $grant );
-			if ( $owner > 0 && $owner !== $user_id ) {
-				return $owner;
-			}
-		}
-
-		$admin = self::first_real_user( $user_id, array( 'role' => 'administrator' ) );
-		if ( null !== $admin ) {
-			return $admin;
-		}
-
-		$current = get_current_user_id();
-		if ( $current > 0 && $current !== $user_id && false !== get_userdata( $current ) && ! Capabilities::is_temp_user( $current ) && ! self::has_pass_link( $current ) ) {
-			return $current;
-		}
-
-		return self::first_real_user( $user_id, array( 'capability' => 'manage_options' ) );
-	}
-
-	/**
-	 * Whether a user carries a pass link.
-	 *
-	 * @param int $user_id User id.
-	 * @return bool
-	 */
-	private static function has_pass_link( $user_id ) {
-		return (int) get_user_meta( $user_id, 'happyaccess_token_id', true ) > 0;
-	}
-
-	/**
-	 * The lowest-ID user of this site that matches the query, is not the
-	 * excluded one, and has neither the temp user marker nor a pass link.
-	 *
-	 * @param int   $exclude User id to skip.
-	 * @param array $query   get_users arguments, a role or a capability.
-	 * @return int|null
-	 */
-	private static function first_real_user( $exclude, array $query ) {
-		$users = get_users(
-			array_merge(
-				$query,
-				array(
-					'fields'     => 'ID',
-					'orderby'    => 'ID',
-					'order'      => 'ASC',
-					'number'     => 1,
-					'exclude'    => array( $exclude ),
-					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One lookup at uninstall.
-					'meta_query' => array(
-						'relation' => 'AND',
-						array(
-							'key'     => 'happyaccess_temp_user',
-							'compare' => 'NOT EXISTS',
-						),
-						array(
-							'key'     => 'happyaccess_token_id',
-							'compare' => 'NOT EXISTS',
-						),
-					),
-				)
-			)
-		);
-		return empty( $users ) ? null : (int) $users[0];
-	}
-
-	/**
 	 * Takes the role and every capability off a temp user, so an account that
 	 * can't be deleted right now can do nothing.
 	 *
@@ -330,7 +254,7 @@ final class Uninstaller {
 		TempUsers::destroy_sessions( $user_id );
 		TempUsers::delete_wc_api_keys( $user_id );
 
-		$target = self::reassign_target( $user_id );
+		$target = TempUsers::reassign_target( $user_id );
 		if ( null === $target || ! TempUsers::remove_user( $user_id, $target ) ) {
 			self::keep( $user_id );
 		}
@@ -371,7 +295,7 @@ final class Uninstaller {
 			switch_to_blog( (int) $blog_id );
 			try {
 				TempUsers::delete_wc_api_keys( $user_id );
-				$targets[ (int) $blog_id ] = self::reassign_target( $user_id );
+				$targets[ (int) $blog_id ] = TempUsers::reassign_target( $user_id );
 				if ( null === $targets[ (int) $blog_id ] ) {
 					self::keep( $user_id );
 				}

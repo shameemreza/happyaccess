@@ -357,9 +357,10 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		list( $id, $user_id ) = $this->grant_with_user();
 		delete_user_meta( $user_id, 'happyaccess_temp_user' );
 		Grants::revoke( $id );
-		$this->assertSame( 0, Grants::retry_orphans() );
-		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		// The grant link alone marks the account as HappyAccess's, so the retry deletes it.
 		$this->assertSame( 1, Grants::retry_orphans() );
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertSame( 0, Grants::retry_orphans() );
 	}
 
 	public function test_resolver_reports_revoked_for_a_grant_revoked_early_as_expired() {
@@ -506,19 +507,17 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		Grants::flush_cache();
 	}
 
-	public function test_retry_orphans_strips_an_unmarked_user_of_a_revoked_grant() {
+	public function test_retry_orphans_deletes_an_unmarked_user_of_a_revoked_grant_and_keeps_its_posts() {
 		list( $id, $user_id ) = $this->grant_with_user();
+		$post                 = self::factory()->post->create( array( 'post_author' => $user_id ) );
 		delete_user_meta( $user_id, 'happyaccess_temp_user' );
 		$this->revoke_row_only( $id );
 		$this->assertTrue( user_can( $user_id, 'manage_options' ) );
 
 		Grants::retry_orphans();
 
-		clean_user_cache( $user_id );
-		$this->assertNotFalse( get_userdata( $user_id ) );
-		$this->assertSame( array(), get_userdata( $user_id )->roles );
-		$this->assertFalse( user_can( $user_id, 'read' ) );
-		$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertSame( $this->owner, (int) get_post( $post )->post_author );
 	}
 
 	public function test_retry_orphans_leaves_an_unmarked_user_of_a_current_grant_alone() {
@@ -564,5 +563,112 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertSame( Grants::owner_id( array( 'created_by' => 0 ) ), (int) get_post( $post )->post_author );
 		$this->assertNotSame( $old, (int) get_post( $post )->post_author );
 		$this->assertSame( 1, AuditLog::query( array( 'event' => 'temp_user_deleted', 'token_id' => 0 ) )['total'] );
+	}
+
+	/**
+	 * Deletes a grant row, as the retention purge does.
+	 *
+	 * @param int $id Grant id.
+	 * @return void
+	 */
+	private function purge_row( $id ) {
+		global $wpdb;
+		$wpdb->delete( Installer::table( 'tokens' ), array( 'id' => $id ) );
+		Grants::flush_cache();
+	}
+
+	/**
+	 * Moves a user's registration back in time.
+	 *
+	 * @param int $user_id User id.
+	 * @param int $age     Seconds.
+	 * @return void
+	 */
+	private function age_user( $user_id, $age ) {
+		global $wpdb;
+		$wpdb->update( $wpdb->users, array( 'user_registered' => Clock::mysql( Clock::now() - $age ) ), array( 'ID' => $user_id ) );
+		clean_user_cache( $user_id );
+	}
+
+	public function test_cleanup_deletes_a_marked_user_whose_grant_was_purged_and_keeps_its_posts() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		$post                 = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		$this->age_user( $user_id, DAY_IN_SECONDS );
+		$this->purge_row( $id );
+
+		Grants::cleanup_expired();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+		$author = (int) get_post( $post )->post_author;
+		$this->assertNotSame( $user_id, $author );
+		$this->assertTrue( user_can( $author, 'manage_options' ) );
+	}
+
+	public function test_cleanup_deletes_an_unmarked_user_whose_grant_was_purged() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		$this->age_user( $user_id, DAY_IN_SECONDS );
+		$this->purge_row( $id );
+
+		Grants::cleanup_expired();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+	}
+
+	public function test_cleanup_keeps_a_leftover_its_marker_and_its_posts_when_no_one_can_inherit() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		$post                 = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		$this->age_user( $user_id, DAY_IN_SECONDS );
+		$this->purge_row( $id );
+		foreach ( get_users( array( 'role' => 'administrator', 'fields' => 'ID' ) ) as $admin ) {
+			if ( (int) $admin !== $user_id ) {
+				( new WP_User( (int) $admin ) )->set_role( 'editor' );
+			}
+		}
+		wp_set_current_user( 0 );
+
+		Grants::cleanup_expired();
+
+		clean_user_cache( $user_id );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertFalse( user_can( $user_id, 'read' ) );
+		$this->assertSame( '1', (string) get_user_meta( $user_id, 'happyaccess_temp_user', true ) );
+		$this->assertSame( $user_id, (int) get_post( $post )->post_author );
+	}
+
+	public function test_cleanup_leaves_a_fresh_user_of_a_purged_grant_for_later() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		$this->age_user( $user_id, 10 * MINUTE_IN_SECONDS );
+		$this->purge_row( $id );
+
+		Grants::cleanup_expired();
+
+		$this->assertNotFalse( get_userdata( $user_id ) );
+	}
+
+	public function test_cleanup_on_a_network_handles_this_sites_leftover_and_leaves_another_sites() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Runs on multisite only.' );
+		}
+		$other = self::factory()->blog->create();
+		$theirs = self::factory()->user->create();
+		add_user_to_blog( $other, $theirs, 'editor' );
+		update_user_meta( $theirs, 'happyaccess_temp_user', 1 );
+		update_user_meta( $theirs, 'happyaccess_token_id', 999999 );
+		update_user_meta( $theirs, 'happyaccess_blog_id', $other );
+		$this->age_user( $theirs, DAY_IN_SECONDS );
+
+		list( $id, $ours ) = $this->grant_with_user();
+		$post              = self::factory()->post->create( array( 'post_author' => $ours ) );
+		$this->age_user( $ours, DAY_IN_SECONDS );
+		$this->purge_row( $id );
+
+		Grants::cleanup_expired();
+
+		$this->assertFalse( is_user_member_of_blog( $ours, get_current_blog_id() ) );
+		$this->assertNotSame( $ours, (int) get_post( $post )->post_author );
+		$this->assertNotFalse( get_userdata( $theirs ) );
+		$this->assertTrue( is_user_member_of_blog( $theirs, $other ) );
 	}
 }

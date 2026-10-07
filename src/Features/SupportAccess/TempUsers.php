@@ -9,6 +9,7 @@ namespace HappyAccess\Features\SupportAccess;
 
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 
 defined( 'ABSPATH' ) || exit;
@@ -277,30 +278,30 @@ final class TempUsers {
 	}
 
 	/**
-	 * Deletes temp users of this site that no grant row links to and that
-	 * were registered before a time, such as a user left by a crash between
-	 * create and link. Their content goes to the owner of the grant they
-	 * name, or the first administrator. With nobody to inherit it, the
-	 * account stays, stripped, and keeps its posts.
+	 * Cron cleanup for leftover accounts on this site. An account with the
+	 * temp user marker or a grant link is HappyAccess's, because only
+	 * HappyAccess writes that meta. It is retired when its grant was
+	 * revoked, or, once it is older than the given time, when its grant row
+	 * is gone or doesn't link to it. Accounts of live grants are skipped.
 	 *
-	 * @param int $registered_before Unix time.
-	 * @return int How many users were deleted.
+	 * @param int $registered_before Unix time; younger accounts of a missing or unlinked grant wait.
+	 * @return int How many accounts were deleted.
 	 */
-	public static function delete_unlinked( $registered_before ) {
+	public static function sweep_leftovers( $registered_before ) {
 		global $wpdb;
 		$table = Installer::table( 'tokens' );
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Cron cleanup, 50 rows at most; table names from the prefix.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Cron cleanup, 50 rows at most; table names from the prefix.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT u.ID FROM {$wpdb->users} u
-				INNER JOIN {$wpdb->usermeta} m ON m.user_id = u.ID AND m.meta_key = %s
-				LEFT JOIN {$wpdb->usermeta} b ON b.user_id = u.ID AND b.meta_key = %s
-				WHERE u.user_registered < %s AND ( b.meta_value IS NULL OR b.meta_value = %s )
-				AND u.ID NOT IN ( SELECT user_id FROM {$table} WHERE user_id > 0 )
-				ORDER BY u.ID ASC LIMIT %d",
-				'happyaccess_temp_user',
+				"SELECT DISTINCT k.user_id FROM {$wpdb->usermeta} k
+				INNER JOIN {$wpdb->users} u ON u.ID = k.user_id
+				LEFT JOIN {$wpdb->usermeta} b ON b.user_id = k.user_id AND b.meta_key = %s
+				WHERE k.meta_key IN ( %s, %s ) AND ( b.meta_value IS NULL OR b.meta_value = %s )
+				AND k.user_id NOT IN ( SELECT user_id FROM {$table} WHERE user_id > 0 AND revoked_at IS NULL )
+				ORDER BY k.user_id ASC LIMIT %d",
 				'happyaccess_blog_id',
-				gmdate( 'Y-m-d H:i:s', (int) $registered_before ),
+				'happyaccess_temp_user',
+				'happyaccess_token_id',
 				(string) get_current_blog_id(),
 				50
 			)
@@ -310,38 +311,150 @@ final class TempUsers {
 		$count = 0;
 		foreach ( array_map( 'intval', (array) $ids ) as $user_id ) {
 			$user = get_userdata( $user_id );
-			if ( false === $user || ( is_multisite() && ! is_user_member_of_blog( $user_id ) ) ) {
+			if ( false === $user ) {
 				continue;
 			}
-			$grant    = Grants::get( (int) get_user_meta( $user_id, 'happyaccess_token_id', true ) );
-			$owner_id = Grants::owner_id( null === $grant ? array( 'created_by' => 0 ) : $grant );
-			if ( $owner_id < 1 || $owner_id === $user_id ) {
-				self::strip( $user_id );
+			$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
+			// Grant ids repeat across a network, so there the account must name this site.
+			if ( $blog_id > 0 ? get_current_blog_id() !== $blog_id : is_multisite() ) {
 				continue;
 			}
-
-			self::destroy_sessions( $user_id );
-			self::delete_wc_api_keys( $user_id );
-			$login = $user->user_login;
-			if ( ! self::remove_user( $user_id, $owner_id ) ) {
-				self::strip( $user_id );
-				continue;
+			$token_id = (int) get_user_meta( $user_id, 'happyaccess_token_id', true );
+			$grant    = $token_id > 0 ? Grants::get( $token_id ) : null;
+			$revoked  = null !== $grant && $grant['revoked_at'] > 0;
+			if ( ! $revoked ) {
+				if ( null !== $grant && (int) $grant['user_id'] === $user_id ) {
+					continue;
+				}
+				if ( Clock::from_mysql( $user->user_registered ) >= (int) $registered_before ) {
+					continue;
+				}
 			}
-			++$count;
-			AuditLog::add(
-				'temp_user_deleted',
-				array(
-					'feature'  => 'support',
-					'token_id' => 0,
-					'user_id'  => 0,
-					'meta'     => array(
-						'user_login' => $login,
-						'reason'     => 'unlinked',
-					),
-				)
-			);
+			if ( self::retire( $user_id, $revoked ? $grant : null ) ) {
+				++$count;
+			}
 		}
 		return $count;
+	}
+
+	/**
+	 * Strips a leftover account, then deletes it with its posts and links
+	 * handed to reassign_target(). With nobody to hand them to, or when the
+	 * delete fails, the account stays stripped, keeps its meta and its posts.
+	 *
+	 * @param int        $user_id User id.
+	 * @param array|null $grant   The revoked grant it belonged to, if known.
+	 * @return bool True when the account was deleted.
+	 */
+	public static function retire( $user_id, $grant = null ) {
+		$user_id = (int) $user_id;
+		$user    = get_userdata( $user_id );
+		if ( false === $user ) {
+			return false;
+		}
+		$login = $user->user_login;
+		self::strip( $user_id );
+
+		$target = self::reassign_target( $user_id );
+		if ( null === $target || ! self::remove_user( $user_id, $target ) ) {
+			return false;
+		}
+
+		$token_id = is_array( $grant ) ? (int) $grant['id'] : 0;
+		if ( is_array( $grant ) && (int) $grant['user_id'] === $user_id ) {
+			self::set_grant_user( $token_id, 0 );
+		}
+		AuditLog::add(
+			'temp_user_deleted',
+			array(
+				'feature'  => 'support',
+				'token_id' => $token_id,
+				'user_id'  => 0,
+				'meta'     => array(
+					'user_login' => $login,
+					'reason'     => 'cleanup',
+				),
+			)
+		);
+		return true;
+	}
+
+	/**
+	 * Who gets a temp user's posts and links: the owner of its pass, the
+	 * first administrator who is not a temp user, the current user when that
+	 * is a real user, or the first real user with manage_options. Shared by
+	 * the cron cleanup and the uninstaller.
+	 *
+	 * @param int $user_id The user being deleted.
+	 * @return int|null User id, or null when the site has no other administrator.
+	 */
+	public static function reassign_target( $user_id ) {
+		$token_id = (int) get_user_meta( $user_id, 'happyaccess_token_id', true );
+		$grant    = ( $token_id > 0 && Installer::table_exists( 'tokens' ) ) ? Grants::get( $token_id ) : null;
+		if ( null !== $grant ) {
+			$owner = Grants::owner_id( $grant );
+			if ( $owner > 0 && $owner !== $user_id ) {
+				return $owner;
+			}
+		}
+
+		$admin = self::first_real_user( $user_id, array( 'role' => 'administrator' ) );
+		if ( null !== $admin ) {
+			return $admin;
+		}
+
+		$current = get_current_user_id();
+		if ( $current > 0 && $current !== $user_id && false !== get_userdata( $current ) && ! Capabilities::is_temp_user( $current ) && ! self::has_pass_link( $current ) ) {
+			return $current;
+		}
+
+		return self::first_real_user( $user_id, array( 'capability' => 'manage_options' ) );
+	}
+
+	/**
+	 * Whether a user carries a pass link.
+	 *
+	 * @param int $user_id User id.
+	 * @return bool
+	 */
+	private static function has_pass_link( $user_id ) {
+		return (int) get_user_meta( $user_id, 'happyaccess_token_id', true ) > 0;
+	}
+
+	/**
+	 * The lowest-ID user of this site that matches the query, is not the
+	 * excluded one, and has neither the temp user marker nor a pass link.
+	 *
+	 * @param int   $exclude User id to skip.
+	 * @param array $query   get_users arguments, a role or a capability.
+	 * @return int|null
+	 */
+	private static function first_real_user( $exclude, array $query ) {
+		$users = get_users(
+			array_merge(
+				$query,
+				array(
+					'fields'     => 'ID',
+					'orderby'    => 'ID',
+					'order'      => 'ASC',
+					'number'     => 1,
+					'exclude'    => array( $exclude ),
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One lookup at uninstall.
+					'meta_query' => array(
+						'relation' => 'AND',
+						array(
+							'key'     => 'happyaccess_temp_user',
+							'compare' => 'NOT EXISTS',
+						),
+						array(
+							'key'     => 'happyaccess_token_id',
+							'compare' => 'NOT EXISTS',
+						),
+					),
+				)
+			)
+		);
+		return empty( $users ) ? null : (int) $users[0];
 	}
 
 	/**
