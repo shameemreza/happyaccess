@@ -306,6 +306,85 @@ final class Catalog {
 	}
 
 	/**
+	 * Capabilities core works out for one object, like edit_post. They are
+	 * never offered: asking current_user_can() about one without an object id
+	 * is a mistake core reports, and a role holding one grants nothing alone.
+	 */
+	const CORE_META_CAPS = array(
+		'edit_post',
+		'read_post',
+		'delete_post',
+		'publish_post',
+		'edit_page',
+		'read_page',
+		'delete_page',
+		'edit_user',
+		'delete_user',
+		'remove_user',
+		'promote_user',
+		'edit_comment',
+		'edit_term',
+		'delete_term',
+		'assign_term',
+		'edit_post_meta',
+		'delete_post_meta',
+		'add_post_meta',
+		'edit_comment_meta',
+		'delete_comment_meta',
+		'add_comment_meta',
+		'edit_term_meta',
+		'delete_term_meta',
+		'add_term_meta',
+		'edit_user_meta',
+		'delete_user_meta',
+		'add_user_meta',
+	);
+
+	/**
+	 * Single-object capabilities for this request: core's own, and the
+	 * edit, read and delete ones each post type and taxonomy maps, like
+	 * WooCommerce's edit_product. The list is kept until a post type or
+	 * taxonomy is added or removed.
+	 *
+	 * @return array<string>
+	 */
+	public static function meta_caps() {
+		static $cache = array(
+			'signature' => '',
+			'caps'      => array(),
+		);
+
+		$types      = get_post_types( array(), 'objects' );
+		$taxonomies = get_taxonomies( array(), 'objects' );
+		$signature  = implode( ',', array_keys( $types ) ) . '|' . implode( ',', array_keys( $taxonomies ) );
+		if ( $signature === $cache['signature'] ) {
+			return $cache['caps'];
+		}
+
+		$caps = self::CORE_META_CAPS;
+		foreach ( $types as $type ) {
+			foreach ( array( 'edit_post', 'read_post', 'delete_post' ) as $key ) {
+				if ( isset( $type->cap->$key ) ) {
+					$caps[] = (string) $type->cap->$key;
+				}
+			}
+		}
+		foreach ( $taxonomies as $taxonomy ) {
+			foreach ( array( 'edit_term', 'delete_term', 'assign_term' ) as $key ) {
+				if ( isset( $taxonomy->cap->$key ) ) {
+					$caps[] = (string) $taxonomy->cap->$key;
+				}
+			}
+		}
+
+		$cache = array(
+			'signature' => $signature,
+			'caps'      => array_values( array_unique( $caps ) ),
+		);
+		return $cache['caps'];
+	}
+
+	/**
 	 * Position of a group in a built list.
 	 *
 	 * @param array  $groups Built groups.
@@ -332,7 +411,8 @@ final class Catalog {
 	 */
 	public static function groups( $for_current_user = true ) {
 		$filter = $for_current_user && is_user_logged_in();
-		$held   = self::role_cap_names();
+		$meta   = self::meta_caps();
+		$held   = array_values( array_diff( self::role_cap_names(), $meta ) );
 		$text   = self::group_text();
 		$labels = self::cap_labels();
 		$groups = array();
@@ -348,6 +428,9 @@ final class Catalog {
 			foreach ( $caps as $cap ) {
 				// Store caps exist only when a role has them; the rest are core primitives.
 				if ( 'store' === $id && ! in_array( $cap, $held, true ) ) {
+					continue;
+				}
+				if ( in_array( $cap, $meta, true ) ) {
 					continue;
 				}
 				if ( $filter && ! current_user_can( $cap ) ) {

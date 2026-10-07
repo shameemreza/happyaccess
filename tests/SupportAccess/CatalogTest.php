@@ -5,7 +5,10 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\Installer;
+use HappyAccess\Core\Secrets;
 use HappyAccess\Features\SupportAccess\Catalog;
+use HappyAccess\Features\SupportAccess\Grants;
 
 class CatalogTest extends WP_UnitTestCase {
 
@@ -13,7 +16,35 @@ class CatalogTest extends WP_UnitTestCase {
 		foreach ( array( 'shop_manager', 'seo', 'netty', 'merch', 'wc_product' ) as $role ) {
 			remove_role( $role );
 		}
+		unregister_post_type( 'ha_widget' );
 		parent::tear_down();
+	}
+
+	/**
+	 * Registers a post type that maps single-item meta caps, as WooCommerce
+	 * does for products, and a role that holds them.
+	 *
+	 * @return void
+	 */
+	private function add_widget_role() {
+		register_post_type(
+			'ha_widget',
+			array(
+				'capability_type' => 'ha_widget',
+				'map_meta_cap'    => true,
+			)
+		);
+		add_role(
+			'merch',
+			'Merch',
+			array(
+				'read'             => true,
+				'edit_ha_widget'   => true,
+				'read_ha_widget'   => true,
+				'delete_ha_widget' => true,
+				'edit_ha_widgets'  => true,
+			)
+		);
 	}
 
 	private function group( $id ) {
@@ -47,7 +78,14 @@ class CatalogTest extends WP_UnitTestCase {
 	}
 
 	public function test_every_cap_item_says_whether_it_runs_on_trust() {
-		add_role( 'seo', 'SEO', array( 'read' => true, 'manage_seo' => true ) );
+		add_role(
+			'seo',
+			'SEO',
+			array(
+				'read'       => true,
+				'manage_seo' => true,
+			)
+		);
 		$seen = array();
 		foreach ( Catalog::groups() as $group ) {
 			foreach ( $group['caps'] as $item ) {
@@ -142,7 +180,7 @@ class CatalogTest extends WP_UnitTestCase {
 				'edit_posts' => true,
 			)
 		);
-		$caps = $this->group_caps( 'other' );
+		$caps   = $this->group_caps( 'other' );
 		$sorted = $caps;
 		sort( $sorted );
 		$this->assertSame( $sorted, $caps );
@@ -268,5 +306,64 @@ class CatalogTest extends WP_UnitTestCase {
 		);
 		$this->assertNotContains( 'wc_product', Catalog::grantable() );
 		$this->assertContains( 'wc_things', $this->group_caps( 'other' ) );
+	}
+
+	public function test_meta_caps_of_a_post_type_are_never_asked_about_or_offered() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->add_widget_role();
+		$notices = array();
+		$listen  = static function ( $function_name ) use ( &$notices ) {
+			$notices[] = $function_name;
+		};
+		add_action( 'doing_it_wrong_run', $listen );
+
+		$offered    = Catalog::grantable();
+		$unfiltered = Catalog::grantable( false );
+
+		remove_action( 'doing_it_wrong_run', $listen );
+		$this->assertSame( array(), $notices );
+		foreach ( array( 'edit_ha_widget', 'read_ha_widget', 'delete_ha_widget' ) as $cap ) {
+			$this->assertNotContains( $cap, $offered );
+			$this->assertNotContains( $cap, $unfiltered );
+		}
+		// The plain capabilities of the same role are still offered.
+		$this->assertContains( 'edit_ha_widgets', $unfiltered );
+	}
+
+	public function test_meta_caps_list_covers_core_post_types_and_taxonomies() {
+		$this->add_widget_role();
+		$meta = Catalog::meta_caps();
+
+		foreach ( array( 'edit_post', 'read_post', 'delete_post', 'edit_user', 'promote_user', 'edit_term', 'edit_ha_widget', 'read_ha_widget', 'delete_ha_widget' ) as $cap ) {
+			$this->assertContains( $cap, $meta );
+		}
+		$this->assertNotContains( 'edit_posts', $meta );
+		$this->assertNotContains( 'edit_ha_widgets', $meta );
+	}
+
+	public function test_meta_caps_list_follows_post_types_registered_later() {
+		$this->assertNotContains( 'edit_ha_widget', Catalog::meta_caps() );
+		$this->add_widget_role();
+		$this->assertContains( 'edit_ha_widget', Catalog::meta_caps() );
+	}
+
+	public function test_a_pass_cannot_be_given_a_meta_cap() {
+		Installer::install();
+		Secrets::reset_cache();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->add_widget_role();
+
+		try {
+			Grants::create(
+				array(
+					'label' => 'Acme',
+					'level' => 'custom',
+					'caps'  => array( 'edit_posts', 'edit_ha_widget' ),
+				)
+			);
+			$this->fail( 'A meta capability was accepted.' );
+		} catch ( \InvalidArgumentException $e ) {
+			$this->assertSame( "This permission can't be given: edit_ha_widget", $e->getMessage() );
+		}
 	}
 }
