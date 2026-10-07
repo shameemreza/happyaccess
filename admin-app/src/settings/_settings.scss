@@ -216,6 +216,7 @@
 	}
 
 	.ha-loginprev__screen {
+		container-type: inline-size;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -257,22 +258,131 @@
 		}
 	}
 
-	.ha-loginprev__code {
+	.ha-loginprev__mock {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
 		align-items: center;
-		justify-content: center;
-		gap: 4px 0;
+		gap: 14px;
+		width: 100%;
+	}
 
-		@include motion.motion {
-			animation: happyaccess-in 0.2s ease-out;
-		}
+	// The marker loop, arrow and bubble are an annotation on top of the mock,
+	// in a pen color, so the mock itself keeps the real login screen's look.
+	.ha-loginprev__code {
+		--ha-pen: #d9472b;
+
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+	}
+
+	.ha-loginprev__spot {
+		position: relative;
+		display: inline-block;
 	}
 
 	.ha-loginprev__link {
+		min-height: 24px;
+		margin: 0;
+		padding: 2px 4px;
+		border: 0;
+		border-radius: 3px;
+		background: none;
 		color: #135e96;
+		font: inherit;
 		font-size: 12px;
 		text-decoration: underline;
+		cursor: pointer;
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color, #2271b1);
+			outline-offset: 2px;
+		}
+	}
+
+	.ha-loginprev__loop {
+		position: absolute;
+		inset: -15px -24px -15px;
+		width: calc(100% + 48px);
+		height: calc(100% + 30px);
+		overflow: visible;
+		pointer-events: none;
+	}
+
+	.ha-loginprev__loop path,
+	.ha-loginprev__arrow path {
+		fill: none;
+		stroke: var(--ha-pen);
+		stroke-width: 2.2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		vector-effect: non-scaling-stroke;
+	}
+
+	.ha-loginprev__loop path {
+
+		@include motion.motion {
+			stroke-dasharray: 1;
+			animation: happyaccess-draw 0.8s ease-out 0.2s both;
+		}
+	}
+
+	.ha-loginprev__arrow path {
+
+		@include motion.motion {
+			stroke-dasharray: 1;
+			animation: happyaccess-draw 0.45s ease-out 0.9s both;
+		}
+	}
+
+	.ha-loginprev__arrow .ha-loginprev__arrowhead {
+
+		@include motion.motion {
+			animation-delay: 1.3s;
+		}
+	}
+
+	.ha-loginprev__bubble {
+		position: absolute;
+		inset-block-start: 50%;
+		inset-inline-start: calc(50% + 128px);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		width: 180px;
+		padding: 8px 12px;
+		border: 2px solid var(--ha-pen);
+		border-radius: 16px 18px 14px 20px / 14px 16px 18px 12px;
+		background: #fff;
+		box-shadow: 3px 3px 0 rgba(217, 71, 43, 0.15);
+		color: var(--ha-text);
+		font-size: 12px;
+		line-height: 1.45;
+		transform: translateY(-50%) rotate(-1.5deg);
+
+		strong {
+			color: var(--ha-pen);
+			font-weight: 600;
+		}
+
+		@include motion.motion {
+			animation: happyaccess-bubble 0.3s ease-out 1.2s both;
+		}
+	}
+
+	.ha-loginprev__arrow {
+		position: absolute;
+		inset-block-start: 4px;
+		inset-inline-end: calc(100% - 4px);
+		width: 48px;
+		height: 34px;
+		overflow: visible;
+
+		&:dir(rtl) {
+			transform: scaleX(-1);
+		}
 	}
 
 	.ha-loginprev__lost {
@@ -280,10 +390,53 @@
 		font-size: 12px;
 	}
 
-	// Explains the change outside the mock, so the mock matches the real screen.
-	.ha-loginprev__note {
-		margin: 12px 0 0;
-		color: var(--ha-muted);
-		font-size: 12px;
+	// Narrow panels: the bubble drops under the link with a small tail.
+	@container (max-width: 520px) {
+
+		.ha-loginprev__bubble {
+			position: relative;
+			inset: auto;
+			width: auto;
+			max-width: 260px;
+			margin-block-start: 18px;
+			transform: rotate(-1deg);
+
+			&::before {
+				content: "";
+				position: absolute;
+				inset-block-end: 100%;
+				inset-inline-start: calc(50% - 7px);
+				border: 7px solid transparent;
+				border-block-end-color: var(--ha-pen);
+			}
+		}
+
+		.ha-loginprev__arrow {
+			display: none;
+		}
+	}
+}
+
+@keyframes happyaccess-draw {
+
+	from {
+		stroke-dashoffset: 1;
+	}
+
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes happyaccess-bubble {
+
+	from {
+		opacity: 0;
+		transform: translateY(-50%) rotate(-1.5deg) scale(0.85);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(-50%) rotate(-1.5deg) scale(1);
 	}
 }

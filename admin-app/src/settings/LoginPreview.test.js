@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import LoginPreview from './LoginPreview';
 
@@ -7,7 +7,7 @@ it( 'shows the support code link when Support access is on', () => {
 	render( <LoginPreview supportAccess /> );
 
 	expect(
-		screen.getByText( 'Have a support access code?' )
+		screen.getByRole( 'button', { name: 'Have a support access code?' } )
 	).toBeInTheDocument();
 	expect( screen.getByText( 'Lost your password?' ) ).toBeInTheDocument();
 	expect(
@@ -15,29 +15,50 @@ it( 'shows the support code link when Support access is on', () => {
 	).toBeInTheDocument();
 } );
 
-it( 'keeps the mock screen clean and explains the change below it', () => {
+it( 'circles the added link and explains it in a bubble', () => {
 	const { container } = render( <LoginPreview supportAccess /> );
 
-	const screenMock = container.querySelector( '.ha-loginprev__screen' );
-	expect( screenMock.textContent ).not.toContain( 'HappyAccess' );
+	expect( container.querySelector( '.ha-loginprev__loop' ) ).not.toBeNull();
+	expect( screen.getByText( 'Added by HappyAccess' ) ).toBeInTheDocument();
 	expect(
 		screen.getByText(
-			'HappyAccess adds the "Have a support access code?" link below the login form.'
+			'Support people click here and enter their 8-digit code.'
 		)
 	).toBeInTheDocument();
+	expect(
+		screen.getByRole( 'button', { name: 'Have a support access code?' } )
+	).toHaveAttribute( 'aria-expanded', 'true' );
 } );
 
-it( 'leaves the link out when Support access is off', () => {
-	render( <LoginPreview supportAccess={ false } /> );
+it( 'opens and closes the bubble from the circled link', () => {
+	render( <LoginPreview supportAccess /> );
+	const link = screen.getByRole( 'button', {
+		name: 'Have a support access code?',
+	} );
+
+	fireEvent.click( link );
+	expect( link ).toHaveAttribute( 'aria-expanded', 'false' );
+	expect(
+		screen.queryByText( 'Added by HappyAccess' )
+	).not.toBeInTheDocument();
+
+	fireEvent.click( link );
+	expect( screen.getByText( 'Added by HappyAccess' ) ).toBeInTheDocument();
+
+	fireEvent.keyDown( link, { key: 'Escape' } );
+	expect( link ).toHaveAttribute( 'aria-expanded', 'false' );
+} );
+
+it( 'leaves the link and the marker out when Support access is off', () => {
+	const { container } = render( <LoginPreview supportAccess={ false } /> );
 
 	expect(
 		screen.queryByText( 'Have a support access code?' )
 	).not.toBeInTheDocument();
+	expect( container.querySelector( '.ha-loginprev__loop' ) ).toBeNull();
 	expect(
-		screen.getByText(
-			'With Support access off, your login screen stays as it is.'
-		)
-	).toBeInTheDocument();
+		screen.queryByText( 'Added by HappyAccess' )
+	).not.toBeInTheDocument();
 } );
 
 it( 'has no accessibility violations', async () => {
