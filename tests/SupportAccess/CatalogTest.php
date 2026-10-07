@@ -65,6 +65,32 @@ class CatalogTest extends WP_UnitTestCase {
 		$this->assertTrue( Catalog::needs_trust( array( 'edit_posts', 'promote_users' ) ) );
 	}
 
+	public function test_admin_is_offered_only_what_they_can_use() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertFalse( current_user_can( 'manage_links' ) );
+
+		$this->assertNotContains( 'manage_links', Catalog::grantable() );
+		$this->assertNotContains( 'manage_links', Catalog::presets()['administrator'] );
+		$this->assertContains( 'edit_posts', Catalog::grantable() );
+	}
+
+	public function test_editor_is_offered_only_their_own_caps() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->assertNotContains( 'manage_options', Catalog::grantable() );
+		$this->assertContains( 'edit_others_posts', Catalog::grantable() );
+	}
+
+	public function test_nothing_is_filtered_with_no_user() {
+		wp_set_current_user( 0 );
+		$this->assertContains( 'manage_links', Catalog::grantable() );
+		$this->assertContains( 'manage_options', Catalog::grantable() );
+	}
+
+	public function test_the_unfiltered_list_ignores_the_current_user() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->assertContains( 'manage_options', Catalog::grantable( false ) );
+	}
+
 	public function test_plain_site_has_no_store_group() {
 		// Other tests leave store roles behind, so clear any role that holds a store cap.
 		foreach ( array_keys( wp_roles()->roles ) as $role_name ) {

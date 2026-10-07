@@ -252,7 +252,8 @@ final class Grants {
 			throw new \InvalidArgumentException( __( 'Pick at least one permission.', 'happyaccess' ) );
 		}
 
-		$grantable = Catalog::grantable();
+		// The full catalog, so a cap the creator lacks gets the creator check's message below.
+		$grantable = Catalog::grantable( false );
 		foreach ( $caps as $cap ) {
 			if ( ! in_array( $cap, $grantable, true ) ) {
 				/* translators: %s: capability name. */

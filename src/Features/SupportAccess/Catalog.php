@@ -323,10 +323,15 @@ final class Catalog {
 
 	/**
 	 * Groups of capabilities a custom pass may receive, ready for the editor.
+	 * With a user logged in, caps that user can't use are left out, so the
+	 * editor never offers what the creator check would refuse. Core denies
+	 * some caps on a plain site, like manage_links without the link manager.
 	 *
+	 * @param bool $for_current_user Whether to leave out caps the current user can't use.
 	 * @return array<int, array{id:string, label:string, hint:string, caps:array<int, array{cap:string, label:string, trust:bool}>}>
 	 */
-	public static function groups() {
+	public static function groups( $for_current_user = true ) {
+		$filter = $for_current_user && is_user_logged_in();
 		$held   = self::role_cap_names();
 		$text   = self::group_text();
 		$labels = self::cap_labels();
@@ -343,6 +348,9 @@ final class Catalog {
 			foreach ( $caps as $cap ) {
 				// Store caps exist only when a role has them; the rest are core primitives.
 				if ( 'store' === $id && ! in_array( $cap, $held, true ) ) {
+					continue;
+				}
+				if ( $filter && ! current_user_can( $cap ) ) {
 					continue;
 				}
 				$items[] = array(
@@ -364,6 +372,9 @@ final class Catalog {
 
 		$other = array();
 		foreach ( array_diff( $held, $fixed, self::NEVER, self::ALWAYS ) as $cap ) {
+			if ( $filter && ! current_user_can( $cap ) ) {
+				continue;
+			}
 			$item = array(
 				'cap'   => $cap,
 				'label' => $cap,
@@ -429,11 +440,12 @@ final class Catalog {
 	/**
 	 * Every capability a custom pass may receive.
 	 *
+	 * @param bool $for_current_user Whether to leave out caps the current user can't use.
 	 * @return array<string>
 	 */
-	public static function grantable() {
+	public static function grantable( $for_current_user = true ) {
 		$caps = array();
-		foreach ( self::groups() as $group ) {
+		foreach ( self::groups( $for_current_user ) as $group ) {
 			foreach ( $group['caps'] as $item ) {
 				$caps[] = $item['cap'];
 			}

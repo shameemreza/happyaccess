@@ -80,7 +80,9 @@ final class TempUsers {
 	 * Gives a custom pass's user its capabilities and nothing else.
 	 *
 	 * The stored list is cut down to what the catalog allows, in case it was
-	 * edited in the database. An empty result leaves the user with read only.
+	 * edited in the database. The full catalog is used, whoever is logged in,
+	 * because the creator check already ran when the pass was made. An empty
+	 * result leaves the user with read only.
 	 * WordPress treats an empty role string as "no role", not the default role.
 	 *
 	 * @param int   $user_id User id.
@@ -88,7 +90,7 @@ final class TempUsers {
 	 * @return void
 	 */
 	private static function give_caps( $user_id, array $caps ) {
-		$allowed = array_merge( Catalog::grantable(), Catalog::ALWAYS );
+		$allowed = array_merge( Catalog::grantable( false ), Catalog::ALWAYS );
 		$caps    = array_values( array_unique( array_intersect( array_map( 'strval', $caps ), $allowed ) ) );
 		if ( ! in_array( 'read', $caps, true ) ) {
 			$caps[] = 'read';

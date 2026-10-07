@@ -8,6 +8,7 @@
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Secrets;
+use HappyAccess\Features\SupportAccess\Catalog;
 use HappyAccess\Features\SupportAccess\Grants;
 
 class AccessLevelTest extends WP_UnitTestCase {
@@ -202,6 +203,23 @@ class AccessLevelTest extends WP_UnitTestCase {
 			)
 		);
 		$this->assertSame( 'custom', Grants::get( $made['id'] )['level'] );
+	}
+
+	public function test_every_preset_saves_for_an_administrator() {
+		$presets = Catalog::presets();
+		$this->assertArrayHasKey( 'administrator', $presets );
+		$this->assertArrayHasKey( 'editor', $presets );
+		foreach ( $presets as $role => $caps ) {
+			$made = Grants::create(
+				array(
+					'label'        => 'Preset ' . $role,
+					'level'        => 'custom',
+					'caps'         => $caps,
+					'confirm_full' => Catalog::needs_trust( $caps ),
+				)
+			);
+			$this->assertSame( 'custom', Grants::get( $made['id'] )['level'], $role );
+		}
 	}
 
 	public function test_unknown_stored_protection_fails_closed() {
