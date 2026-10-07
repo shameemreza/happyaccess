@@ -476,6 +476,17 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertSame( array(), array_values( array_diff( CapabilityGuard::APP_PASSWORD_CAPS, CapabilityGuard::SELF_BLOCKED ) ) );
 	}
 
+	public function test_self_blocked_caps_never_drift_from_the_catalog() {
+		$this->assertSame( array(), array_values( array_diff( CapabilityGuard::SELF_BLOCKED, CapabilityGuard::APP_PASSWORD_CAPS, Catalog::NEVER ) ) );
+		$this->assertSame( array(), array_values( array_diff( Catalog::NETWORK_CAPS, CapabilityGuard::SELF_BLOCKED ) ) );
+		$this->assertSame( array(), array_values( array_diff( Catalog::NETWORK_CAPS, CapabilityGuard::ALWAYS_BLOCKED ) ) );
+	}
+
+	public function test_full_cannot_upload_unfiltered_files() {
+		$temp = $this->full();
+		$this->assertSame( array( 'do_not_allow' ), CapabilityGuard::map( array( 'unfiltered_upload' ), 'unfiltered_upload', $temp, array() ) );
+	}
+
 	public function test_full_options_page_save_cannot_write_happyaccess_options() {
 		$secret = get_option( 'happyaccess_secret' );
 		$this->full();

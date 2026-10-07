@@ -132,9 +132,9 @@ final class Catalog {
 	const CONTENT_PATTERN = '/_(post|posts|page|pages)$/';
 
 	/**
-	 * Capabilities a support pass can never receive.
+	 * Network caps. No pass gets them, and the guard blocks them on every level.
 	 */
-	const NEVER = array(
+	const NETWORK_CAPS = array(
 		'manage_network',
 		'manage_network_users',
 		'manage_network_plugins',
@@ -145,6 +145,13 @@ final class Catalog {
 		'delete_sites',
 		'upgrade_network',
 		'setup_network',
+	);
+
+	/**
+	 * Capabilities a support pass can never receive.
+	 */
+	const NEVER = array(
+		...self::NETWORK_CAPS,
 		'erase_others_personal_data',
 		'export_others_personal_data',
 		'edit_plugins',

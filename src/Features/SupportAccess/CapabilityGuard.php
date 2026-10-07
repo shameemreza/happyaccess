@@ -34,16 +34,7 @@ final class CapabilityGuard {
 		'unfiltered_upload',
 		'erase_others_personal_data',
 		'export_others_personal_data',
-		'manage_network',
-		'manage_network_users',
-		'manage_network_plugins',
-		'manage_network_themes',
-		'manage_network_options',
-		'manage_sites',
-		'create_sites',
-		'delete_sites',
-		'upgrade_network',
-		'setup_network',
+		...Catalog::NETWORK_CAPS,
 	);
 
 	/**
@@ -118,25 +109,18 @@ final class CapabilityGuard {
 
 	/**
 	 * Caps blocked on every level, including full. The file editor could
-	 * rewrite HappyAccess itself. The network caps match the ones in Catalog::NEVER.
+	 * rewrite HappyAccess itself. Apart from the application password caps,
+	 * every one is in Catalog::NEVER too.
 	 */
 	const SELF_BLOCKED = array(
 		...self::APP_PASSWORD_CAPS,
 		'edit_plugins',
 		'edit_themes',
 		'edit_files',
+		'unfiltered_upload',
 		'erase_others_personal_data',
 		'export_others_personal_data',
-		'manage_network',
-		'manage_network_users',
-		'manage_network_plugins',
-		'manage_network_themes',
-		'manage_network_options',
-		'manage_sites',
-		'create_sites',
-		'delete_sites',
-		'upgrade_network',
-		'setup_network',
+		...Catalog::NETWORK_CAPS,
 	);
 
 	/**
