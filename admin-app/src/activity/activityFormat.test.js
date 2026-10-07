@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getSettings, setSettings } from '@wordpress/date';
 import {
 	countCsvRows,
+	featureTag,
 	groupByDay,
 	rangeFilters,
 	shiftDay,
@@ -84,5 +85,19 @@ describe( 'countCsvRows', () => {
 		expect( countCsvRows( csv ) ).toBe( 2 );
 		expect( countCsvRows( 'time,summary\n' ) ).toBe( 0 );
 		expect( countCsvRows( '' ) ).toBe( 0 );
+	} );
+} );
+
+describe( 'featureTag', () => {
+	it( 'tags what the server calls an admin event as Admin, whatever its feature', () => {
+		expect(
+			featureTag( item( { feature: 'support', kind: 'admin' } ) ).label
+		).toBe( 'Admin' );
+		expect(
+			featureTag( item( { feature: 'support', kind: 'agent' } ) ).label
+		).toBe( 'Support access' );
+		expect(
+			featureTag( item( { feature: 'core', kind: 'core' } ) ).label
+		).toBe( 'HappyAccess' );
 	} );
 } );

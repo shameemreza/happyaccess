@@ -3,20 +3,6 @@ import { __ } from '@wordpress/i18n';
 
 export const PER_PAGE = 25;
 
-// Mirrors Privacy::ADMIN_EVENTS: what a site admin did, as opposed to what a pass did.
-const ADMIN_EVENTS = [
-	'grant_created',
-	'grant_extended',
-	'grant_suspended',
-	'grant_resumed',
-	'grant_regenerated',
-	'grant_ended',
-	'temp_user_deleted',
-	'temp_user_delete_failed',
-	'bundle_emailed',
-	'emergency_lock',
-];
-
 const WARN_EVENTS = [ 'login_failed', 'access_blocked', 'wc_key_blocked' ];
 
 const ICONS = {
@@ -123,7 +109,7 @@ export function rangeFilters( when, from, to, today ) {
  * @return {boolean} Whether a site admin did this, rather than a pass.
  */
 export function isAdminItem( item ) {
-	return 'admin' === item.feature || ADMIN_EVENTS.includes( item.event );
+	return 'admin' === item.kind;
 }
 
 /**
@@ -245,5 +231,6 @@ export function downloadCsv( csv, filename ) {
 	document.body.appendChild( link );
 	link.click();
 	link.remove();
-	URL.revokeObjectURL( url );
+	// Gives the browser a moment to start the download before the URL goes.
+	setTimeout( () => URL.revokeObjectURL( url ), 1000 );
 }

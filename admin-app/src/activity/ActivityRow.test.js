@@ -43,6 +43,7 @@ describe( 'ActivityRow', () => {
 		setup(
 			item( {
 				event: 'grant_created',
+				kind: 'admin',
 				summary: 'Gave support access to Acme',
 				actor: { id: 1, name: 'Sam' },
 			} )

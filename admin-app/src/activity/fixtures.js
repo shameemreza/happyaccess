@@ -5,6 +5,7 @@ export const item = ( extra = {} ) => ( {
 	feature: 'support',
 	event: 'settings_saved',
 	event_label: 'Settings saved',
+	kind: 'agent',
 	summary: 'Saved WooCommerce shipping settings',
 	actor: { id: 12, name: 'Acme Plugin Support' },
 	ip: '203.0.113.24',

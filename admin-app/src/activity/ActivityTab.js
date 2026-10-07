@@ -127,17 +127,20 @@ export default function ActivityTab( {
 	}, [ searchText ] );
 
 	// A change to the filters starts again at the first page.
-	const change = ( setter ) => ( value ) => {
+	const change = ( current, setter ) => ( value ) => {
+		if ( value === current ) {
+			return;
+		}
 		speak.current = true;
 		setter( value );
 		setPage( 1 );
 		setOpenId( 0 );
 	};
-	const pickFeature = change( setFeature );
-	const pickWho = change( setWho );
-	const pickWhen = change( setWhen );
-	const pickFrom = change( setFrom );
-	const pickTo = change( setTo );
+	const pickFeature = change( feature, setFeature );
+	const pickWho = change( who, setWho );
+	const pickWhen = change( when, setWhen );
+	const pickFrom = change( from, setFrom );
+	const pickTo = change( to, setTo );
 
 	const filters = useMemo( () => {
 		const next = { feature, ...rangeFilters( when, from, to, today ) };
@@ -152,20 +155,24 @@ export default function ActivityTab( {
 		return next;
 	}, [ feature, who, when, from, to, today, search ] );
 
-	const activity = useActivity( {
-		...filters,
-		page,
-		per_page: PER_PAGE,
-	} );
-	const { items, total, loading, error } = activity;
+	const request = { ...filters, page, per_page: PER_PAGE };
+	const activity = useActivity( request );
+	const { items, total, loading, error, loadedKey } = activity;
 
-	// Say how many events a change of filters found, once it has loaded.
+	// Say how many events a change of filters found, once the list for those
+	// filters is the one on screen. Until then the total is the old one.
+	const requestKey = JSON.stringify( request );
 	useEffect( () => {
-		if ( ! loading && ! error && speak.current ) {
+		if (
+			speak.current &&
+			! loading &&
+			! error &&
+			loadedKey === requestKey
+		) {
 			speak.current = false;
 			announce( countText( total ) );
 		}
-	}, [ loading, error, total, announce ] );
+	}, [ loading, error, loadedKey, requestKey, total, announce ] );
 
 	const days = useMemo( () => groupByDay( items, now ), [ items, now ] );
 
@@ -465,7 +472,12 @@ export default function ActivityTab( {
 					<span className="ha-log__count">
 						{ sprintf(
 							/* translators: 1: events on this page. 2: events in all. */
-							__( 'Showing %1$d of %2$d events.', 'happyaccess' ),
+							_n(
+								'Showing %1$d of %2$d event.',
+								'Showing %1$d of %2$d events.',
+								total,
+								'happyaccess'
+							),
 							items.length,
 							total
 						) }
@@ -477,6 +489,15 @@ export default function ActivityTab( {
 						size="compact"
 						accessibleWhenDisabled
 						disabled={ page <= 1 }
+						aria-label={ sprintf(
+							/* translators: 1: the current page number. 2: the number of pages. */
+							__(
+								'Previous page, page %1$d of %2$d',
+								'happyaccess'
+							),
+							page,
+							lastPage
+						) }
 						onClick={ () => turn( -1 ) }
 					>
 						{ __( 'Previous', 'happyaccess' ) }
@@ -486,6 +507,12 @@ export default function ActivityTab( {
 						size="compact"
 						accessibleWhenDisabled
 						disabled={ page >= lastPage }
+						aria-label={ sprintf(
+							/* translators: 1: the current page number. 2: the number of pages. */
+							__( 'Next page, page %1$d of %2$d', 'happyaccess' ),
+							page,
+							lastPage
+						) }
 						onClick={ () => turn( 1 ) }
 					>
 						{ __( 'Next', 'happyaccess' ) }

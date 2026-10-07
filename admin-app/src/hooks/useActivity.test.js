@@ -73,3 +73,46 @@ it( 'sets error on failure', async () => {
 	await waitFor( () => expect( result.current.loading ).toBe( false ) );
 	expect( result.current.error.code ).toBe( 'network' );
 } );
+
+it( 'clears the old items when a request fails', async () => {
+	apiFetch.mockResolvedValueOnce( page( [ 1, 2 ] ) );
+	const { result, rerender } = renderHook(
+		( { filters } ) => useActivity( filters ),
+		{ initialProps: { filters: { search: 'a' } } }
+	);
+	await waitFor( () => expect( result.current.items ).toHaveLength( 2 ) );
+
+	apiFetch.mockRejectedValueOnce( {
+		code: 'rest_forbidden',
+		message: 'No.',
+	} );
+	rerender( { filters: { search: 'ab' } } );
+	await waitFor( () => expect( result.current.error ).not.toBeNull() );
+
+	expect( result.current.items ).toEqual( [] );
+	expect( result.current.total ).toBe( 0 );
+} );
+
+it( 'reports which filters the shown items were loaded for', async () => {
+	let resolveSecond;
+	apiFetch.mockResolvedValueOnce( page( [ 1 ] ) );
+	apiFetch.mockImplementationOnce(
+		() => new Promise( ( resolve ) => ( resolveSecond = resolve ) )
+	);
+	const { result, rerender } = renderHook(
+		( { filters } ) => useActivity( filters ),
+		{ initialProps: { filters: { search: 'a' } } }
+	);
+	await waitFor( () =>
+		expect( result.current.loadedKey ).toBe( '{"search":"a"}' )
+	);
+
+	rerender( { filters: { search: 'ab' } } );
+	await waitFor( () => expect( result.current.loading ).toBe( true ) );
+	expect( result.current.loadedKey ).toBe( '{"search":"a"}' );
+
+	resolveSecond( page( [ 2 ] ) );
+	await waitFor( () =>
+		expect( result.current.loadedKey ).toBe( '{"search":"ab"}' )
+	);
+} );

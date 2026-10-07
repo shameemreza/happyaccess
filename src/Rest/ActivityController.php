@@ -375,6 +375,7 @@ final class ActivityController {
 				'feature'     => (string) $row['feature'],
 				'event'       => (string) $row['event_type'],
 				'event_label' => EventLabels::label( $row['event_type'] ),
+				'kind'        => self::kind( (string) $row['event_type'] ),
 				'summary'     => (string) $row['summary'],
 				'actor'       => array(
 					'id'   => $user_id,
@@ -386,6 +387,25 @@ final class ActivityController {
 			);
 		}
 		return $items;
+	}
+
+	/**
+	 * Who an event belongs to: a site admin, a pass, the plugin itself, or none of these.
+	 *
+	 * @param string $event Event key.
+	 * @return string One of admin, agent, core or other.
+	 */
+	private static function kind( $event ) {
+		if ( in_array( $event, Privacy::ADMIN_EVENTS, true ) ) {
+			return 'admin';
+		}
+		if ( in_array( $event, Privacy::AGENT_EVENTS, true ) ) {
+			return 'agent';
+		}
+		if ( in_array( $event, Privacy::CORE_EVENTS, true ) ) {
+			return 'core';
+		}
+		return 'other';
 	}
 
 	/**

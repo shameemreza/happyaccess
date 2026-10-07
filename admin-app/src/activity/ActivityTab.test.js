@@ -27,6 +27,19 @@ const readBlob = ( blob ) =>
 	} );
 
 let rows;
+let gate = null;
+
+// Makes the next activity list request wait until the returned function is called.
+function holdNext() {
+	let release;
+	gate = new Promise( ( resolve ) => ( release = resolve ) );
+	return release;
+}
+
+const liveText = () =>
+	document
+		.querySelector( '.screen-reader-text[aria-live="polite"]' )
+		.textContent.trim();
 let lastPage;
 let routes;
 
@@ -58,6 +71,11 @@ function mockServer( { grants = [ grantFixture() ], total } = {} ) {
 				csv: 'time,summary\n2026-10-06,"One"\n2026-10-06,"Two"\n',
 			};
 		}
+		if ( gate ) {
+			const waiting = gate;
+			gate = null;
+			await waiting;
+		}
 		lastPage = Number( url.searchParams.get( 'page' ) || 1 );
 		return page( rows, { total: total ?? rows.length, page: lastPage } );
 	} );
@@ -77,6 +95,7 @@ function setup( props = {} ) {
 }
 
 beforeEach( () => {
+	gate = null;
 	apiFetch.mockReset();
 	rows = [
 		item( { id: 1, time: at( '2026-10-05T19:00:00Z' ) } ),
@@ -318,20 +337,26 @@ describe( 'ActivityTab', () => {
 			await screen.findByText( /Showing 2 of 60 events\./ )
 		).toHaveTextContent( 'Kept for 90 days, change it in Settings.' );
 		expect(
-			screen.getByRole( 'button', { name: 'Previous' } )
+			screen.getByRole( 'button', { name: 'Previous page, page 1 of 3' } )
 		).toHaveAttribute( 'aria-disabled', 'true' );
 
-		await user.click( screen.getByRole( 'button', { name: 'Next' } ) );
+		await user.click(
+			screen.getByRole( 'button', { name: 'Next page, page 1 of 3' } )
+		);
 		await waitFor( () =>
 			expect( lastActivity().get( 'page' ) ).toBe( '2' )
 		);
 		await waitFor( () =>
 			expect(
-				screen.getByRole( 'button', { name: 'Previous' } )
+				screen.getByRole( 'button', {
+					name: 'Previous page, page 2 of 3',
+				} )
 			).not.toHaveAttribute( 'aria-disabled', 'true' )
 		);
 
-		await user.click( screen.getByRole( 'button', { name: 'Previous' } ) );
+		await user.click(
+			screen.getByRole( 'button', { name: 'Previous page, page 2 of 3' } )
+		);
 		await waitFor( () =>
 			expect( lastActivity().has( 'page' ) ).toBe( true )
 		);
@@ -370,10 +395,16 @@ describe( 'ActivityTab', () => {
 			screen.getByRole( 'button', { name: 'Export CSV' } )
 		);
 
-		await waitFor( () =>
-			expect( URL.revokeObjectURL ).toHaveBeenCalledWith( 'blob:csv' )
-		);
 		expect( created ).toHaveLength( 1 );
+		// The link needs a moment to start the download before the URL goes.
+		expect( URL.revokeObjectURL ).not.toHaveBeenCalled();
+		await waitFor(
+			() =>
+				expect( URL.revokeObjectURL ).toHaveBeenCalledWith(
+					'blob:csv'
+				),
+			{ timeout: 2000 }
+		);
 		expect( created[ 0 ].type ).toBe( 'text/csv;charset=utf-8' );
 		expect( await readBlob( created[ 0 ] ) ).toBe(
 			'time,summary\n2026-10-06,"One"\n2026-10-06,"Two"\n'
@@ -382,6 +413,68 @@ describe( 'ActivityTab', () => {
 		expect( screen.getByText( 'Exported 2 events' ) ).toBeInTheDocument();
 		// The export sends the filters, not a page.
 		expect( routes[ '/activity/export' ][ 0 ].has( 'page' ) ).toBe( false );
+	} );
+
+	it( 'announces a new count only after the new filters have loaded', async () => {
+		const { user } = setup();
+		await screen.findByText( 'Saved WooCommerce shipping settings' );
+		expect( liveText() ).toBe( '' );
+
+		const release = holdNext();
+		await user.click( screen.getByRole( 'button', { name: 'Admin' } ) );
+		await waitFor( () =>
+			expect( lastActivity().get( 'feature' ) ).toBe( 'admin' )
+		);
+		// The old list is still on screen, and its two events are not news.
+		expect( liveText() ).toBe( '' );
+
+		rows = [ rows[ 0 ] ];
+		release();
+
+		await waitFor( () => expect( liveText() ).toBe( '1 event' ) );
+	} );
+
+	it( 'says nothing when a filter is picked that was already picked', async () => {
+		const { user } = setup();
+		await screen.findByText( 'Saved WooCommerce shipping settings' );
+		const before = activityCalls().length;
+
+		await user.click( screen.getByRole( 'button', { name: 'All' } ) );
+		await user.selectOptions(
+			screen.getByLabelText( 'When' ),
+			'Last 7 days'
+		);
+
+		expect( activityCalls() ).toHaveLength( before );
+		expect( liveText() ).toBe( '' );
+	} );
+
+	it( 'counts one event in the singular', async () => {
+		rows = [ rows[ 0 ] ];
+		setup();
+
+		expect(
+			await screen.findByText( /Showing 1 of 1 event\./ )
+		).toBeVisible();
+	} );
+
+	it( 'drops the old rows when a request fails', async () => {
+		const { user } = setup();
+		await screen.findByText( 'Saved WooCommerce shipping settings' );
+
+		apiFetch.mockImplementationOnce( async () => {
+			throw {
+				code: 'rest_forbidden',
+				message: 'Nope.',
+				data: { status: 403 },
+			};
+		} );
+		await user.click( screen.getByRole( 'button', { name: 'Admin' } ) );
+
+		await screen.findByRole( 'button', { name: 'Try again' } );
+		expect(
+			screen.queryByText( 'Saved WooCommerce shipping settings' )
+		).not.toBeInTheDocument();
 	} );
 
 	it( 'shows an empty state and an error with a way to retry', async () => {

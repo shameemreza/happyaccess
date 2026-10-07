@@ -204,6 +204,25 @@ class ActivityControllerTest extends RestTestCase {
 		$this->assertArrayHasKey( 'ip', $items[2] );
 	}
 
+	public function test_each_item_has_a_kind_from_the_event_lists() {
+		AuditLog::add( 'some_unlisted_event', array( 'feature' => 'support' ) );
+		AuditLog::add( 'plugin_upgraded', array( 'feature' => 'core' ) );
+		AuditLog::add( 'settings_saved', array( 'feature' => 'support' ) );
+		AuditLog::add( 'grant_created', array( 'feature' => 'support' ) );
+
+		$items = $this->get( '/activity' )->get_data()['items'];
+
+		$this->assertSame(
+			array(
+				'grant_created'       => 'admin',
+				'settings_saved'      => 'agent',
+				'plugin_upgraded'     => 'core',
+				'some_unlisted_event' => 'other',
+			),
+			array_column( $items, 'kind', 'event' )
+		);
+	}
+
 	public function test_summary_counts_match_seeded_rows() {
 		$grant = Grants::create( array( 'label' => 'Acme' ) )['id'];
 		$other = Grants::create( array( 'label' => 'Other' ) )['id'];
