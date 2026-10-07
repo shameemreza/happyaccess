@@ -322,6 +322,21 @@ describe( 'App shell', () => {
 		expect(
 			screen.queryByRole( 'heading', { name: 'Set up HappyAccess' } )
 		).not.toBeInTheDocument();
+		// Setup is gone, so focus goes to the first field of the form.
+		await waitFor( () =>
+			expect(
+				screen.getByRole( 'textbox', { name: 'Who is it for' } )
+			).toHaveFocus()
+		);
+
+		// Leaving the tab and coming back does not pull focus into the form again.
+		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
+		await user.click(
+			screen.getByRole( 'link', { name: 'Support access' } )
+		);
+		expect(
+			screen.getByRole( 'textbox', { name: 'Who is it for' } )
+		).not.toHaveFocus();
 	} );
 
 	it( 'drops the Support access tab and updates the boot data when the feature is switched off', async () => {

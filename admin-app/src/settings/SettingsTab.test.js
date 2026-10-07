@@ -102,7 +102,7 @@ describe( 'Settings tab', () => {
 	it( 'keeps Save changes off until something changes, then sends only that key', async () => {
 		const user = userEvent.setup();
 		await renderTab();
-		expect( saveButton() ).toBeDisabled();
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 		expect(
 			screen.queryByText( 'Unsaved changes' )
 		).not.toBeInTheDocument();
@@ -113,15 +113,44 @@ describe( 'Settings tab', () => {
 		);
 
 		expect( screen.getByText( 'Unsaved changes' ) ).toBeInTheDocument();
-		expect( saveButton() ).toBeEnabled();
+		expect( saveButton() ).not.toHaveAttribute( 'aria-disabled', 'true' );
 		await user.click( saveButton() );
 
 		await waitFor( () => expect( liveText() ).toBe( 'Settings saved' ) );
 		expect( posts ).toEqual( [ { privacy: { retention_days: 365 } } ] );
-		expect( saveButton() ).toBeDisabled();
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 		expect(
 			screen.queryByText( 'Unsaved changes' )
 		).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps focus on Save changes through a save', async () => {
+		const user = userEvent.setup();
+		await renderTab();
+		await user.selectOptions(
+			screen.getByLabelText( 'Keep activity for' ),
+			'365'
+		);
+		const answer = apiFetch.getMockImplementation();
+		let release;
+		apiFetch.mockImplementation( ( request ) =>
+			'POST' === request.method
+				? new Promise( ( resolve ) => {
+						release = () => resolve( answer( request ) );
+					} )
+				: answer( request )
+		);
+
+		await user.click( saveButton() );
+
+		await waitFor( () => expect( release ).toBeDefined() );
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( saveButton() ).not.toBeDisabled();
+		expect( saveButton() ).toHaveFocus();
+		release();
+		await waitFor( () => expect( liveText() ).toBe( 'Settings saved' ) );
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( saveButton() ).toHaveFocus();
 	} );
 
 	it( 'drops a field that is put back to its saved value', async () => {
@@ -130,10 +159,10 @@ describe( 'Settings tab', () => {
 		const keep = screen.getByLabelText( 'Keep activity for' );
 
 		await user.selectOptions( keep, '90' );
-		expect( saveButton() ).toBeEnabled();
+		expect( saveButton() ).not.toHaveAttribute( 'aria-disabled', 'true' );
 		await user.selectOptions( keep, '30' );
 
-		expect( saveButton() ).toBeDisabled();
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
 	it( 'sends the lockout pair together and the other fields as they are', async () => {
@@ -204,7 +233,7 @@ describe( 'Settings tab', () => {
 		await user.selectOptions( select, 'Custom (7 tries, 20 minutes)' );
 
 		expect( select ).toHaveDisplayValue( 'Custom (7 tries, 20 minutes)' );
-		expect( saveButton() ).toBeDisabled();
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
 	it( 'shows a stored pair and a stored day count that are not presets, and leaves them alone', async () => {
@@ -251,7 +280,7 @@ describe( 'Settings tab', () => {
 			await within( page() ).findByText( 'That value is not allowed.' )
 		).toBeInTheDocument();
 		expect( screen.getByText( 'Unsaved changes' ) ).toBeInTheDocument();
-		expect( saveButton() ).toBeEnabled();
+		expect( saveButton() ).not.toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
 	describe( 'Support access', () => {
@@ -436,7 +465,7 @@ describe( 'Settings tab', () => {
 			expect(
 				screen.getByText( 'A secret key is saved' )
 			).toBeInTheDocument();
-			expect( saveButton() ).toBeDisabled();
+			expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 
 			await user.click(
 				screen.getByRole( 'button', { name: 'Remove' } )
@@ -450,6 +479,41 @@ describe( 'Settings tab', () => {
 				).not.toBeInTheDocument()
 			);
 			expect( screen.getByLabelText( 'Secret key' ) ).toHaveValue( '' );
+		} );
+
+		it( 'keeps focus on Remove while the secret is removed', async () => {
+			mockServer(
+				settingsFixture( {
+					security: {
+						recaptcha_enabled: true,
+						recaptcha_site_key: 'site-123',
+					},
+					recaptcha_secret_set: true,
+				} )
+			);
+			const user = userEvent.setup();
+			await renderTab();
+			const answer = apiFetch.getMockImplementation();
+			let release;
+			apiFetch.mockImplementation( ( request ) =>
+				'POST' === request.method
+					? new Promise( ( resolve ) => {
+							release = () => resolve( answer( request ) );
+						} )
+					: answer( request )
+			);
+			const remove = screen.getByRole( 'button', { name: 'Remove' } );
+
+			await user.click( remove );
+
+			await waitFor( () => expect( release ).toBeDefined() );
+			expect( remove ).toHaveAttribute( 'aria-disabled', 'true' );
+			expect( remove ).not.toBeDisabled();
+			expect( remove ).toHaveFocus();
+			release();
+			await waitFor( () =>
+				expect( screen.getByLabelText( 'Secret key' ) ).toHaveFocus()
+			);
 		} );
 
 		it( 'Remove drops a secret that was typed but not saved', async () => {
@@ -472,7 +536,7 @@ describe( 'Settings tab', () => {
 					''
 				)
 			);
-			expect( saveButton() ).toBeDisabled();
+			expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 			expect( posts ).toEqual( [ { recaptcha_secret_key: '' } ] );
 		} );
 
@@ -507,7 +571,10 @@ describe( 'Settings tab', () => {
 			await renderTab();
 
 			await user.type( screen.getByLabelText( 'Secret key' ), 's3cret' );
-			expect( saveButton() ).toBeEnabled();
+			expect( saveButton() ).not.toHaveAttribute(
+				'aria-disabled',
+				'true'
+			);
 			await user.click( saveButton() );
 
 			await waitFor( () => expect( posts ).toHaveLength( 1 ) );

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
@@ -103,12 +103,12 @@ describe( 'First-run setup', () => {
 			name: "I understand, and I'll only give access to people I trust.",
 		} );
 		expect( consent ).not.toBeChecked();
-		expect( finish ).toBeDisabled();
+		expect( finish ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		await user.click( consent );
-		expect( finish ).toBeEnabled();
+		expect( finish ).not.toHaveAttribute( 'aria-disabled', 'true' );
 		await user.click( consent );
-		expect( finish ).toBeDisabled();
+		expect( finish ).toHaveAttribute( 'aria-disabled', 'true' );
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
@@ -168,6 +168,67 @@ describe( 'First-run setup', () => {
 		} );
 	} );
 
+	it( 'keeps focus on Finish setup while it saves', async () => {
+		let release;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					release = () =>
+						resolve( { features: { support_access: true } } );
+				} )
+		);
+		const user = userEvent.setup();
+		render( <Setup /> );
+		await toConsent( user );
+		await user.click(
+			screen.getByRole( 'checkbox', {
+				name: "I understand, and I'll only give access to people I trust.",
+			} )
+		);
+		const finish = screen.getByRole( 'button', { name: 'Finish setup' } );
+
+		await user.click( finish );
+
+		await waitFor( () => expect( release ).toBeDefined() );
+		expect( finish ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( finish ).not.toBeDisabled();
+		expect( finish ).toHaveFocus();
+		release();
+		await screen.findByRole( 'heading', { name: "You're all set" } );
+	} );
+
+	it( 'keeps focus on Back while it saves', async () => {
+		let release;
+		apiFetch.mockImplementation(
+			() =>
+				new Promise( ( resolve ) => {
+					release = () =>
+						resolve( { features: { support_access: true } } );
+				} )
+		);
+		const user = userEvent.setup();
+		render( <Setup /> );
+		await toConsent( user );
+		await user.click(
+			screen.getByRole( 'checkbox', {
+				name: "I understand, and I'll only give access to people I trust.",
+			} )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Finish setup' } )
+		);
+		await waitFor( () => expect( release ).toBeDefined() );
+		const back = screen.getByRole( 'button', { name: 'Back' } );
+
+		act( () => back.focus() );
+
+		expect( back ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( back ).not.toBeDisabled();
+		expect( back ).toHaveFocus();
+		release();
+		await screen.findByRole( 'heading', { name: "You're all set" } );
+	} );
+
 	it( 'stays on the consent step and shows the error when saving fails', async () => {
 		apiFetch.mockRejectedValue( {
 			code: 'happyaccess_consent_required',
@@ -199,7 +260,7 @@ describe( 'First-run setup', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'button', { name: 'Finish setup' } )
-		).toBeEnabled();
+		).not.toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
 	it( 'has no accessibility violations on any step', async () => {

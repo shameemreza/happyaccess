@@ -28,6 +28,7 @@ const readBlob = ( blob ) =>
 
 let rows;
 let gate = null;
+let exportGate = null;
 
 // Makes the next activity list request wait until the returned function is called.
 function holdNext() {
@@ -66,6 +67,9 @@ function mockServer( { grants = [ grantFixture() ], total } = {} ) {
 			};
 		}
 		if ( '/activity/export' === route ) {
+			if ( exportGate ) {
+				await exportGate;
+			}
 			return {
 				filename: 'happyaccess-activity-2026-10-06.csv',
 				csv: 'time,summary\n2026-10-06,"One"\n2026-10-06,"Two"\n',
@@ -96,6 +100,7 @@ function setup( props = {} ) {
 
 beforeEach( () => {
 	gate = null;
+	exportGate = null;
 	apiFetch.mockReset();
 	rows = [
 		item( { id: 1, time: at( '2026-10-05T19:00:00Z' ) } ),
@@ -448,6 +453,31 @@ describe( 'ActivityTab', () => {
 		expect( screen.getByText( 'Exported 2 events' ) ).toBeInTheDocument();
 		// The export sends the filters, not a page.
 		expect( routes[ '/activity/export' ][ 0 ].has( 'page' ) ).toBe( false );
+	} );
+
+	it( 'keeps focus on Export CSV while the export runs', async () => {
+		URL.createObjectURL = vi.fn( () => 'blob:csv' );
+		URL.revokeObjectURL = vi.fn();
+		vi.spyOn(
+			window.HTMLAnchorElement.prototype,
+			'click'
+		).mockImplementation( () => {} );
+		let release;
+		exportGate = new Promise( ( resolve ) => ( release = resolve ) );
+		const { user } = setup();
+		await screen.findByText( 'Saved WooCommerce shipping settings' );
+		const button = screen.getByRole( 'button', { name: 'Export CSV' } );
+
+		await user.click( button );
+
+		await waitFor( () =>
+			expect( button ).toHaveAttribute( 'aria-disabled', 'true' )
+		);
+		expect( button ).not.toBeDisabled();
+		expect( button ).toHaveFocus();
+		release();
+		await screen.findByText( 'Exported 2 events' );
+		expect( button ).toHaveFocus();
 	} );
 
 	it( 'announces a new count only after the new filters have loaded', async () => {

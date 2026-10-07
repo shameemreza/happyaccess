@@ -56,7 +56,11 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 	// Bumped when Emergency lock ends every pass, so the list loads again.
 	const [ lockCount, setLockCount ] = useState( 0 );
 
+	// True right after setup, so the Support access form takes focus once.
+	const [ afterSetup, setAfterSetup ] = useState( false );
+
 	const select = useCallback( ( slug, args ) => {
+		setAfterSetup( false );
 		setCurrent( slug );
 		storeTab( slug );
 		window.history.replaceState(
@@ -89,6 +93,7 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 			}
 			setNeedsSetup( false );
 			select( 'support' );
+			setAfterSetup( true );
 		},
 		[ updateFeatures, select ]
 	);
@@ -110,6 +115,7 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 					{ 'support' === active.slug && (
 						<SupportTab
 							boot={ appBoot }
+							focusOnOpen={ afterSetup }
 							refreshKey={ lockCount }
 							onViewActivity={ openActivity }
 						/>

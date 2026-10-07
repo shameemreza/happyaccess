@@ -534,6 +534,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 													variant="tertiary"
 													isDestructive
 													size="compact"
+													accessibleWhenDisabled
 													disabled={ saving }
 													onClick={ removeSecret }
 												>
@@ -560,6 +561,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 								type="submit"
 								variant="primary"
 								isBusy={ saving }
+								accessibleWhenDisabled
 								disabled={ ! dirty || saving }
 							>
 								{ __( 'Save changes', 'happyaccess' ) }

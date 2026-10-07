@@ -225,6 +225,7 @@ export default function Setup( { onFinish = noop } ) {
 						{ 2 === step && (
 							<Button
 								variant="secondary"
+								accessibleWhenDisabled
 								disabled={ busy }
 								onClick={ () => setStep( 1 ) }
 							>
@@ -244,6 +245,7 @@ export default function Setup( { onFinish = noop } ) {
 							<Button
 								variant="primary"
 								isBusy={ busy }
+								accessibleWhenDisabled
 								disabled={ ! agreed || busy }
 								onClick={ finish }
 							>

@@ -36,12 +36,14 @@ function countLine( count ) {
  *
  * @param {Object}                props                Props.
  * @param {Object}                props.boot           Boot data.
+ * @param {boolean}               props.focusOnOpen    Whether the form's first field takes focus when the tab opens, as it does after setup.
  * @param {number}                props.refreshKey     Changes when something outside ended every pass, so the list loads again.
  * @param {(id?: number) => void} props.onViewActivity Opens the Activity tab, optionally for one pass.
  * @return {Element} The tab.
  */
 export default function SupportTab( {
 	boot = NO_BOOT,
+	focusOnOpen = false,
 	refreshKey = 0,
 	onViewActivity = noop,
 } ) {
@@ -54,7 +56,7 @@ export default function SupportTab( {
 	// Bumped for every change to the secrets, so the activity footer loads again.
 	const [ events, setEvents ] = useState( 0 );
 	const labelRef = useRef( null );
-	const focusForm = useRef( false );
+	const focusForm = useRef( focusOnOpen );
 	const startKey = useRef( refreshKey );
 
 	// Everything ended elsewhere, so the secrets on screen no longer work.
@@ -66,7 +68,7 @@ export default function SupportTab( {
 		}
 	}, [ refreshKey, refresh ] );
 
-	// After "Done" the form is back. Put the cursor in its first field.
+	// After "Done", or on opening the tab when asked, put the cursor in the form's first field.
 	useEffect( () => {
 		if ( null === result && focusForm.current ) {
 			focusForm.current = false;
