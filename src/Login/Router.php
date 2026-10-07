@@ -34,13 +34,17 @@ final class Router {
 	}
 
 	/**
-	 * Registers a step handler.
+	 * Registers a step handler. A handler that can't be called is ignored, so
+	 * a typo can't turn into a fatal error on the login screen.
 	 *
 	 * @param string   $step    Step name.
 	 * @param callable $handler Handler; it renders or redirects.
 	 * @return void
 	 */
 	public static function add_step( $step, $handler ) {
+		if ( ! is_callable( $handler ) ) {
+			return;
+		}
 		self::$steps[ sanitize_key( $step ) ] = $handler;
 	}
 
@@ -58,6 +62,10 @@ final class Router {
 	/**
 	 * URL of a step, built on wp_login_url() so login URL filters apply.
 	 *
+	 * The result is a plain URL. Wrap it in esc_url() when printing it into
+	 * HTML. Extra args that aren't text or numbers are dropped, and they can
+	 * never replace the action or the step.
+	 *
 	 * @param string $step Step name.
 	 * @param array  $args Extra query args.
 	 * @return string
@@ -67,10 +75,16 @@ final class Router {
 			'action' => self::ACTION,
 			'step'   => sanitize_key( $step ),
 		);
+		$extra = array();
 		foreach ( $args as $key => $value ) {
-			$query[ sanitize_key( $key ) ] = rawurlencode( (string) $value );
+			$key = sanitize_key( $key );
+			if ( '' === $key || ! is_scalar( $value ) ) {
+				continue;
+			}
+			$extra[ $key ] = rawurlencode( (string) $value );
 		}
-		return add_query_arg( $query, wp_login_url() );
+		// The union keeps the left side, so an extra arg can't replace the action or the step.
+		return add_query_arg( $query + $extra, wp_login_url() );
 	}
 
 	/**
@@ -84,19 +98,35 @@ final class Router {
 	}
 
 	/**
-	 * Runs the current step, or sends unknown steps to the normal login.
+	 * The wp-login.php hook: runs the current step, then ends the request.
 	 *
 	 * @return void
 	 */
 	public static function dispatch() {
+		self::run();
+		exit;
+	}
+
+	/**
+	 * Runs the current step, or sends unknown steps to the normal login. The
+	 * page is marked uncacheable first, for every step, so page caches never
+	 * store a screen that carries a nonce or a one-time key. Split out of
+	 * dispatch() so tests can run it without ending the request.
+	 *
+	 * @return bool True when a step handler ran, false when the visitor was redirected.
+	 */
+	public static function run() {
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Page cache plugins read this exact constant.
+		}
 		nocache_headers();
 		$handler = self::resolve( self::current_step() );
 		if ( null === $handler ) {
 			wp_safe_redirect( wp_login_url() );
-			exit;
+			return false;
 		}
 		call_user_func( $handler );
-		exit;
+		return true;
 	}
 
 	/**
