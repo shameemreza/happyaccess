@@ -6,11 +6,13 @@
  */
 
 use HappyAccess\Admin\Page;
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
+use HappyAccess\Rest\Routes;
 
 class PageTest extends WP_UnitTestCase {
 
@@ -20,6 +22,13 @@ class PageTest extends WP_UnitTestCase {
 	 * @var array
 	 */
 	private $menu_globals = array();
+
+	/**
+	 * Settings globals as they were before the REST server started.
+	 *
+	 * @var array
+	 */
+	private $settings_globals = array();
 
 	public function set_up() {
 		parent::set_up();
@@ -33,6 +42,10 @@ class PageTest extends WP_UnitTestCase {
 		}
 		$GLOBALS['menu']    = array();
 		$GLOBALS['submenu'] = array();
+
+		foreach ( array( 'new_allowed_options', 'wp_registered_settings' ) as $name ) {
+			$this->settings_globals[ $name ] = isset( $GLOBALS[ $name ] ) ? $GLOBALS[ $name ] : null;
+		}
 	}
 
 	public function tear_down() {
@@ -43,6 +56,12 @@ class PageTest extends WP_UnitTestCase {
 		foreach ( $this->menu_globals as $name => $value ) {
 			$GLOBALS[ $name ] = $value;
 		}
+		foreach ( $this->settings_globals as $name => $value ) {
+			$GLOBALS[ $name ] = $value;
+		}
+		global $wp_rest_server;
+		$wp_rest_server = null;
+		wp_scripts()->add_data( 'wp-api-fetch', 'after', array() );
 		Clock::freeze( null );
 		parent::tear_down();
 	}
@@ -159,5 +178,92 @@ class PageTest extends WP_UnitTestCase {
 		$html = ob_get_clean();
 
 		$this->assertStringContainsString( '<div class="wrap"><hr class="wp-header-end"><div id="happyaccess-root" class="happyaccess-app"></div>', $html );
+	}
+
+	public function test_nothing_is_preloaded_before_setup() {
+		$this->assertSame( array(), Page::preload_paths() );
+	}
+
+	public function test_preload_paths_match_what_the_app_requests() {
+		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+
+		// 1790000000 is 2026-09-21 in UTC, the test site's timezone.
+		$this->assertSame(
+			array(
+				'/happyaccess/v1/settings',
+				'/happyaccess/v1/grants',
+				'/happyaccess/v1/catalog',
+				'/happyaccess/v1/activity?since=2026-09-15&until=2026-09-21&page=1&per_page=25',
+			),
+			Page::preload_paths()
+		);
+	}
+
+	public function test_preload_days_follow_the_site_timezone() {
+		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+		update_option( 'timezone_string', 'Pacific/Auckland' );
+		// 2026-09-21 13:46 UTC is already the 22nd in Auckland.
+		$this->assertStringContainsString( 'since=2026-09-16&until=2026-09-22', Page::preload_paths()[3] );
+	}
+
+	/**
+	 * The script printed after wp-api-fetch, decoded.
+	 *
+	 * @return array{0: string, 1: array} The script and the preload data.
+	 */
+	private function printed_preload() {
+		$after  = implode( '', (array) wp_scripts()->get_data( 'wp-api-fetch', 'after' ) );
+		$prefix = 'wp.apiFetch.use( wp.apiFetch.createPreloadingMiddleware( ';
+		$this->assertStringContainsString( $prefix, $after );
+
+		$json = substr( $after, strpos( $after, $prefix ) + strlen( $prefix ) );
+		$json = substr( $json, 0, strrpos( $json, ' ) );' ) );
+		$data = json_decode( $json, true );
+		$this->assertIsArray( $data );
+		return array( $after, $data );
+	}
+
+	public function test_enqueue_preloads_the_first_view_without_secrets() {
+		if ( ! is_readable( HAPPYACCESS_PLUGIN_DIR . 'build/index.asset.php' ) ) {
+			$this->markTestSkipped( 'Run npm run build first.' );
+		}
+		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+		update_option( \HappyAccess\Rest\SettingsController::SECRET_OPTION, 'recaptcha-private-value' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		Grants::create(
+			array(
+				'label' => 'Vendor pass',
+				'email' => 'agent@example.com',
+			)
+		);
+		AuditLog::add( 'grant_created', array( 'feature' => 'support' ) );
+		Routes::register();
+		Page::add_menu();
+
+		Page::enqueue( Page::hook_suffix() );
+
+		list( $script, $data ) = $this->printed_preload();
+		$this->assertSame( Page::preload_paths(), array_keys( $data ) );
+		$this->assertArrayHasKey( 'features', $data['/happyaccess/v1/settings']['body'] );
+		$this->assertCount( 1, $data['/happyaccess/v1/grants']['body']['items'] );
+		$this->assertArrayHasKey( 'groups', $data['/happyaccess/v1/catalog']['body'] );
+		$this->assertGreaterThanOrEqual( 1, $data[ Page::preload_paths()[3] ]['body']['total'] );
+
+		foreach ( array( '_hash', 'code"', 'link_key', 'recaptcha-private-value' ) as $needle ) {
+			$this->assertStringNotContainsString( $needle, $script );
+		}
+	}
+
+	public function test_enqueue_preloads_nothing_before_setup() {
+		if ( ! is_readable( HAPPYACCESS_PLUGIN_DIR . 'build/index.asset.php' ) ) {
+			$this->markTestSkipped( 'Run npm run build first.' );
+		}
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		Page::add_menu();
+
+		Page::enqueue( Page::hook_suffix() );
+
+		$after = implode( '', (array) wp_scripts()->get_data( 'wp-api-fetch', 'after' ) );
+		$this->assertStringNotContainsString( 'createPreloadingMiddleware( {', $after );
 	}
 }

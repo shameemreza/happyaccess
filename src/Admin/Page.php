@@ -8,6 +8,7 @@
 namespace HappyAccess\Admin;
 
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Clock;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\MenuGuard;
 use HappyAccess\Login\Router;
@@ -26,6 +27,17 @@ final class Page {
 	const HANDLE = 'happyaccess-admin';
 
 	const MAX_DAYS = 30;
+
+	/**
+	 * Rows per page the Activity tab asks for. Keep in step with PER_PAGE in
+	 * admin-app/src/activity/activityFormat.js, or the preloaded page misses.
+	 */
+	const ACTIVITY_PER_PAGE = 25;
+
+	/**
+	 * Days the Activity tab shows by default, today included.
+	 */
+	const ACTIVITY_DEFAULT_DAYS = 7;
 
 	/**
 	 * Hook suffix returned by add_users_page().
@@ -107,6 +119,71 @@ final class Page {
 
 		wp_enqueue_script( self::HANDLE );
 		wp_enqueue_style( self::HANDLE );
+
+		self::print_preload();
+	}
+
+	/**
+	 * Answers the app's first GET requests from the page, so the first view
+	 * needs no round trip. Nothing here carries a code, key or hash: the
+	 * settings, grants, catalog and activity responses never hold one.
+	 *
+	 * @return void
+	 */
+	private static function print_preload() {
+		$paths = self::preload_paths();
+		if ( array() === $paths ) {
+			return;
+		}
+
+		$preload = array_reduce( $paths, 'rest_preload_api_request', array() );
+		if ( empty( $preload ) ) {
+			return;
+		}
+
+		wp_add_inline_script(
+			'wp-api-fetch',
+			sprintf(
+				'wp.apiFetch.use( wp.apiFetch.createPreloadingMiddleware( %s ) );',
+				wp_json_encode( $preload )
+			),
+			'after'
+		);
+	}
+
+	/**
+	 * REST paths the app requests first. Each must match what api.js sends,
+	 * query string included. The preloading middleware sorts the query, and
+	 * apiFetch adds _locale later, so neither belongs here.
+	 *
+	 * Nothing is preloaded before setup, since the setup screen reads none of it.
+	 *
+	 * @return string[]
+	 */
+	public static function preload_paths() {
+		if ( SettingsController::needs_setup() ) {
+			return array();
+		}
+
+		$today = ( new \DateTimeImmutable( '@' . Clock::now() ) )->setTimezone( wp_timezone() );
+		$since = $today->modify( '-' . ( self::ACTIVITY_DEFAULT_DAYS - 1 ) . ' days' );
+
+		$activity = add_query_arg(
+			array(
+				'since'    => $since->format( 'Y-m-d' ),
+				'until'    => $today->format( 'Y-m-d' ),
+				'page'     => 1,
+				'per_page' => self::ACTIVITY_PER_PAGE,
+			),
+			'/happyaccess/v1/activity'
+		);
+
+		return array(
+			'/happyaccess/v1/settings',
+			'/happyaccess/v1/grants',
+			'/happyaccess/v1/catalog',
+			$activity,
+		);
 	}
 
 	/**
