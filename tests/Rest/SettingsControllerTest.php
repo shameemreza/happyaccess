@@ -349,9 +349,17 @@ class SettingsControllerTest extends RestTestCase {
 	public function test_non_string_nested_secret_keeps_the_stored_secret() {
 		update_option( self::SECRET, 'sk_live_abc123', false );
 
-		foreach ( array( array( 'x' ), 123, null, true ) as $bad ) {
-			$response = $this->request( 'POST', '/settings', array( 'security' => array( 'recaptcha_secret_key' => $bad ) ) );
-			$this->assertSame( 200, $response->get_status() );
+		// A list or null is refused outright; a number or boolean passes validation and is ignored as not text.
+		$expected = array(
+			array( array( 'x' ), 400 ),
+			array( 123, 200 ),
+			array( null, 400 ),
+			array( true, 200 ),
+		);
+		foreach ( $expected as $case ) {
+			list( $bad, $status ) = $case;
+			$response             = $this->request( 'POST', '/settings', array( 'security' => array( 'recaptcha_secret_key' => $bad ) ) );
+			$this->assertSame( $status, $response->get_status(), wp_json_encode( $bad ) );
 			$this->assertSame( 'sk_live_abc123', get_option( self::SECRET ), wp_json_encode( $bad ) );
 		}
 	}
@@ -445,5 +453,118 @@ class SettingsControllerTest extends RestTestCase {
 		$rows = $this->settings_rows();
 		$this->assertCount( 1, $rows );
 		$this->assertSame( array( 'security.recaptcha_secret_key' ), $rows[0]['meta']['keys'] );
+	}
+
+	public function provide_bad_groups() {
+		return array(
+			'a list'               => array( array( 'security' => array( 1, 2 ) ) ),
+			'a string'             => array( array( 'privacy' => 'nope' ) ),
+			'a number'             => array( array( 'support' => 5 ) ),
+			'a list in a value'    => array( array( 'security' => array( 'max_attempts' => array( 7 ) ) ) ),
+			'an object in a value' => array( array( 'privacy' => array( 'retention_days' => array( 'x' => 1 ) ) ) ),
+			'null in a value'      => array( array( 'security' => array( 'max_attempts' => null ) ) ),
+			'nested group value'   => array( array( 'features' => array( 'support_access' => array( 'on' => true ) ) ) ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_bad_groups
+	 */
+	public function test_save_refuses_groups_that_are_not_objects_of_plain_values( $params ) {
+		$response = $this->request( 'POST', '/settings', $params );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 5, Settings::get( 'security.max_attempts' ) );
+		$this->assertSame( 30, Settings::get( 'privacy.retention_days' ) );
+		$this->assertSame( array(), $this->settings_rows() );
+	}
+
+	public function test_save_still_takes_plain_values_of_each_type() {
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'security' => array(
+					'max_attempts'        => '7',
+					'recaptcha_enabled'   => true,
+					'recaptcha_threshold' => 0.7,
+					'proxy_header'        => '',
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 7, Settings::get( 'security.max_attempts' ) );
+		$this->assertTrue( Settings::get( 'security.recaptcha_enabled' ) );
+	}
+
+	/**
+	 * Makes writes to one option fail, as a full disk or a locked table would.
+	 *
+	 * @param string $option Option name.
+	 * @return callable The filter, to remove later.
+	 */
+	private function break_option_writes( $option ) {
+		$filter = static function ( $query ) use ( $option ) {
+			$query = (string) $query;
+			$write = 0 === stripos( ltrim( $query ), 'UPDATE' ) || 0 === stripos( ltrim( $query ), 'INSERT' );
+			return $write && false !== strpos( $query, "'" . $option . "'" ) ? 'this is not valid sql' : $query;
+		};
+		add_filter( 'query', $filter );
+		return $filter;
+	}
+
+	public function test_a_failed_settings_write_is_a_500_with_a_message() {
+		global $wpdb;
+		$filter   = $this->break_option_writes( Settings::OPTION );
+		$suppress = $wpdb->suppress_errors( true );
+
+		$response = $this->request( 'POST', '/settings', array( 'privacy' => array( 'retention_days' => 90 ) ) );
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $filter );
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'happyaccess_settings_not_saved', $response->get_data()['code'] );
+		$this->assertSame( 'Settings could not be saved. Please try again.', $response->get_data()['message'] );
+		$this->assertSame( 30, Settings::get( 'privacy.retention_days' ) );
+		$this->assertSame( array(), $this->settings_rows(), 'A change that was not saved is not logged.' );
+	}
+
+	public function test_a_failed_setup_write_is_a_500_and_records_no_consent() {
+		global $wpdb;
+		$filter   = $this->break_option_writes( Settings::OPTION );
+		$suppress = $wpdb->suppress_errors( true );
+
+		$response = $this->request( 'POST', '/setup', array( 'features' => array( 'support_access' => false ) ) );
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $filter );
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'happyaccess_settings_not_saved', $response->get_data()['code'] );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+	}
+
+	public function test_a_failed_secret_write_is_a_500_and_is_not_logged() {
+		global $wpdb;
+		$filter   = $this->break_option_writes( self::SECRET );
+		$suppress = $wpdb->suppress_errors( true );
+
+		$response = $this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => 'sk_live_value' ) );
+
+		$wpdb->suppress_errors( $suppress );
+		remove_filter( 'query', $filter );
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 'happyaccess_settings_not_saved', $response->get_data()['code'] );
+		$this->assertStringNotContainsString( 'sk_live_value', wp_json_encode( $response->get_data() ) );
+		$this->assertFalse( get_option( self::SECRET, false ) );
+		$this->assertSame( array(), $this->settings_rows() );
+	}
+
+	public function test_saving_the_same_values_again_is_not_an_error() {
+		$this->request( 'POST', '/settings', array( 'privacy' => array( 'retention_days' => 90 ) ) );
+		$response = $this->request( 'POST', '/settings', array( 'privacy' => array( 'retention_days' => 90 ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $this->settings_rows() );
 	}
 }

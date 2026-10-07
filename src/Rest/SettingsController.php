@@ -51,7 +51,7 @@ final class SettingsController {
 		foreach ( self::GROUPS as $group ) {
 			$group_args[ $group ] = array(
 				'type'              => 'object',
-				'validate_callback' => 'rest_validate_request_arg',
+				'validate_callback' => array( __CLASS__, 'validate_group' ),
 				'sanitize_callback' => 'rest_sanitize_request_arg',
 			);
 		}
@@ -135,6 +135,35 @@ final class SettingsController {
 	}
 
 	/**
+	 * Checks a settings group: an object whose values are all plain text,
+	 * numbers or booleans. A list, or a value that is itself a list or an
+	 * object, is refused instead of being cast to something else.
+	 *
+	 * @param mixed            $value   Param value.
+	 * @param \WP_REST_Request $request Request.
+	 * @param string           $param   Param name.
+	 * @return true|\WP_Error
+	 */
+	public static function validate_group( $value, $request, $param ) {
+		$valid = rest_validate_request_arg( $value, $request, $param );
+		if ( true !== $valid ) {
+			return $valid;
+		}
+		$is_list = is_array( $value ) && array() !== $value && array_keys( $value ) === range( 0, count( $value ) - 1 );
+		if ( ! is_array( $value ) || $is_list ) {
+			/* translators: %s: setting group name. */
+			return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s must be an object.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
+		}
+		foreach ( $value as $item ) {
+			if ( ! is_scalar( $item ) ) {
+				/* translators: %s: setting group name. */
+				return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s can only hold text, numbers and true or false.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Cleans the secret. It is never echoed, even in an error.
 	 *
 	 * @param mixed $value Param value.
@@ -187,10 +216,9 @@ final class SettingsController {
 		unset( $changes['security']['recaptcha_secret_key'] );
 
 		$secret_changed = is_string( $secret ) && (string) get_option( self::SECRET_OPTION, '' ) !== $secret;
-		$extra          = self::apply( $changes, $secret_changed ? array( 'security.recaptcha_secret_key' ) : array() );
-
-		if ( $secret_changed ) {
-			self::write_secret( $secret );
+		$extra          = self::apply( $changes, $secret_changed ? $secret : null );
+		if ( is_wp_error( $extra ) ) {
+			return $extra;
 		}
 
 		return rest_ensure_response( array_merge( self::present(), $extra ) );
@@ -221,6 +249,9 @@ final class SettingsController {
 				),
 			)
 		);
+		if ( is_wp_error( $extra ) ) {
+			return $extra;
+		}
 
 		return rest_ensure_response( array_merge( self::present(), $extra ) );
 	}
@@ -263,28 +294,55 @@ final class SettingsController {
 	}
 
 	/**
-	 * Saves changes and logs the names of the keys that changed. When Support
-	 * Access goes from on to off, every pass ends.
+	 * The error for a write that did not reach the database.
 	 *
-	 * The row is written before the save while logging is on, so turning
-	 * logging off is the last row logged, and after the save otherwise, so
-	 * turning it back on is the first.
-	 *
-	 * @param array    $changes    Nested changes, known groups only.
-	 * @param string[] $extra_keys Other changed keys to name, such as the secret.
-	 * @return array Extra response fields: "revoked" when passes were ended.
+	 * @return \WP_Error
 	 */
-	private static function apply( array $changes, array $extra_keys = array() ) {
-		$was_on  = Features::is_enabled( 'support_access' );
-		$pending = $was_on ? count( Grants::list_current() ) : 0;
-		$keys    = array_merge( self::changed_keys( Settings::all(), Settings::merge( $changes ) ), $extra_keys );
+	private static function save_error() {
+		return new \WP_Error(
+			'happyaccess_settings_not_saved',
+			__( 'Settings could not be saved. Please try again.', 'happyaccess' ),
+			array( 'status' => 500 )
+		);
+	}
+
+	/**
+	 * Saves changes, checks that they were stored, and logs the names of the
+	 * keys that changed. When Support Access goes from on to off, every pass
+	 * ends.
+	 *
+	 * The row is written before the save only when this request turns
+	 * logging off, so that change is the last row logged. Otherwise it is
+	 * written after a save that was stored, so a failed save leaves no row
+	 * saying it happened.
+	 *
+	 * @param array       $changes Nested changes, known groups only.
+	 * @param string|null $secret  New reCAPTCHA secret, an empty string to clear it, or null to leave it.
+	 * @return array|\WP_Error Extra response fields ("revoked" when passes were ended), or an error when a write failed.
+	 */
+	private static function apply( array $changes, $secret = null ) {
+		$was_on   = Features::is_enabled( 'support_access' );
+		$pending  = $was_on ? count( Grants::list_current() ) : 0;
+		$before   = Settings::all();
+		$expected = Settings::merge( $changes );
+		$keys     = self::changed_keys( $before, $expected );
+		if ( null !== $secret ) {
+			$keys[] = 'security.recaptcha_secret_key';
+		}
 		sort( $keys );
-		$log_first = (bool) Settings::get( 'privacy.logging' );
+		$log_first = (bool) $before['privacy']['logging'] && ! $expected['privacy']['logging'];
 
 		if ( $log_first ) {
 			self::log_change( $keys );
 		}
 		Settings::update( $changes );
+		// update_option() also returns false for an unchanged value, so compare what is stored with what was meant to be.
+		if ( Settings::all() !== $expected ) {
+			return self::save_error();
+		}
+		if ( null !== $secret && ! self::write_secret( $secret ) ) {
+			return self::save_error();
+		}
 		if ( ! $log_first ) {
 			self::log_change( $keys );
 		}
@@ -342,7 +400,7 @@ final class SettingsController {
 	 * Saves the secret in its own option, autoload off. An empty value clears it.
 	 *
 	 * @param string $secret Cleaned secret.
-	 * @return void
+	 * @return bool Whether the stored secret is now the given one.
 	 */
 	private static function write_secret( $secret ) {
 		Internal::run(
@@ -354,6 +412,7 @@ final class SettingsController {
 				}
 			}
 		);
+		return (string) get_option( self::SECRET_OPTION, '' ) === $secret;
 	}
 
 	/**
