@@ -170,6 +170,13 @@ final class CapabilityGuard {
 	private static $rules = array();
 
 	/**
+	 * Per request cache of the locked owner account, keyed like $rules.
+	 *
+	 * @var int[]
+	 */
+	private static $owners = array();
+
+	/**
 	 * How many plugin activations are running in this request.
 	 *
 	 * @var int
@@ -302,6 +309,7 @@ final class CapabilityGuard {
 	 */
 	public static function flush_cache() {
 		self::$rules        = array();
+		self::$owners       = array();
 		self::$stored_names = array();
 	}
 
@@ -439,7 +447,9 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Creator of a temp user's grant, or 0 when there is none or the account is gone.
+	 * The locked owner account of a temp user's grant: the one that gets its
+	 * alerts, from Grants::owner_id(). That is the creator, or the fallback
+	 * administrator when the creator is gone. 0 when no administrator is left.
 	 *
 	 * @param int $user_id Temp user id.
 	 * @return int
@@ -449,8 +459,11 @@ final class CapabilityGuard {
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return 0;
 		}
-		$creator = self::rules( $user_id )['created_by'];
-		return $creator > 0 && false !== get_userdata( $creator ) ? $creator : 0;
+		$key = get_current_blog_id() . ':' . $user_id . ':' . Capabilities::grant_id( $user_id );
+		if ( ! array_key_exists( $key, self::$owners ) ) {
+			self::$owners[ $key ] = Grants::owner_id( array( 'created_by' => self::rules( $user_id )['created_by'] ) );
+		}
+		return self::$owners[ $key ];
 	}
 
 	/**

@@ -13,6 +13,7 @@ use HappyAccess\Features\SupportAccess\AdminWatch;
 use HappyAccess\Features\SupportAccess\CapabilityGuard;
 use HappyAccess\Features\SupportAccess\Feature;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\Notifications;
 use HappyAccess\Features\SupportAccess\TempUsers;
 
 class AdminWatchTest extends WP_UnitTestCase {
@@ -207,8 +208,8 @@ class AdminWatchTest extends WP_UnitTestCase {
 		$this->assertCount( 0, $this->sent() );
 	}
 
-	public function test_alert_for_the_fallback_owner_goes_to_the_address_before_the_change() {
-		$admins = get_users( array( 'role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1 ) );
+	public function test_a_pass_cannot_change_the_fallback_owners_email() {
+		$admins   = get_users( array( 'role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1 ) );
 		$fallback = $admins[0];
 		wp_update_user( array( 'ID' => $fallback->ID, 'user_email' => 'real-owner@example.org' ) );
 		$made = Grants::create( array( 'label' => 'Orphan', 'level' => 'full', 'confirm_full' => true, 'created_by' => 0 ) );
@@ -218,15 +219,21 @@ class AdminWatchTest extends WP_UnitTestCase {
 
 		wp_set_current_user( $temp );
 		wp_update_user( array( 'ID' => $fallback->ID, 'user_email' => 'evil@example.com' ) );
+		clean_user_cache( $fallback->ID );
 
-		$this->assertCount( 1, $this->rows( 'admin_account_changed' ) );
+		$this->assertSame( 'real-owner@example.org', get_userdata( $fallback->ID )->user_email );
+		$this->assertCount( 0, $this->rows( 'admin_account_changed' ) );
+		$this->assertCount( 0, $this->sent() );
+	}
+
+	public function test_an_owner_account_alert_goes_to_the_address_before_the_change() {
+		$owner = get_userdata( $this->owner );
+		$owner->user_email = 'evil@example.com';
+
+		$this->assertTrue( Notifications::admin_changed( Grants::get( $this->grant_id ), $owner, array( 'email' ), 'owner@example.org' ) );
+
 		$this->assertCount( 1, $this->sent() );
-		$this->assertSame( 'real-owner@example.org', $this->sent()[0]['to'][0][0] );
-		foreach ( $this->sent() as $mail ) {
-			foreach ( $mail['to'] as $recipient ) {
-				$this->assertNotSame( 'evil@example.com', $recipient[0] );
-			}
-		}
+		$this->assertSame( 'owner@example.org', $this->sent()[0]['to'][0][0] );
 	}
 
 	public function test_emails_are_capped_per_pass_but_every_event_is_logged() {
@@ -302,27 +309,19 @@ class AdminWatchTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->sent() );
 	}
 
-	public function test_an_owner_account_change_still_sends_after_the_cap_is_used_up() {
-		// The creator's account is protected, so the owner here is the fallback administrator.
-		$admins   = get_users( array( 'role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1 ) );
-		$fallback = $admins[0];
-		wp_update_user( array( 'ID' => $fallback->ID, 'user_email' => 'real-owner@example.org' ) );
-		$made = Grants::create( array( 'label' => 'Orphan', 'level' => 'full', 'confirm_full' => true, 'created_by' => 0 ) );
-		$temp = TempUsers::get_or_create( Grants::get( $made['id'] ) );
-		$this->assertSame( $fallback->ID, Grants::owner_id( Grants::get( $made['id'] ) ) );
-		reset_phpmailer_instance();
-
-		wp_set_current_user( $temp );
+	public function test_an_owner_account_alert_still_sends_after_the_cap_is_used_up() {
+		wp_set_current_user( $this->temp );
 		for ( $i = 1; $i <= 6; $i++ ) {
 			wp_insert_user( array( 'user_login' => 'bulkadmin' . $i, 'user_pass' => 'x', 'role' => 'administrator' ) );
 		}
 		$this->assertCount( 5, $this->sent() );
 
-		wp_update_user( array( 'ID' => $fallback->ID, 'user_email' => 'evil@example.com' ) );
+		$owner = get_userdata( $this->owner );
+		Notifications::admin_changed( Grants::get( $this->grant_id ), $owner, array( 'email' ), 'owner@example.org' );
 
 		$this->assertCount( 6, $this->sent() );
-		$this->assertSame( 'real-owner@example.org', $this->sent()[5]['to'][0][0] );
-		$this->assertSame( 5, get_transient( 'happyaccess_admin_alerts_' . $made['id'] )['count'] );
+		$this->assertSame( 'owner@example.org', $this->sent()[5]['to'][0][0] );
+		$this->assertSame( 5, get_transient( 'happyaccess_admin_alerts_' . $this->grant_id )['count'] );
 	}
 
 	public function test_a_failed_send_is_not_counted() {

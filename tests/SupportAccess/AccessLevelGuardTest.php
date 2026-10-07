@@ -195,7 +195,26 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertSame( $creator_email, get_userdata( $this->owner )->user_email );
 	}
 
-	public function test_no_creator_means_no_creator_lock() {
+	/**
+	 * The administrator Grants::owner_id() falls back to: the lowest id.
+	 *
+	 * @return int
+	 */
+	private function fallback_owner() {
+		$admins = get_users(
+			array(
+				'role'    => 'administrator',
+				'orderby' => 'ID',
+				'order'   => 'ASC',
+				'number'  => 1,
+				'fields'  => 'ID',
+			)
+		);
+		return (int) $admins[0];
+	}
+
+	public function test_no_creator_locks_the_fallback_owner() {
+		$fallback = $this->fallback_owner();
 		$this->become(
 			array(
 				'level'        => 'full',
@@ -203,18 +222,44 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 				'created_by'   => 0,
 			)
 		);
-		$this->assertTrue( current_user_can( 'edit_user', $this->owner ) );
+		$this->assertFalse( current_user_can( 'edit_user', $fallback ) );
+		$this->assertFalse( current_user_can( 'delete_user', $fallback ) );
+		$this->assertFalse( AccountGuard::block_reset( true, $fallback ) );
 		$this->assertTrue( current_user_can( 'edit_user', $this->other_admin ) );
 	}
 
-	public function test_deleted_creator_means_no_creator_lock() {
+	public function test_deleted_creator_locks_the_fallback_owner() {
 		$creator = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $creator );
 		$this->full();
 		self::delete_user( $creator );
 		Grants::flush_cache();
+		$fallback = $this->fallback_owner();
+		$this->assertFalse( current_user_can( 'edit_user', $fallback ) );
 		$this->assertTrue( current_user_can( 'edit_user', $this->other_admin ) );
 		$this->assertTrue( AccountGuard::block_reset( true, $creator ) );
+		$this->assertFalse( AccountGuard::block_reset( true, $fallback ) );
+	}
+
+	public function test_custom_cannot_edit_the_fallback_owners_email() {
+		$fallback = $this->fallback_owner();
+		$email    = get_userdata( $fallback )->user_email;
+		$this->become(
+			array(
+				'level'        => 'custom',
+				'caps'         => array( 'list_users', 'edit_users' ),
+				'confirm_full' => true,
+				'created_by'   => 0,
+			)
+		);
+		wp_update_user(
+			array(
+				'ID'         => $fallback,
+				'user_email' => 'stolen@example.com',
+			)
+		);
+		clean_user_cache( $fallback );
+		$this->assertSame( $email, get_userdata( $fallback )->user_email );
 	}
 
 	public function test_protected_keeps_the_old_rules() {
