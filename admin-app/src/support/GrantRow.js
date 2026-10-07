@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useEffect, useId, useRef, useState } from '@wordpress/element';
 import { Button, Notice } from '@wordpress/components';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useAnnounce } from '../hooks/useAnnounce';
@@ -62,13 +62,17 @@ export function InlineConfirm( {
 	danger = true,
 } ) {
 	const keep = useRef( null );
+	const textId = useId();
 	useEffect( () => {
 		keep.current?.focus();
 	}, [] );
 
+	// Focus moves to the safe button, so the question is its group name, not an alert.
 	return (
-		<div className="ha-confirm" role="alert">
-			<span className="ha-confirm__text">{ children }</span>
+		<div className="ha-confirm" role="group" aria-labelledby={ textId }>
+			<span id={ textId } className="ha-confirm__text">
+				{ children }
+			</span>
 			<Button
 				ref={ keep }
 				variant="secondary"
@@ -103,6 +107,7 @@ export function InlineConfirm( {
  * @param {Object}                                                 props.boot           Boot data: roles and maxDays.
  * @param {(id: number, action: string, arg?: unknown) => Promise} props.onAct          Runs an action on a pass.
  * @param {(id: number) => void}                                   props.onViewActivity Opens the Activity tab for this pass.
+ * @param {boolean}                                                props.locked         Whether a list-wide action is running, which blocks this row.
  * @return {Element} The list item.
  */
 export default function GrantRow( {
@@ -111,6 +116,7 @@ export default function GrantRow( {
 	boot = {},
 	onAct,
 	onViewActivity,
+	locked = false,
 } ) {
 	const announce = useAnnounce();
 	const [ panel, setPanel ] = useState( '' );
@@ -134,6 +140,8 @@ export default function GrantRow( {
 		( days ) => grant.expires_at + days * DAY <= capSeconds
 	);
 
+	const blocked = busy || locked;
+
 	const run = async ( action, arg, message ) => {
 		setBusy( true );
 		setError( null );
@@ -142,6 +150,10 @@ export default function GrantRow( {
 			announce( message );
 			if ( mounted.current ) {
 				setPanel( '' );
+				if ( 'extend' === action ) {
+					// The +N button that had focus is gone.
+					triggers.current.extend?.focus();
+				}
 			}
 		} catch ( e ) {
 			if ( mounted.current ) {
@@ -319,7 +331,7 @@ export default function GrantRow( {
 									variant="secondary"
 									size="compact"
 									accessibleWhenDisabled
-									disabled={ busy }
+									disabled={ blocked }
 									onClick={ () => extend( days ) }
 								>
 									{ sprintf(
@@ -387,7 +399,7 @@ export default function GrantRow( {
 					variant="secondary"
 					size="compact"
 					accessibleWhenDisabled
-					disabled={ busy }
+					disabled={ blocked }
 					aria-expanded={ 'extend' === panel }
 					onClick={ () => open( 'extend' ) }
 				>
@@ -397,7 +409,7 @@ export default function GrantRow( {
 					variant="secondary"
 					size="compact"
 					accessibleWhenDisabled
-					disabled={ busy }
+					disabled={ blocked }
 					onClick={ toggle }
 				>
 					{ suspended
@@ -409,7 +421,7 @@ export default function GrantRow( {
 					variant="secondary"
 					size="compact"
 					accessibleWhenDisabled
-					disabled={ busy }
+					disabled={ blocked }
 					aria-expanded={ 'regenerate' === panel }
 					onClick={ () => open( 'regenerate' ) }
 				>
@@ -432,7 +444,7 @@ export default function GrantRow( {
 					size="compact"
 					isDestructive
 					accessibleWhenDisabled
-					disabled={ busy }
+					disabled={ blocked }
 					aria-expanded={ 'revoke' === panel }
 					onClick={ () => open( 'revoke' ) }
 				>

@@ -187,12 +187,14 @@ function TrustBox( { children, checked, onChange } ) {
  * @param {(result: Object) => void}          props.onCreated Called with the create response, which holds the plain code and link.
  * @param {(form: Object) => Promise<Object>} props.create    Sends the form to the server. Pass the one from useGrants to keep the list in step.
  * @param {Object}                            props.boot      Boot data. Defaults to window.happyaccessBoot.
+ * @param {Object}                            props.labelRef  Ref that receives the "Who is it for" input, so the parent can focus it.
  * @return {Element} The form.
  */
 export default function GrantForm( {
 	onCreated,
 	create = createGrant,
 	boot = window.happyaccessBoot,
+	labelRef,
 } ) {
 	const {
 		menus = NO_MENUS,
@@ -415,6 +417,7 @@ export default function GrantForm( {
 			</div>
 			<form className="ha-form" onSubmit={ submit } noValidate>
 				<TextControl
+					ref={ labelRef }
 					className="ha-field"
 					label={ __( 'Who is it for', 'happyaccess' ) }
 					value={ form.label }

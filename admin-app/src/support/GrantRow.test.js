@@ -117,6 +117,57 @@ describe( 'GrantRow', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( 'puts focus back on Extend after an extension', async () => {
+		const { user } = setup();
+
+		await user.click( screen.getByRole( 'button', { name: 'Extend' } ) );
+		await user.click( screen.getByRole( 'button', { name: '+1 day' } ) );
+
+		await waitFor( () =>
+			expect(
+				screen.queryByRole( 'button', { name: '+1 day' } )
+			).not.toBeInTheDocument()
+		);
+		expect(
+			screen.getByRole( 'button', { name: 'Extend' } )
+		).toHaveFocus();
+	} );
+
+	it( 'does not announce the focused confirm as an alert', async () => {
+		const { user } = setup();
+
+		await user.click( screen.getByRole( 'button', { name: 'Revoke' } ) );
+
+		expect( screen.queryByRole( 'alert' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'blocks every action while the list is locked', () => {
+		render(
+			<AnnounceProvider>
+				<ul>
+					<GrantRow
+						grant={ grantFixture() }
+						now={ NOW }
+						boot={ boot }
+						locked
+						onAct={ vi.fn() }
+						onViewActivity={ vi.fn() }
+					/>
+				</ul>
+			</AnnounceProvider>
+		);
+
+		within(
+			screen.getByRole( 'group', {
+				name: 'Actions for Acme Plugin Support',
+			} )
+		)
+			.getAllByRole( 'button' )
+			.forEach( ( button ) =>
+				expect( button ).toHaveAttribute( 'aria-disabled', 'true' )
+			);
+	} );
+
 	it( 'hides extensions that would pass the cap, and says when none are left', async () => {
 		// 29 days and 20 hours left: +1 day crosses 30 days, nothing fits.
 		const near = grantFixture( {
@@ -194,7 +245,9 @@ describe( 'GrantRow', () => {
 		await user.click(
 			screen.getByRole( 'button', { name: 'New link and code' } )
 		);
-		const confirm = screen.getByRole( 'alert' );
+		const confirm = screen.getByRole( 'group', {
+			name: /^This makes a new link and code/,
+		} );
 		expect( confirm ).toHaveTextContent(
 			'This makes a new link and code. The old ones stop working and anyone using this pass is logged out. A suspended pass stays suspended.'
 		);
@@ -210,7 +263,9 @@ describe( 'GrantRow', () => {
 		const { user, onAct } = setup();
 
 		await user.click( screen.getByRole( 'button', { name: 'Revoke' } ) );
-		const confirm = screen.getByRole( 'alert' );
+		const confirm = screen.getByRole( 'group', {
+			name: /^Revoke access for Acme Plugin Support\?/,
+		} );
 		expect( confirm ).toHaveTextContent(
 			"Revoke access for Acme Plugin Support? They're logged out right away and the account is deleted."
 		);
@@ -221,7 +276,9 @@ describe( 'GrantRow', () => {
 		await user.click(
 			within( confirm ).getByRole( 'button', { name: 'Keep access' } )
 		);
-		expect( screen.queryByRole( 'alert' ) ).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'group', { name: /^Revoke access for/ } )
+		).not.toBeInTheDocument();
 		expect( onAct ).not.toHaveBeenCalled();
 		expect(
 			screen.getByRole( 'button', { name: 'Revoke' } )

@@ -109,7 +109,9 @@ describe( 'ActiveList', () => {
 			screen.getByRole( 'button', { name: 'Revoke all' } )
 		);
 		await user.click(
-			within( screen.getByRole( 'alert' ) ).getByRole( 'button', {
+			within(
+				screen.getByRole( 'group', { name: /^Revoke every pass/ } )
+			).getByRole( 'button', {
 				name: 'Keep access',
 			} )
 		);
@@ -174,6 +176,57 @@ describe( 'ActiveList', () => {
 				screen.getByRole( 'heading', { name: 'Who has access' } )
 			).toHaveFocus()
 		);
+	} );
+
+	it( 'blocks Revoke all and the row actions while it runs', async () => {
+		let finish;
+		const { user } = setup( {
+			onRevokeAll: vi.fn(
+				() =>
+					new Promise( ( resolve ) => {
+						finish = resolve;
+					} )
+			),
+		} );
+
+		await user.click(
+			screen.getByRole( 'button', { name: 'Revoke all' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Revoke all now' } )
+		);
+
+		expect(
+			screen.getByRole( 'button', { name: 'Revoke all' } )
+		).toHaveAttribute( 'aria-disabled', 'true' );
+		screen
+			.getAllByRole( 'button', { name: 'Extend' } )
+			.forEach( ( button ) =>
+				expect( button ).toHaveAttribute( 'aria-disabled', 'true' )
+			);
+
+		finish();
+		await waitFor( () =>
+			expect(
+				screen.getAllByRole( 'button', { name: 'Extend' } )[ 0 ]
+			).not.toHaveAttribute( 'aria-disabled', 'true' )
+		);
+	} );
+
+	it( 'loads the latest activity again after an action', async () => {
+		const { user } = setup();
+		await screen.findByText( /^Latest:/ );
+		const activityCalls = () =>
+			apiFetch.mock.calls.filter( ( [ options ] ) =>
+				options.path.startsWith( '/happyaccess/v1/activity' )
+			).length;
+		expect( activityCalls() ).toBe( 1 );
+
+		await user.click(
+			screen.getAllByRole( 'button', { name: 'Suspend' } )[ 0 ]
+		);
+
+		await waitFor( () => expect( activityCalls() ).toBe( 2 ) );
 	} );
 
 	it( 'shows a load error with a way to retry', async () => {

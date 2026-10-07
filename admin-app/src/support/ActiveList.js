@@ -13,10 +13,11 @@ const ACTIVITY_REFRESH_MS = 60000;
  * The newest support activity line, fetched on mount and then every minute
  * while the tab is visible.
  *
- * @param {number} now Current Unix time in seconds.
+ * @param {number} now   Current Unix time in seconds.
+ * @param {string} token Changes when something happened, so the line loads again.
  * @return {string} The line, or an empty string.
  */
-function useLatestLine( now ) {
+function useLatestLine( now, token ) {
 	const [ item, setItem ] = useState( null );
 
 	useEffect( () => {
@@ -44,7 +45,7 @@ function useLatestLine( now ) {
 			live = false;
 			clearInterval( timer );
 		};
-	}, [] );
+	}, [ token ] );
 
 	if ( ! item ) {
 		return '';
@@ -65,6 +66,7 @@ function useLatestLine( now ) {
  * @param {boolean}                                                props.loading        Whether the first load is running.
  * @param {Object|null}                                            props.error          Load error from useGrants.
  * @param {() => void}                                             props.onRetry        Loads the list again.
+ * @param {string}                                                 props.refreshToken   Changes when a pass was made or ended elsewhere, so the footer loads again.
  * @param {number}                                                 props.now            Current Unix time in seconds.
  * @param {Object}                                                 props.boot           Boot data: roles and maxDays.
  * @param {(id: number, action: string, arg?: unknown) => Promise} props.onAct          Runs an action on one pass.
@@ -77,6 +79,7 @@ export default function ActiveList( {
 	loading,
 	error,
 	onRetry,
+	refreshToken = '',
 	now,
 	boot,
 	onAct,
@@ -89,10 +92,12 @@ export default function ActiveList( {
 	const [ allError, setAllError ] = useState( null );
 	const heading = useRef( null );
 	const revokeAllButton = useRef( null );
-	const latest = useLatestLine( now );
+	const [ acted, setActed ] = useState( 0 );
+	const latest = useLatestLine( now, `${ refreshToken }:${ acted }` );
 
 	const act = async ( id, action, arg ) => {
 		const result = await onAct( id, action, arg );
+		setActed( ( count ) => count + 1 );
 		if ( 'revoke' === action ) {
 			// The row is gone, so its buttons can't hold focus.
 			heading.current?.focus();
@@ -105,6 +110,7 @@ export default function ActiveList( {
 		setAllError( null );
 		try {
 			await onRevokeAll();
+			setActed( ( count ) => count + 1 );
 			setConfirming( false );
 			announce( __( 'All access revoked', 'happyaccess' ) );
 			heading.current?.focus();
@@ -142,6 +148,8 @@ export default function ActiveList( {
 						ref={ revokeAllButton }
 						variant="tertiary"
 						isDestructive
+						accessibleWhenDisabled
+						disabled={ busy }
 						aria-expanded={ confirming }
 						onClick={ () => {
 							setAllError( null );
@@ -202,6 +210,7 @@ export default function ActiveList( {
 							now={ now }
 							boot={ boot }
 							onAct={ act }
+							locked={ busy }
 							onViewActivity={ onViewActivity }
 						/>
 					) ) }

@@ -295,6 +295,43 @@ describe( 'create and result card', () => {
 		expect( regenerations.at( -1 ).data ).toEqual( { send_email: true } );
 	} );
 
+	it( 'starts the card fresh when the same pass is regenerated from the list', async () => {
+		mockServer( [ grantFixture( { email: 'agent@acme.test' } ) ] );
+		const { user } = setup();
+		await screen.findByText( '1 person has access.' );
+		const regenerate = async () => {
+			await user.click(
+				screen.getByRole( 'button', { name: 'New link and code' } )
+			);
+			await user.click(
+				screen.getByRole( 'button', { name: 'Make new ones' } )
+			);
+		};
+
+		await regenerate();
+		await screen.findByRole( 'heading', {
+			name: 'Access is ready for Acme Plugin Support',
+		} );
+		await user.click(
+			screen.getByRole( 'button', { name: 'Send by email' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Make new ones and send' } )
+		);
+		expect( await screen.findByText( /^Emailed to/ ) ).toBeInTheDocument();
+
+		await regenerate();
+
+		await waitFor( () =>
+			expect(
+				screen.getByRole( 'heading', {
+					name: 'Access is ready for Acme Plugin Support',
+				} )
+			).toHaveFocus()
+		);
+		expect( screen.queryByText( /^Emailed to/ ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'has no accessibility violations on the result card', async () => {
 		mockServer( [] );
 		const { user, container } = setup();

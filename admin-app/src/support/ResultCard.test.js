@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import { AnnounceProvider } from '../Announcer';
@@ -250,6 +258,104 @@ describe( 'ResultCard', () => {
 			).toHaveTextContent( 'The email could not be sent.' )
 		);
 		expect( screen.queryByText( /^Emailed to/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'groups the code with its name', () => {
+		setup();
+
+		expect(
+			screen.getByRole( 'group', { name: 'Or the access code' } )
+		).toHaveTextContent( '4829 1375' );
+	} );
+
+	it( 'blocks Copy and Done while the email is being sent', async () => {
+		let finish;
+		const onSendEmail = vi.fn(
+			() =>
+				new Promise( ( resolve ) => {
+					finish = resolve;
+				} )
+		);
+		const { user, onDone } = setup( {
+			result: result( { email: 'agent@acme.test' } ),
+			onSendEmail,
+		} );
+
+		await user.click(
+			screen.getByRole( 'button', { name: 'Send by email' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Make new ones and send' } )
+		);
+
+		[
+			'Copy login link',
+			'Copy access code',
+			'Copy message with instructions',
+			'Done, give access to someone else',
+		].forEach( ( name ) =>
+			expect( screen.getByRole( 'button', { name } ) ).toHaveAttribute(
+				'aria-disabled',
+				'true'
+			)
+		);
+		await user.click(
+			screen.getByRole( 'button', {
+				name: 'Done, give access to someone else',
+			} )
+		);
+		expect( onDone ).not.toHaveBeenCalled();
+
+		finish( { emailed: true } );
+		await screen.findByText( /^Emailed to/ );
+		expect(
+			screen.getByRole( 'button', { name: 'Copy login link' } )
+		).not.toHaveAttribute( 'aria-disabled', 'true' );
+	} );
+
+	it( 'cancels its own timers when it unmounts', async () => {
+		vi.useFakeTimers();
+		const realSet = globalThis.setTimeout;
+		const realClear = globalThis.clearTimeout;
+		const started = [];
+		const cancelled = [];
+		globalThis.setTimeout = ( callback, delay, ...rest ) => {
+			const id = realSet( callback, delay, ...rest );
+			started.push( { id, callback, delay } );
+			return id;
+		};
+		globalThis.clearTimeout = ( id ) => {
+			cancelled.push( id );
+			return realClear( id );
+		};
+		try {
+			setup();
+			Object.defineProperty( navigator, 'clipboard', {
+				configurable: true,
+				value: undefined,
+			} );
+
+			// With no clipboard the card selects the message on the next tick.
+			fireEvent.click(
+				screen.getByRole( 'button', {
+					name: 'Copy message with instructions',
+				} )
+			);
+			await act( async () => {} );
+			// jsdom starts its own zero-delay timer when text gets selected.
+			const ours = started.filter(
+				( { callback, delay } ) =>
+					0 === delay &&
+					! String( callback ).includes( 'selectionchange' )
+			);
+			expect( ours.length ).toBeGreaterThan( 0 );
+			cleanup();
+
+			ours.forEach( ( { id } ) => expect( cancelled ).toContain( id ) );
+		} finally {
+			globalThis.setTimeout = realSet;
+			globalThis.clearTimeout = realClear;
+		}
 	} );
 
 	it( 'calls onDone', async () => {

@@ -49,7 +49,11 @@ export default function SupportTab( {
 	const { refresh } = grants;
 	const now = useNow();
 	const [ result, setResult ] = useState( null );
-	const root = useRef( null );
+	// Bumped for every new result, so each one gets a fresh card with focus on its heading.
+	const [ shown, setShown ] = useState( 0 );
+	// Bumped for every change to the secrets, so the activity footer loads again.
+	const [ events, setEvents ] = useState( 0 );
+	const labelRef = useRef( null );
 	const focusForm = useRef( false );
 	const startKey = useRef( refreshKey );
 
@@ -66,24 +70,37 @@ export default function SupportTab( {
 	useEffect( () => {
 		if ( null === result && focusForm.current ) {
 			focusForm.current = false;
-			root.current?.querySelector( '.ha-grant .ha-field input' )?.focus();
+			labelRef.current?.focus();
 		}
 	}, [ result ] );
 
 	const { act } = grants;
+	const showResult = useCallback( ( next ) => {
+		setShown( ( count ) => count + 1 );
+		setEvents( ( count ) => count + 1 );
+		setResult( next );
+	}, [] );
 	const resultId = result ? result.id : 0;
 	const handleAct = useCallback(
 		async ( id, action, arg ) => {
 			const next = await act( id, action, arg );
 			if ( 'regenerate' === action ) {
-				setResult( next );
+				showResult( next );
 			} else if ( 'revoke' === action && id === resultId ) {
 				setResult( null );
 			}
 			return next;
 		},
-		[ act, resultId ]
+		[ act, resultId, showResult ]
 	);
+
+	// New secrets for the card that is open. It keeps its own state, so no new key.
+	const sendEmail = async () => {
+		const next = await act( result.id, 'regenerate', true );
+		setEvents( ( count ) => count + 1 );
+		setResult( next );
+		return next;
+	};
 
 	const handleRevokeAll = async () => {
 		await revokeAll();
@@ -120,7 +137,7 @@ export default function SupportTab( {
 	}
 
 	return (
-		<div className="ha-support" ref={ root }>
+		<div className="ha-support">
 			<p className="ha-support__status">
 				<strong>{ statusText }</strong>
 				{ latest && (
@@ -139,19 +156,18 @@ export default function SupportTab( {
 				<div className="ha-support__main">
 					{ result ? (
 						<ResultCard
-							key={ result.id }
+							key={ shown }
 							result={ result }
 							boot={ boot }
 							onDone={ done }
-							onSendEmail={ () =>
-								handleAct( result.id, 'regenerate', true )
-							}
+							onSendEmail={ sendEmail }
 						/>
 					) : (
 						<GrantForm
 							boot={ boot }
 							create={ grants.create }
-							onCreated={ setResult }
+							labelRef={ labelRef }
+							onCreated={ showResult }
 						/>
 					) }
 				</div>
@@ -161,6 +177,7 @@ export default function SupportTab( {
 						loading={ grants.loading }
 						error={ grants.error }
 						onRetry={ refresh }
+						refreshToken={ `${ refreshKey }:${ events }` }
 						now={ now }
 						boot={ boot }
 						onAct={ handleAct }

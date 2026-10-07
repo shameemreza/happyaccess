@@ -23,13 +23,16 @@ function hostOf( url ) {
  * @param {string}     props.label     What the button copies, for its accessible name.
  * @param {string}     props.doneLabel Accessible name while it says Copied.
  * @param {() => void} props.onClick   Copies.
+ * @param {boolean}    props.disabled  Whether copying is blocked for now.
  * @return {Element} The button.
  */
-function CopyButton( { copied, label, doneLabel, onClick } ) {
+function CopyButton( { copied, label, doneLabel, onClick, disabled } ) {
 	return (
 		<Button
 			className={ copied ? 'ha-copy is-copied' : 'ha-copy' }
 			variant="secondary"
+			accessibleWhenDisabled
+			disabled={ disabled }
 			aria-label={ copied ? doneLabel : label }
 			onClick={ onClick }
 		>
@@ -65,6 +68,7 @@ export default function ResultCard( {
 	const messageText = useRef( null );
 	const emailButton = useRef( null );
 	const timer = useRef( null );
+	const ticks = useRef( new Set() );
 	const [ copied, setCopied ] = useState( '' );
 	const [ manual, setManual ] = useState( '' );
 	const [ showMessage, setShowMessage ] = useState( false );
@@ -77,11 +81,22 @@ export default function ResultCard( {
 	useEffect( () => {
 		mounted.current = true;
 		heading.current?.focus();
+		const pending = ticks.current;
 		return () => {
 			mounted.current = false;
 			clearTimeout( timer.current );
+			pending.forEach( clearTimeout );
 		};
 	}, [] );
+
+	// A short timeout that is cancelled if the card goes away first.
+	const later = ( callback ) => {
+		const id = setTimeout( () => {
+			ticks.current.delete( id );
+			callback();
+		}, 0 );
+		ticks.current.add( id );
+	};
 
 	// A manual copy hint belongs to the secret it was shown for.
 	useEffect( () => {
@@ -130,7 +145,7 @@ export default function ResultCard( {
 		} else {
 			setShowMessage( true );
 			// The message mounts on the next render.
-			setTimeout( () => selectNode( messageText.current ), 0 );
+			later( () => selectNode( messageText.current ) );
 		}
 	};
 
@@ -161,7 +176,7 @@ export default function ResultCard( {
 					),
 				} );
 			}
-			setTimeout( () => emailButton.current?.focus(), 0 );
+			later( () => emailButton.current?.focus() );
 		} catch ( e ) {
 			if ( mounted.current ) {
 				setError( e );
@@ -251,6 +266,7 @@ export default function ResultCard( {
 								onFocus={ ( event ) => event.target.select() }
 							/>
 							<CopyButton
+								disabled={ sending }
 								copied={ 'link' === copied }
 								label={ __( 'Copy login link', 'happyaccess' ) }
 								doneLabel={ __(
@@ -277,6 +293,7 @@ export default function ResultCard( {
 							<div
 								ref={ codeText }
 								className="ha-pass__digits"
+								role="group"
 								aria-labelledby="ha-code-name"
 							>
 								{ result.code }
@@ -298,6 +315,7 @@ export default function ResultCard( {
 							{ hint( 'code' ) }
 						</div>
 						<CopyButton
+							disabled={ sending }
 							copied={ 'code' === copied }
 							label={ __( 'Copy access code', 'happyaccess' ) }
 							doneLabel={ __(
@@ -335,6 +353,8 @@ export default function ResultCard( {
 					<Button
 						className="ha-result__primary"
 						variant="primary"
+						accessibleWhenDisabled
+						disabled={ sending }
 						onClick={ () =>
 							copy(
 								'message',
@@ -434,6 +454,8 @@ export default function ResultCard( {
 				<Button
 					className="ha-result__done"
 					variant="link"
+					accessibleWhenDisabled
+					disabled={ sending }
 					onClick={ onDone }
 				>
 					{ __( 'Done, give access to someone else', 'happyaccess' ) }
