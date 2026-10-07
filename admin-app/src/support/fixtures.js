@@ -72,3 +72,23 @@ export const catalog = {
 		editor: [ 'edit_posts', 'edit_others_posts', 'upload_files' ],
 	},
 };
+
+// A pass in the shape of the REST list, ending 2 days after NOW.
+export const NOW = 1800000000;
+export const grantFixture = ( extra = {} ) => ( {
+	id: 5,
+	label: 'Acme Plugin Support',
+	email: '',
+	level: 'protected',
+	role: 'administrator',
+	status: 'active',
+	one_time: false,
+	login_count: 3,
+	use_count: 3,
+	created_at: NOW - 86400,
+	expires_at: NOW + 2 * 86400,
+	last_login_at: NOW - 14 * 60,
+	seconds_left: 2 * 86400,
+	duration: 3 * 86400,
+	...extra,
+} );

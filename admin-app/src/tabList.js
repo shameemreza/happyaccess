@@ -77,11 +77,16 @@ export function storeTab( slug ) {
 
 /**
  * @param {string} slug Tab slug.
+ * @param {Object} args Extra query args for the tab, like { token: 7 }. Args from an earlier tab are dropped.
  * @return {string} The current URL with the tab query arg set.
  */
-export function tabUrl( slug ) {
+export function tabUrl( slug, args = {} ) {
 	const url = new URL( window.location.href );
 	url.searchParams.set( 'tab', slug );
+	url.searchParams.delete( 'token' );
+	Object.entries( args ).forEach( ( [ key, value ] ) => {
+		url.searchParams.set( key, String( value ) );
+	} );
 	return url.pathname + url.search + url.hash;
 }
 

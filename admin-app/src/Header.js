@@ -1,13 +1,14 @@
-import { Button } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { Icon, lock } from '@wordpress/icons';
+import EmergencyLock from './support/EmergencyLock';
 
 /**
  * Logo tile, title, help link and the Emergency lock button.
  *
+ * @param {Object}                  props          Props.
+ * @param {(count: number) => void} props.onLocked Called after Emergency lock ended the passes.
  * @return {Element} The header.
  */
-export default function Header() {
+export default function Header( { onLocked } ) {
 	return (
 		<header className="ha-header">
 			<div className="ha-logo" aria-hidden="true">
@@ -44,11 +45,7 @@ export default function Header() {
 			>
 				{ __( 'Help and docs', 'happyaccess' ) }
 			</a>
-			{ /* Wired to the lock endpoint in a later task. */ }
-			<Button className="ha-lock" variant="secondary" isDestructive>
-				<Icon icon={ lock } size={ 16 } />
-				{ __( 'Emergency lock', 'happyaccess' ) }
-			</Button>
+			<EmergencyLock onLocked={ onLocked } />
 		</header>
 	);
 }

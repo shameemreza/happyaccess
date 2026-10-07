@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { AnnounceProvider } from './Announcer';
 import Header from './Header';
-import GrantForm from './support/GrantForm';
+import SupportTab from './support/SupportTab';
 import SetupPlaceholder from './SetupPlaceholder';
 import TabNav from './TabNav';
 import { getVisibleTabs, pickInitialTab, storeTab, tabUrl } from './tabList';
@@ -25,17 +25,31 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 	);
 	const [ current, setCurrent ] = useState( () => pickInitialTab( tabs ) );
 
-	const select = useCallback( ( slug ) => {
+	// Bumped when Emergency lock ends every pass, so the list loads again.
+	const [ lockCount, setLockCount ] = useState( 0 );
+
+	const select = useCallback( ( slug, args ) => {
 		setCurrent( slug );
 		storeTab( slug );
-		window.history.replaceState( window.history.state, '', tabUrl( slug ) );
+		window.history.replaceState(
+			window.history.state,
+			'',
+			tabUrl( slug, args )
+		);
 	}, [] );
+
+	// The Activity tab reads `token` from the URL to show one pass.
+	const openActivity = useCallback(
+		( token ) => select( 'activity', token ? { token } : {} ),
+		[ select ]
+	);
+	const onLocked = useCallback( () => setLockCount( ( n ) => n + 1 ), [] );
 
 	const active = tabs.find( ( tab ) => tab.slug === current ) || tabs[ 0 ];
 
 	return (
 		<AnnounceProvider>
-			<Header />
+			<Header onLocked={ onLocked } />
 			{ boot.needsSetup ? (
 				<SetupPlaceholder />
 			) : (
@@ -45,9 +59,12 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 						current={ active.slug }
 						onSelect={ select }
 					/>
-					{ /* Temporary mount. The Support access tab replaces it. */ }
 					{ 'support' === active.slug ? (
-						<GrantForm boot={ boot } onCreated={ () => {} } />
+						<SupportTab
+							boot={ boot }
+							refreshKey={ lockCount }
+							onViewActivity={ openActivity }
+						/>
 					) : (
 						<section
 							className="ha-panel"

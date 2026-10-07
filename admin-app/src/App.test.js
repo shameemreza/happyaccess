@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
+import apiFetch from '@wordpress/api-fetch';
 import App from './App';
+import { grantFixture } from './support/fixtures';
+
+vi.mock( '@wordpress/api-fetch' );
+
+let grantsOnServer;
 
 const boot = ( overrides = {} ) => ( {
 	features: { support_access: true, passwordless: false, two_step: false },
@@ -16,6 +22,19 @@ const tabNames = () =>
 		.map( ( link ) => link.textContent );
 
 beforeEach( () => {
+	grantsOnServer = [];
+	apiFetch.mockReset();
+	apiFetch.mockImplementation( async ( { path, method } ) => {
+		if ( '/happyaccess/v1/lock' === path && 'POST' === method ) {
+			const revoked = grantsOnServer.length;
+			grantsOnServer = [];
+			return { revoked };
+		}
+		if ( path.startsWith( '/happyaccess/v1/activity' ) ) {
+			return { items: [], total: 0, page: 1, per_page: 1 };
+		}
+		return { items: grantsOnServer };
+	} );
 	window.localStorage.clear();
 	window.history.replaceState(
 		{},
@@ -180,6 +199,54 @@ describe( 'App shell', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.queryByRole( 'navigation', { name: 'HappyAccess sections' } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'opens the Activity tab for one pass, with its id as the token arg', async () => {
+		grantsOnServer = [ grantFixture( { id: 9 } ) ];
+		const user = userEvent.setup();
+		render( <App boot={ boot() } /> );
+
+		await user.click(
+			await screen.findByRole( 'link', { name: 'View activity' } )
+		);
+
+		expect(
+			screen.getByRole( 'link', { name: 'Activity' } )
+		).toHaveAttribute( 'aria-current', 'page' );
+		const params = new URLSearchParams( window.location.search );
+		expect( params.get( 'tab' ) ).toBe( 'activity' );
+		expect( params.get( 'token' ) ).toBe( '9' );
+		expect( params.get( 'page' ) ).toBe( 'happyaccess' );
+
+		// Choosing a tab by hand drops the token.
+		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
+		expect(
+			new URLSearchParams( window.location.search ).has( 'token' )
+		).toBe( false );
+	} );
+
+	it( 'ends every pass from the header and refreshes the list', async () => {
+		grantsOnServer = [ grantFixture( { id: 9 } ) ];
+		const user = userEvent.setup();
+		render( <App boot={ boot() } /> );
+		expect(
+			await screen.findByRole( 'heading', { name: 'Who has access' } )
+		).toBeInTheDocument();
+		await screen.findByText( 'Acme Plugin Support' );
+
+		await user.click(
+			screen.getByRole( 'button', { name: 'Emergency lock' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'End all passes' } )
+		);
+
+		expect(
+			await screen.findByText( 'Nobody has access.' )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByText( 'Acme Plugin Support' )
 		).not.toBeInTheDocument();
 	} );
 
