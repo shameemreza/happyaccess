@@ -456,6 +456,118 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertSame( $secret, get_option( 'happyaccess_secret' ) );
 	}
 
+	public function test_custom_cannot_point_default_role_at_a_role_with_more_than_read() {
+		add_role( 'happyaccess_reader', 'Reader', array( 'read' => true ) );
+		$this->custom( array( 'manage_options' ) );
+
+		update_option( 'default_role', 'administrator' );
+		update_option( 'default_role', 'editor' );
+		update_option( 'Default_Role', 'administrator' );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'default_role', 'options' );
+		$this->assertSame( 'subscriber', get_option( 'default_role' ) );
+
+		update_option( 'default_role', 'happyaccess_reader' );
+		$this->assertSame( 'happyaccess_reader', get_option( 'default_role' ) );
+		update_option( 'default_role', 'subscriber' );
+		$this->assertSame( 'subscriber', get_option( 'default_role' ) );
+		remove_role( 'happyaccess_reader' );
+	}
+
+	public function test_custom_cannot_add_default_role_with_an_admin_role() {
+		delete_option( 'default_role' );
+		$this->custom( array( 'manage_options' ) );
+		try {
+			add_option( 'default_role', 'administrator' );
+			$this->fail( 'Expected wp_die.' );
+		} catch ( WPDieException $e ) {
+			$this->assertSame( 403, $this->die_code );
+		}
+		$this->assertFalse( get_option( 'default_role' ) );
+		add_option( 'default_role', 'subscriber' );
+		$this->assertSame( 'subscriber', get_option( 'default_role' ) );
+	}
+
+	public function test_custom_cannot_write_the_role_table_outside_plugin_work() {
+		global $wpdb;
+		$key = $wpdb->prefix . 'user_roles';
+		$this->custom( array( 'manage_options' ) );
+
+		$table                                               = get_option( $key );
+		$table['subscriber']['capabilities']['manage_options'] = true;
+		update_option( $key, $table );
+		update_option( strtoupper( $key ), $table );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( $key, 'options' );
+
+		$this->assertArrayNotHasKey( 'manage_options', get_option( $key )['subscriber']['capabilities'] );
+		$this->assertArrayNotHasKey( $key, CapabilityGuard::filter_allowed_options( array( 'general' => array( $key ) ) )['general'] );
+	}
+
+	public function test_custom_role_table_writes_during_plugin_work_are_kept_and_logged() {
+		global $wpdb;
+		$key  = $wpdb->prefix . 'user_roles';
+		$temp = $this->custom( array( 'activate_plugins' ) );
+
+		CapabilityGuard::plugin_work_started();
+		get_role( 'editor' )->add_cap( 'happyaccess_test_cap' );
+		CapabilityGuard::plugin_work_finished();
+		$stored = get_option( $key )['editor']['capabilities'];
+		get_role( 'editor' )->remove_cap( 'happyaccess_test_cap' );
+
+		$this->assertTrue( ! empty( $stored['happyaccess_test_cap'] ) );
+		$rows = AuditLog::query(
+			array(
+				'event'    => 'roles_changed',
+				'token_id' => Capabilities::grant_id( $temp ),
+			)
+		);
+		$this->assertSame( 1, $rows['total'] );
+	}
+
+	public function test_custom_options_page_has_no_catch_all_group() {
+		$this->custom( array( 'manage_options' ) );
+		$allowed = CapabilityGuard::filter_allowed_options(
+			array(
+				'options' => array( 'default_role', 'users_can_register' ),
+				'general' => array( 'blogname' ),
+			)
+		);
+		$this->assertSame( array( 'general' => array( 'blogname' ) ), $allowed );
+	}
+
+	public function test_custom_without_activate_plugins_keeps_the_plugin_list() {
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
+		$this->custom( array( 'manage_options' ) );
+		$this->assertFalse( current_user_can( 'activate_plugins' ) );
+
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME, 'hello.php' ) );
+		$this->assertSame( array( HAPPYACCESS_PLUGIN_BASENAME ), get_option( 'active_plugins' ) );
+		update_option( 'active_plugins', 'not a list' );
+		$this->assertSame( array( HAPPYACCESS_PLUGIN_BASENAME ), get_option( 'active_plugins' ) );
+	}
+
+	public function test_custom_with_activate_plugins_changes_the_list_but_keeps_happyaccess() {
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
+		$this->custom( array( 'activate_plugins' ) );
+
+		update_option( 'active_plugins', array( 'hello.php' ) );
+		$this->assertSame( array( 'hello.php', HAPPYACCESS_PLUGIN_BASENAME ), get_option( 'active_plugins' ) );
+	}
+
+	public function test_full_may_still_write_default_role_and_the_role_table() {
+		global $wpdb;
+		$key = $wpdb->prefix . 'user_roles';
+		$this->full();
+
+		update_option( 'default_role', 'editor' );
+		$this->assertSame( 'editor', get_option( 'default_role' ) );
+		get_role( 'subscriber' )->add_cap( 'happyaccess_test_cap' );
+		$stored = get_option( $key )['subscriber']['capabilities'];
+		get_role( 'subscriber' )->remove_cap( 'happyaccess_test_cap' );
+		$this->assertTrue( ! empty( $stored['happyaccess_test_cap'] ) );
+	}
+
 	public function test_unreadable_grant_fails_closed_to_protected() {
 		$temp = $this->full();
 		update_user_meta( $temp, 'happyaccess_token_id', 999999 );

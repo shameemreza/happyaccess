@@ -221,7 +221,7 @@ final class CapabilityGuard {
 		add_filter( 'allowed_options', array( __CLASS__, 'filter_allowed_options' ) );
 		add_filter( 'pre_update_option', array( __CLASS__, 'keep_old_option' ), 10, 3 );
 		add_action( 'delete_option', array( __CLASS__, 'block_option_delete' ) );
-		add_action( 'add_option', array( __CLASS__, 'block_option_add' ) );
+		add_action( 'add_option', array( __CLASS__, 'block_option_add' ), 10, 2 );
 		foreach ( array_merge( self::PROTECTED_SITE_OPTIONS, array( self::NETWORK_PLUGINS_OPTION ) ) as $site_option ) {
 			add_filter( 'pre_update_site_option_' . $site_option, array( __CLASS__, 'keep_old_site_option' ), 10, 4 );
 			add_action( 'pre_delete_site_option_' . $site_option, array( __CLASS__, 'block_site_option_delete' ), 10, 2 );
@@ -455,16 +455,40 @@ final class CapabilityGuard {
 	 * @return bool
 	 */
 	public static function is_low_privilege( \WP_User $user ) {
+		return array() === array_diff( self::true_caps( (array) $user->allcaps ), array( 'read' ) );
+	}
+
+	/**
+	 * Whether a role's caps go no further than read. A role that doesn't exist is not.
+	 *
+	 * @param mixed $role Role slug.
+	 * @return bool
+	 */
+	public static function is_low_privilege_role( $role ) {
+		$object = is_string( $role ) && '' !== $role ? get_role( $role ) : null;
+		if ( ! $object ) {
+			return false;
+		}
+		return array() === array_diff( self::true_caps( (array) $object->capabilities ), array( 'read' ) );
+	}
+
+	/**
+	 * Names of the granted caps in a cap list, without role names and legacy level_N caps.
+	 *
+	 * @param array $capabilities Cap name to granted flag.
+	 * @return string[]
+	 */
+	public static function true_caps( array $capabilities ) {
 		$roles = array_keys( wp_roles()->roles );
 		$caps  = array();
-		foreach ( (array) $user->allcaps as $name => $granted ) {
+		foreach ( $capabilities as $name => $granted ) {
 			$name = (string) $name;
 			if ( ! $granted || in_array( $name, $roles, true ) || ( 0 === strpos( $name, 'level_' ) && ctype_digit( substr( $name, 6 ) ) ) ) {
 				continue;
 			}
 			$caps[] = $name;
 		}
-		return array() === $caps || array( 'read' ) === $caps;
+		return $caps;
 	}
 
 	/**
@@ -495,8 +519,8 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Removes protected options for temp users, and on the protected level
-	 * the catch-all options page group too.
+	 * Removes protected options for temp users, and on the protected and
+	 * custom levels the catch-all options page group too.
 	 *
 	 * @param array $allowed Options by group.
 	 * @return array
@@ -507,7 +531,7 @@ final class CapabilityGuard {
 			return $allowed;
 		}
 		$level = self::level_for( $user_id );
-		if ( 'protected' === $level ) {
+		if ( 'full' !== $level ) {
 			unset( $allowed['options'] );
 		}
 		foreach ( $allowed as $group => $options ) {
@@ -531,7 +555,11 @@ final class CapabilityGuard {
 
 	/**
 	 * Keeps the old value of a protected option when a temp user writes it.
-	 * The active plugins list may change but always keeps HappyAccess.
+	 * The active plugins list may change but always keeps HappyAccess, and
+	 * on a custom pass only when the pass may turn plugins on and off.
+	 * Protected and custom passes write the role table only while a plugin
+	 * is activated or updated, and a custom pass may point default_role
+	 * only at a role with no more than read.
 	 *
 	 * @param mixed  $value     New value.
 	 * @param string $option    Option name.
@@ -546,11 +574,14 @@ final class CapabilityGuard {
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return $value;
 		}
+		$level = self::level_for( $user_id );
 		if ( 'active_plugins' === $option ) {
+			if ( 'custom' === $level && ! user_can( $user_id, 'activate_plugins' ) ) {
+				return $old_value;
+			}
 			return self::keep_plugin_active( $value, $old_value );
 		}
-		$level = self::level_for( $user_id );
-		if ( 'protected' !== $level ) {
+		if ( 'full' === $level ) {
 			if ( self::is_guarded_option( $option, $level ) ) {
 				return $old_value;
 			}
@@ -574,11 +605,38 @@ final class CapabilityGuard {
 			}
 			return $value;
 		}
-		return self::is_guarded_option( $option, $level ) ? $old_value : $value;
+		if ( self::is_guarded_option( $option, $level ) ) {
+			return $old_value;
+		}
+		if ( 'custom' === $level && self::resolves_to( $option, 'default_role' ) && ! self::is_low_privilege_role( $value ) ) {
+			return $old_value;
+		}
+		return $value;
 	}
 
 	/**
-	 * Logs the first role table change a custom or full pass makes in a request.
+	 * Whether an option name writes the row of another option name, as the
+	 * options table compares names: in any letter case, or through the
+	 * stored row it matches. Names that aren't printable ASCII never match.
+	 *
+	 * @param mixed  $option Option name being written.
+	 * @param string $name   Lowercase option name to compare with.
+	 * @return bool
+	 */
+	public static function resolves_to( $option, $name ) {
+		if ( ! self::is_ascii_name( $option ) ) {
+			return false;
+		}
+		$name = strtolower( (string) $name );
+		if ( strtolower( $option ) === $name ) {
+			return true;
+		}
+		$stored = self::stored_option_name( $option );
+		return '' !== $stored && strtolower( $stored ) === $name;
+	}
+
+	/**
+	 * Logs the first role table change a full pass makes in a request.
 	 *
 	 * @param int   $user_id   Temp user id.
 	 * @param mixed $value     New role table.
@@ -623,14 +681,18 @@ final class CapabilityGuard {
 	 * transient, before it exists to be kept by the update guard.
 	 *
 	 * @param string $option Option name.
+	 * @param mixed  $value  Value of the new option.
 	 * @return void
 	 */
-	public static function block_option_add( $option ) {
+	public static function block_option_add( $option, $value = null ) {
 		$user_id = get_current_user_id();
 		if ( Internal::active() || ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
 		}
-		if ( ! self::is_guarded_option( $option, self::level_for( $user_id ) ) ) {
+		$level   = self::level_for( $user_id );
+		$blocked = self::is_guarded_option( $option, $level )
+			|| ( 'custom' === $level && self::resolves_to( $option, 'default_role' ) && ! self::is_low_privilege_role( $value ) );
+		if ( ! $blocked ) {
 			return;
 		}
 		wp_die( esc_html__( "Temporary support accounts can't change this setting.", 'happyaccess' ), '', array( 'response' => 403 ) );
@@ -889,9 +951,10 @@ final class CapabilityGuard {
 	}
 
 	/**
-	 * Whether an option is off limits to temp users. Custom and full passes
-	 * are kept only from HappyAccess's own options. Call it through
-	 * is_guarded_option(), which lowercases the name first.
+	 * Whether an option is off limits to temp users. Full passes are kept
+	 * only from HappyAccess's own options, and custom passes from the role
+	 * table too. Call it through is_guarded_option(), which lowercases the
+	 * name first.
 	 *
 	 * @param mixed  $option Lowercased option name.
 	 * @param string $level  Access level of the grant.
@@ -901,8 +964,11 @@ final class CapabilityGuard {
 		if ( ! is_string( $option ) || '' === $option ) {
 			return false;
 		}
-		if ( 'protected' !== $level ) {
+		if ( 'full' === $level ) {
 			return self::is_own_name( $option ) || in_array( $option, self::SECRET_OPTIONS, true );
+		}
+		if ( 'custom' === $level ) {
+			return self::is_own_name( $option ) || in_array( $option, self::SECRET_OPTIONS, true ) || self::is_roles_option( $option );
 		}
 		return in_array( $option, self::PROTECTED_OPTIONS, true )
 			|| self::is_own_name( $option )
