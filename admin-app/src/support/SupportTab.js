@@ -128,32 +128,33 @@ export default function SupportTab( {
 		}
 	} );
 
+	// With no passes at all the empty list says "Nobody has access.", and after
+	// a failed load an empty list says nothing about who has access.
 	let statusText = countLine( live.length );
 	if ( 0 === grants.grants.length ) {
-		if ( grants.loading ) {
-			statusText = __( 'Checking who has access.', 'happyaccess' );
-		} else if ( grants.error ) {
-			// An empty list after a failed load says nothing about who has access.
-			statusText = '';
-		}
+		statusText = grants.loading
+			? __( 'Checking who has access.', 'happyaccess' )
+			: '';
 	}
 
 	return (
 		<div className="ha-support">
-			<p className="ha-support__status">
-				<strong>{ statusText }</strong>
-				{ latest && (
-					<span className="ha-support__last">
-						{ ' ' }
-						{ sprintf(
-							/* translators: 1: who the pass is for. 2: how long ago, like "14 minutes ago". */
-							__( '%1$s logged in %2$s.', 'happyaccess' ),
-							latest.label,
-							timeAgo( latest.last_login_at, now )
-						) }
-					</span>
-				) }
-			</p>
+			{ ( statusText || latest ) && (
+				<p className="ha-support__status">
+					<strong>{ statusText }</strong>
+					{ latest && (
+						<span className="ha-support__last">
+							{ ' ' }
+							{ sprintf(
+								/* translators: 1: who the pass is for. 2: how long ago, like "14 minutes ago". */
+								__( '%1$s logged in %2$s.', 'happyaccess' ),
+								latest.label,
+								timeAgo( latest.last_login_at, now )
+							) }
+						</span>
+					) }
+				</p>
+			) }
 			<div className="ha-support__cols">
 				<div className="ha-support__main">
 					{ result ? (

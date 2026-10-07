@@ -189,6 +189,21 @@ describe( 'status line', () => {
 			screen.queryByText( /^Acme Plugin Support logged in/ )
 		).not.toBeInTheDocument();
 	} );
+
+	it( 'leaves the status line out when nobody has a pass, so the empty list speaks once', async () => {
+		mockServer( [] );
+		setup();
+
+		expect(
+			await screen.findByText(
+				'Passes you create show here, with the time each one has left.'
+			)
+		).toBeInTheDocument();
+		expect( screen.getAllByText( 'Nobody has access.' ) ).toHaveLength( 1 );
+		expect(
+			document.querySelector( '.ha-support__status' )
+		).not.toBeInTheDocument();
+	} );
 } );
 
 describe( 'create and result card', () => {
@@ -447,10 +462,13 @@ describe( 'pass actions', () => {
 			screen.getByRole( 'button', { name: 'Revoke all now' } )
 		);
 
-		// The status line and the empty list both say it.
+		// The empty list says it, so the status line stays quiet.
 		expect(
 			await screen.findAllByText( 'Nobody has access.' )
-		).toHaveLength( 2 );
+		).toHaveLength( 1 );
+		expect(
+			document.querySelector( '.ha-support__status' )
+		).not.toBeInTheDocument();
 		expect( calls.some( ( c ) => '/grants/revoke-all' === c.route ) ).toBe(
 			true
 		);
@@ -510,7 +528,7 @@ describe( 'refresh key', () => {
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
 		await waitFor( () =>
 			expect( screen.getAllByText( 'Nobody has access.' ) ).toHaveLength(
-				2
+				1
 			)
 		);
 	} );
