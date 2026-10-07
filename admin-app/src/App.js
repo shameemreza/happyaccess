@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from '@wordpress/element';
 import ActivityTab from './activity/ActivityTab';
 import { AnnounceProvider } from './Announcer';
 import Header from './Header';
+import SettingsTab from './settings/SettingsTab';
+import Setup from './setup/Setup';
 import SupportTab from './support/SupportTab';
-import SetupPlaceholder from './SetupPlaceholder';
 import TabNav from './TabNav';
 import { getVisibleTabs, pickInitialTab, storeTab, tabUrl } from './tabList';
 
@@ -19,7 +20,16 @@ const DEFAULT_BOOT = { features: NO_FEATURES, needsSetup: false };
  * @return {Element} The app.
  */
 export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
-	const features = boot.features || NO_FEATURES;
+	// Both change while the app is open: Settings switches features, and
+	// setup ends. Neither needs a page reload.
+	const [ features, setFeatures ] = useState(
+		() => boot.features || NO_FEATURES
+	);
+	const [ needsSetup, setNeedsSetup ] = useState( !! boot.needsSetup );
+	const appBoot = useMemo(
+		() => ( { ...boot, features } ),
+		[ boot, features ]
+	);
 	const tabs = useMemo(
 		() => getVisibleTabs( { features, loginReady } ),
 		[ features, loginReady ]
@@ -47,13 +57,33 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 	const openSettings = useCallback( () => select( 'settings' ), [ select ] );
 	const onLocked = useCallback( () => setLockCount( ( n ) => n + 1 ), [] );
 
+	// Keeps the boot data the page printed in step, for anything that reads it.
+	const updateFeatures = useCallback( ( next ) => {
+		setFeatures( { ...next } );
+		const printed = window.happyaccessBoot;
+		if ( printed ) {
+			printed.features = Object.assign( printed.features || {}, next );
+		}
+	}, [] );
+
+	const finishSetup = useCallback(
+		( saved ) => {
+			if ( saved ) {
+				updateFeatures( saved );
+			}
+			setNeedsSetup( false );
+			select( 'support' );
+		},
+		[ updateFeatures, select ]
+	);
+
 	const active = tabs.find( ( tab ) => tab.slug === current ) || tabs[ 0 ];
 
 	return (
 		<AnnounceProvider>
 			<Header onLocked={ onLocked } />
-			{ boot.needsSetup ? (
-				<SetupPlaceholder />
+			{ needsSetup ? (
+				<Setup onFinish={ finishSetup } />
 			) : (
 				<>
 					<TabNav
@@ -63,19 +93,24 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 					/>
 					{ 'support' === active.slug && (
 						<SupportTab
-							boot={ boot }
+							boot={ appBoot }
 							refreshKey={ lockCount }
 							onViewActivity={ openActivity }
 						/>
 					) }
 					{ 'activity' === active.slug && (
 						<ActivityTab
-							boot={ boot }
+							boot={ appBoot }
 							loginReady={ loginReady }
 							onOpenSettings={ openSettings }
 						/>
 					) }
-					{ ! [ 'support', 'activity' ].includes( active.slug ) && (
+					{ 'settings' === active.slug && (
+						<SettingsTab onFeaturesChange={ updateFeatures } />
+					) }
+					{ ! [ 'support', 'activity', 'settings' ].includes(
+						active.slug
+					) && (
 						<section
 							className="ha-panel"
 							aria-labelledby="ha-panel-title"

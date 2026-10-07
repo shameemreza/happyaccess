@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import App from './App';
+import { settingsFixture } from './settings/fixtures';
 import { grantFixture } from './support/fixtures';
 
 vi.mock( '@wordpress/api-fetch' );
 
 let grantsOnServer;
+let settingsOnServer;
 
 const boot = ( overrides = {} ) => ( {
 	features: { support_access: true, passwordless: false, two_step: false },
@@ -23,12 +25,28 @@ const tabNames = () =>
 
 beforeEach( () => {
 	grantsOnServer = [];
+	settingsOnServer = settingsFixture();
 	apiFetch.mockReset();
-	apiFetch.mockImplementation( async ( { path, method } ) => {
+	apiFetch.mockImplementation( async ( { path, method, data } ) => {
 		if ( '/happyaccess/v1/lock' === path && 'POST' === method ) {
 			const revoked = grantsOnServer.length;
 			grantsOnServer = [];
 			return { revoked };
+		}
+		if ( '/happyaccess/v1/setup' === path ) {
+			settingsOnServer = { ...settingsOnServer, needs_setup: false };
+			return settingsOnServer;
+		}
+		if ( '/happyaccess/v1/settings' === path ) {
+			if ( 'POST' === method ) {
+				const patch = data.features || {};
+				settingsOnServer = {
+					...settingsOnServer,
+					features: { ...settingsOnServer.features, ...patch },
+				};
+				return { ...settingsOnServer, revoked: grantsOnServer.length };
+			}
+			return settingsOnServer;
 		}
 		if ( path.startsWith( '/happyaccess/v1/activity/summary' ) ) {
 			return { logins: 2, changes: 4, minutes: null, ips: [] };
@@ -258,6 +276,81 @@ describe( 'App shell', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( 'walks through setup, then shows the tabs on Support access without a reload', async () => {
+		const user = userEvent.setup();
+		render(
+			<App
+				boot={ boot( {
+					needsSetup: true,
+					features: { support_access: true },
+				} ) }
+			/>
+		);
+		await user.click( screen.getByRole( 'button', { name: 'Continue' } ) );
+		await user.click(
+			screen.getByRole( 'checkbox', {
+				name: "I understand, and I'll only give access to people I trust.",
+			} )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Finish setup' } )
+		);
+		await screen.findByRole( 'heading', { name: "You're all set" } );
+		expect(
+			screen.queryByRole( 'navigation', { name: 'HappyAccess sections' } )
+		).not.toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole( 'button', {
+				name: 'Create your first support pass',
+			} )
+		);
+
+		expect( tabNames() ).toEqual( [
+			'Support access',
+			'Activity',
+			'Settings',
+		] );
+		expect(
+			screen.getByRole( 'link', { name: 'Support access' } )
+		).toHaveAttribute( 'aria-current', 'page' );
+		expect(
+			await screen.findByRole( 'heading', {
+				name: 'Give support access',
+			} )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'heading', { name: 'Set up HappyAccess' } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'drops the Support access tab and updates the boot data when the feature is switched off', async () => {
+		window.happyaccessBoot = { features: { support_access: true } };
+		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
+		const user = userEvent.setup();
+		render(
+			<App
+				boot={ boot( { features: window.happyaccessBoot.features } ) }
+			/>
+		);
+		await user.click(
+			await screen.findByRole( 'switch', { name: 'Support access' } )
+		);
+		await user.click( screen.getByRole( 'button', { name: 'Turn off' } ) );
+
+		await waitFor( () =>
+			expect( tabNames() ).toEqual( [ 'Activity', 'Settings' ] )
+		);
+		expect( window.happyaccessBoot.features.support_access ).toBe( false );
+		expect(
+			screen.getByRole( 'link', { name: 'Settings' } )
+		).toHaveAttribute( 'aria-current', 'page' );
+		expect(
+			screen.queryByText( 'Have a support access code?' )
+		).not.toBeInTheDocument();
+		delete window.happyaccessBoot;
+	} );
+
 	it( 'has one polite live region', () => {
 		const { container } = render( <App boot={ boot() } /> );
 
@@ -268,6 +361,13 @@ describe( 'App shell', () => {
 
 	it( 'has no accessibility violations', async () => {
 		const { container } = render( <App boot={ boot() } /> );
+		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+
+	it( 'has no accessibility violations on the Settings tab', async () => {
+		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
+		const { container } = render( <App boot={ boot() } /> );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
 		expect( await axe( container ) ).toHaveNoViolations();
 	} );
 

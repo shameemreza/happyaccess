@@ -7,6 +7,8 @@
 @use "support/list";
 @use "activity/summary";
 @use "activity/log";
+@use "settings/settings";
+@use "setup/setup";
 
 .happyaccess-app {
 	--ha-text: #1e1e1e;

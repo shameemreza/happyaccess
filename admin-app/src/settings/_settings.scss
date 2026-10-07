@@ -1,0 +1,278 @@
+@use "../support/motion";
+
+.happyaccess-app {
+
+	.ha-settings {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 24px;
+		min-width: 0;
+	}
+
+	.ha-settings__main {
+		display: flex;
+		flex: 999 1 560px;
+		flex-direction: column;
+		gap: 24px;
+		min-width: 0;
+	}
+
+	.ha-settings__loading {
+		color: var(--ha-muted);
+	}
+
+	.ha-card {
+		min-width: 0;
+		border: 1px solid var(--ha-line);
+		border-radius: 8px;
+		background: #fff;
+	}
+
+	.ha-card__head {
+		padding: 20px 24px 8px;
+
+		h2 {
+			margin: 0;
+			padding: 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+		p {
+			margin: 4px 0 0;
+			color: var(--ha-muted);
+		}
+	}
+
+	.ha-card__body {
+		padding: 20px 24px;
+	}
+
+	.ha-card__confirm {
+		padding: 0 24px 16px;
+	}
+
+	.ha-features {
+		margin: 0;
+		padding: 0 0 8px;
+		list-style: none;
+	}
+
+	.ha-feature {
+		display: flex;
+		align-items: flex-start;
+		gap: 16px;
+		margin: 0;
+		padding: 16px 24px;
+		border-block-start: 1px solid var(--ha-line-soft);
+	}
+
+	.ha-feature__icon {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 8px;
+		background: #f0f6fc;
+		color: #0a4b78;
+	}
+
+	.ha-feature__text {
+		flex: 1 1 auto;
+		min-width: 0;
+		color: var(--ha-muted);
+	}
+
+	.ha-feature__name {
+		color: var(--ha-text);
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.ha-feature .ha-switch {
+		margin-block-start: 6px;
+	}
+
+	.ha-settings__form {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+
+		h2 {
+			margin: 0;
+			padding: 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+		.ha-field .components-base-control__label,
+		.ha-field .components-input-control__label {
+			font-size: 11px;
+			font-weight: 500;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+
+		.components-base-control__help {
+			margin: 6px 0 0;
+			color: var(--ha-muted);
+			font-size: 12px;
+		}
+	}
+
+	.ha-settings__grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+
+		@media (max-width: 600px) {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	.ha-settings__checks {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.ha-recaptcha {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding-block-start: 16px;
+		border-block-start: 1px solid var(--ha-line-soft);
+
+		p {
+			margin: 0;
+		}
+	}
+
+	.ha-recaptcha__row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.ha-recaptcha__name {
+		font-weight: 600;
+	}
+
+	.ha-recaptcha__secret {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.ha-recaptcha__saved {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		color: var(--ha-muted);
+	}
+
+	.ha-settings__actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 12px;
+		padding-block-start: 4px;
+	}
+
+	.ha-settings__dirty {
+		color: #614200;
+		font-weight: 500;
+	}
+
+	.ha-settings__saved {
+		color: #007017;
+		font-weight: 500;
+	}
+
+	.ha-loginprev {
+		flex: 1 1 320px;
+		min-width: 0;
+		padding: 20px;
+		border: 1px solid var(--ha-line);
+		border-radius: 8px;
+		background: #fff;
+
+		h2 {
+			margin: 0;
+			padding: 0;
+			font-size: 14px;
+			font-weight: 600;
+		}
+	}
+
+	.ha-loginprev__lead {
+		margin: 2px 0 16px;
+		color: var(--ha-muted);
+	}
+
+	.ha-loginprev__screen {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+		padding: 24px 20px;
+		border-radius: 8px;
+		background: var(--ha-line-soft);
+		color: #3c434a;
+	}
+
+	.ha-loginprev__form {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		width: 100%;
+		padding: 18px;
+		border: 1px solid #c3c4c7;
+		border-radius: 4px;
+		background: #fff;
+		color: var(--ha-text);
+		font-size: 12px;
+	}
+
+	.ha-loginprev__input {
+		height: 30px;
+		border: 1px solid #8c8f94;
+		border-radius: 4px;
+	}
+
+	.ha-loginprev__submit {
+		display: flex;
+		justify-content: flex-end;
+
+		span {
+			padding: 4px 10px;
+			border-radius: 3px;
+			background: #2271b1;
+			color: #fff;
+		}
+	}
+
+	.ha-loginprev__code {
+		padding: 1px 3px;
+		border-radius: 2px;
+		outline: 2px solid rgba(219, 166, 23, 0.55);
+		outline-offset: 2px;
+		color: #135e96;
+		font-size: 12px;
+		text-decoration: underline;
+
+		@include motion.motion {
+			animation: ha-in 0.2s ease-out;
+		}
+	}
+
+	.ha-loginprev__lost {
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+}
