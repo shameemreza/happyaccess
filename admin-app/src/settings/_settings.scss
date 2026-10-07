@@ -271,13 +271,14 @@
 	.ha-loginprev__code {
 		--ha-pen: #d9472b;
 
-		position: relative;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		width: 100%;
 	}
 
+	// The bubble hangs off the link itself, so the gap to the loop holds for
+	// any link length, translations included.
 	.ha-loginprev__spot {
 		position: relative;
 		display: inline-block;
@@ -304,15 +305,16 @@
 
 	.ha-loginprev__loop {
 		position: absolute;
-		inset: -15px -24px -15px;
-		width: calc(100% + 48px);
+		inset: -15px -16px -15px;
+		width: calc(100% + 32px);
 		height: calc(100% + 30px);
 		overflow: visible;
 		pointer-events: none;
 	}
 
 	.ha-loginprev__loop path,
-	.ha-loginprev__arrow path {
+	.ha-loginprev__arrow path,
+	.ha-loginprev__shape path {
 		fill: none;
 		stroke: var(--ha-pen);
 		stroke-width: 2.2;
@@ -321,63 +323,52 @@
 		vector-effect: non-scaling-stroke;
 	}
 
-	.ha-loginprev__loop path {
-
-		@include motion.motion {
-			stroke-dasharray: 1;
-			animation: happyaccess-draw 0.8s ease-out 0.2s both;
-		}
-	}
-
-	.ha-loginprev__arrow path {
-
-		@include motion.motion {
-			stroke-dasharray: 1;
-			animation: happyaccess-draw 0.45s ease-out 0.9s both;
-		}
-	}
-
-	.ha-loginprev__arrow .ha-loginprev__arrowhead {
-
-		@include motion.motion {
-			animation-delay: 1.3s;
-		}
+	.ha-loginprev__shape path {
+		fill: #fff;
 	}
 
 	.ha-loginprev__bubble {
 		position: absolute;
+		z-index: 1;
 		inset-block-start: 50%;
-		inset-inline-start: calc(50% + 128px);
+		inset-inline-start: calc(100% + 70px);
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		width: 180px;
-		padding: 8px 12px;
-		border: 2px solid var(--ha-pen);
-		border-radius: 16px 18px 14px 20px / 14px 16px 18px 12px;
-		background: #fff;
-		box-shadow: 3px 3px 0 rgba(217, 71, 43, 0.15);
+		width: max-content;
+		padding: 10px 18px 11px;
 		color: var(--ha-text);
 		font-size: 12px;
 		line-height: 1.45;
+		text-align: start;
 		transform: translateY(-50%) rotate(-1.5deg);
+		isolation: isolate;
 
 		strong {
 			color: var(--ha-pen);
 			font-weight: 600;
-		}
-
-		@include motion.motion {
-			animation: happyaccess-bubble 0.3s ease-out 1.2s both;
+			white-space: nowrap;
 		}
 	}
 
+	// The soft, slightly wobbly outline replaces a boxy border.
+	.ha-loginprev__shape {
+		position: absolute;
+		z-index: -1;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		overflow: visible;
+		filter: drop-shadow(3px 3px 0 rgba(217, 71, 43, 0.15));
+	}
+
+	// The arrow fills the space between bubble and loop and stops short of it.
 	.ha-loginprev__arrow {
 		position: absolute;
-		inset-block-start: 4px;
-		inset-inline-end: calc(100% - 4px);
-		width: 48px;
-		height: 34px;
+		inset-block-start: calc(50% - 11px);
+		inset-inline-end: calc(100% + 2px);
+		width: 44px;
+		height: 22px;
 		overflow: visible;
 
 		&:dir(rtl) {
@@ -390,29 +381,71 @@
 		font-size: 12px;
 	}
 
-	// Narrow panels: the bubble drops under the link with a small tail.
-	@container (max-width: 520px) {
+	// Motion: nothing draws until the preview is on screen.
+	@include motion.motion {
+
+		.ha-loginprev__loop path,
+		.ha-loginprev__arrow path,
+		.ha-loginprev__shape path {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 1;
+		}
 
 		.ha-loginprev__bubble {
-			position: relative;
-			inset: auto;
-			width: auto;
-			max-width: 260px;
-			margin-block-start: 18px;
-			transform: rotate(-1deg);
+			opacity: 0;
+		}
 
-			&::before {
-				content: "";
-				position: absolute;
-				inset-block-end: 100%;
-				inset-inline-start: calc(50% - 7px);
-				border: 7px solid transparent;
-				border-block-end-color: var(--ha-pen);
+		.ha-loginprev.is-visible {
+
+			.ha-loginprev__loop path {
+				animation: happyaccess-draw 0.8s ease-out 0.2s both;
+			}
+
+			.ha-loginprev__bubble {
+				animation: happyaccess-fade 0.3s ease-out 0.9s both;
+			}
+
+			.ha-loginprev__shape path {
+				animation: happyaccess-draw 0.6s ease-out 0.9s both;
+			}
+
+			.ha-loginprev__arrow path {
+				animation: happyaccess-draw 0.45s ease-out 1.3s both;
+			}
+
+			.ha-loginprev__arrow .ha-loginprev__arrowhead {
+				animation-delay: 1.7s;
+			}
+		}
+	}
+
+	// Narrow panels: the bubble sits under the link, pointing up at it.
+	@container (max-width: 660px) {
+
+		.ha-loginprev__code.has-bubble {
+			padding-block-end: 96px;
+		}
+
+		.ha-loginprev__bubble {
+			inset-block-start: calc(100% + 50px);
+			inset-inline-start: 50%;
+			transform: translateX(-50%) rotate(-1deg);
+
+			&:dir(rtl) {
+				transform: translateX(50%) rotate(1deg);
 			}
 		}
 
 		.ha-loginprev__arrow {
-			display: none;
+			inset-block-start: -28px;
+			inset-inline-end: auto;
+			inset-inline-start: calc(50% - 15px);
+			width: 30px;
+			transform: rotate(90deg);
+
+			&:dir(rtl) {
+				transform: rotate(90deg);
+			}
 		}
 	}
 }
@@ -428,15 +461,13 @@
 	}
 }
 
-@keyframes happyaccess-bubble {
+@keyframes happyaccess-fade {
 
 	from {
 		opacity: 0;
-		transform: translateY(-50%) rotate(-1.5deg) scale(0.85);
 	}
 
 	to {
 		opacity: 1;
-		transform: translateY(-50%) rotate(-1.5deg) scale(1);
 	}
 }

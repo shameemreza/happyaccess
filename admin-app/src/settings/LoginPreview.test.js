@@ -1,7 +1,41 @@
-import { expect, it } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import LoginPreview from './LoginPreview';
+
+afterEach( () => {
+	vi.unstubAllGlobals();
+} );
+
+it( 'waits to draw the marker until the preview is on screen', () => {
+	let notify;
+	const observe = vi.fn();
+	const disconnect = vi.fn();
+	vi.stubGlobal(
+		'IntersectionObserver',
+		vi.fn( function ( callback ) {
+			notify = callback;
+			this.observe = observe;
+			this.disconnect = disconnect;
+		} )
+	);
+
+	const { container } = render( <LoginPreview supportAccess /> );
+	const preview = container.querySelector( '.ha-loginprev' );
+	expect( observe ).toHaveBeenCalled();
+	expect( preview ).not.toHaveClass( 'is-visible' );
+
+	act( () => notify( [ { isIntersecting: true } ] ) );
+	expect( preview ).toHaveClass( 'is-visible' );
+	expect( disconnect ).toHaveBeenCalled();
+} );
+
+it( 'draws the bubble as a hand-drawn shape, not a box', () => {
+	const { container } = render( <LoginPreview supportAccess /> );
+	expect(
+		container.querySelector( '.ha-loginprev__bubble .ha-loginprev__shape' )
+	).not.toBeNull();
+} );
 
 it( 'shows the support code link when Support access is on', () => {
 	render( <LoginPreview supportAccess /> );
@@ -19,12 +53,12 @@ it( 'circles the added link and explains it in a bubble', () => {
 	const { container } = render( <LoginPreview supportAccess /> );
 
 	expect( container.querySelector( '.ha-loginprev__loop' ) ).not.toBeNull();
-	expect( screen.getByText( 'Added by HappyAccess' ) ).toBeInTheDocument();
+	expect( screen.getByText( 'Support access' ) ).toBeInTheDocument();
 	expect(
-		screen.getByText(
+		screen.queryByText(
 			'Support people click here and enter their 8-digit code.'
 		)
-	).toBeInTheDocument();
+	).not.toBeInTheDocument();
 	expect(
 		screen.getByRole( 'button', { name: 'Have a support access code?' } )
 	).toHaveAttribute( 'aria-expanded', 'true' );
@@ -38,12 +72,10 @@ it( 'opens and closes the bubble from the circled link', () => {
 
 	fireEvent.click( link );
 	expect( link ).toHaveAttribute( 'aria-expanded', 'false' );
-	expect(
-		screen.queryByText( 'Added by HappyAccess' )
-	).not.toBeInTheDocument();
+	expect( screen.queryByText( 'Support access' ) ).not.toBeInTheDocument();
 
 	fireEvent.click( link );
-	expect( screen.getByText( 'Added by HappyAccess' ) ).toBeInTheDocument();
+	expect( screen.getByText( 'Support access' ) ).toBeInTheDocument();
 
 	fireEvent.keyDown( link, { key: 'Escape' } );
 	expect( link ).toHaveAttribute( 'aria-expanded', 'false' );
@@ -56,9 +88,7 @@ it( 'leaves the link and the marker out when Support access is off', () => {
 		screen.queryByText( 'Have a support access code?' )
 	).not.toBeInTheDocument();
 	expect( container.querySelector( '.ha-loginprev__loop' ) ).toBeNull();
-	expect(
-		screen.queryByText( 'Added by HappyAccess' )
-	).not.toBeInTheDocument();
+	expect( screen.queryByText( 'Support access' ) ).not.toBeInTheDocument();
 } );
 
 it( 'has no accessibility violations', async () => {
