@@ -74,6 +74,7 @@ final class EventLabels {
 			'wc_key_blocked'          => __( 'API key request blocked', 'happyaccess' ),
 			'admin_account_created'   => __( 'Administrator account made', 'happyaccess' ),
 			'admin_account_changed'   => __( 'Administrator login details changed', 'happyaccess' ),
+			'admin_role_granted'      => __( 'Role given admin-level permissions', 'happyaccess' ),
 			'plugin_upgraded'         => __( 'HappyAccess updated', 'happyaccess' ),
 		);
 	}

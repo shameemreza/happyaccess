@@ -187,7 +187,7 @@ final class Notifications {
 	 * @return bool Whether the email was accepted.
 	 */
 	public static function admin_created( array $grant, \WP_User $user ) {
-		return self::admin_alert( 'created', $grant, $user, array() );
+		return self::admin_alert( 'created', $grant, self::account_vars( $user, array() ) );
 	}
 
 	/**
@@ -205,26 +205,66 @@ final class Notifications {
 		if ( Grants::owner_id( $grant ) === (int) $user->ID ) {
 			// The owner's own account is never held back by the cap.
 			$to = is_email( $old_email ) ? (string) $old_email : '';
-			return self::admin_alert( 'changed', $grant, $user, $fields, $to, false );
+			return self::admin_alert( 'changed', $grant, self::account_vars( $user, $fields ), $to, false );
 		}
-		return self::admin_alert( 'changed', $grant, $user, $fields );
+		return self::admin_alert( 'changed', $grant, self::account_vars( $user, $fields ) );
 	}
 
 	/**
-	 * Sends the administrator alert, for both variants. At most ALERT_LIMIT
+	 * Tells the owner that a support pass gave a role admin-level caps, or
+	 * pointed the default role for new accounts at such a role.
+	 *
+	 * @param array    $grant  Grant of the acting pass.
+	 * @param string   $role   Readable role name.
+	 * @param string   $change role or default_role.
+	 * @param string[] $caps   Admin-level caps involved.
+	 * @return bool Whether the email was accepted.
+	 */
+	public static function admin_role( array $grant, $role, $change, array $caps ) {
+		return self::admin_alert(
+			'role',
+			$grant,
+			array(
+				'role'   => (string) $role,
+				'change' => 'default_role' === $change ? 'default_role' : 'role',
+				'caps'   => array_map( 'strval', $caps ),
+			)
+		);
+	}
+
+	/**
+	 * Template fields about the account an alert is for.
+	 *
+	 * @param \WP_User $user   The administrator account.
+	 * @param string[] $fields What changed: email, password or both.
+	 * @return array
+	 */
+	private static function account_vars( \WP_User $user, array $fields ) {
+		$labels = array();
+		foreach ( $fields as $field ) {
+			$labels[] = 'password' === $field ? __( 'password', 'happyaccess' ) : __( 'email address', 'happyaccess' );
+		}
+		return array(
+			'login'      => $user->user_login,
+			'user_email' => $user->user_email,
+			'changed'    => $labels,
+		);
+	}
+
+	/**
+	 * Sends the administrator alert, for every variant. At most ALERT_LIMIT
 	 * emails go out per grant in each ALERT_WINDOW, and only a sent email is
 	 * counted. The last one says more may follow. Every event is still logged
 	 * by the caller.
 	 *
-	 * @param string   $variant created or changed.
-	 * @param array    $grant   Grant of the acting pass.
-	 * @param \WP_User $user    The administrator account.
-	 * @param string[] $fields  What changed, for the changed variant.
-	 * @param string   $to      Recipient override. Empty means the owner.
-	 * @param bool     $capped  Whether the cap applies.
+	 * @param string $variant created, changed or role.
+	 * @param array  $grant   Grant of the acting pass.
+	 * @param array  $details Template fields for this variant.
+	 * @param string $to      Recipient override. Empty means the owner.
+	 * @param bool   $capped  Whether the cap applies.
 	 * @return bool
 	 */
-	private static function admin_alert( $variant, array $grant, \WP_User $user, array $fields, $to = '', $capped = true ) {
+	private static function admin_alert( $variant, array $grant, array $details, $to = '', $capped = true ) {
 		if ( '' === $to ) {
 			$to = self::owner_email( $grant );
 		}
@@ -257,27 +297,39 @@ final class Notifications {
 		}
 		$is_last = $capped && self::ALERT_LIMIT === $state['count'] + 1;
 
-		$labels = array();
-		foreach ( $fields as $field ) {
-			$labels[] = 'password' === $field ? __( 'password', 'happyaccess' ) : __( 'email address', 'happyaccess' );
+		switch ( $variant ) {
+			case 'changed':
+				$subject = __( "A support pass changed an administrator's login details", 'happyaccess' );
+				break;
+			case 'role':
+				$subject = __( 'A support pass gave a role admin-level permissions', 'happyaccess' );
+				break;
+			default:
+				$subject = __( 'A support pass made an administrator account', 'happyaccess' );
 		}
 
 		$sent = Mailer::send(
 			$to,
-			'changed' === $variant
-				? __( "A support pass changed an administrator's login details", 'happyaccess' )
-				: __( 'A support pass made an administrator account', 'happyaccess' ),
+			$subject,
 			'admin-created',
-			array(
-				'variant'    => $variant,
-				'label'      => isset( $grant['label'] ) ? (string) $grant['label'] : '',
-				'login'      => $user->user_login,
-				'user_email' => $user->user_email,
-				'changed'    => $labels,
-				'time'       => self::format_time( Clock::now() ),
-				'users_url'  => admin_url( 'users.php' ),
-				'more'       => $is_last,
-				'log_url'    => admin_url( 'users.php?page=happyaccess' ),
+			array_merge(
+				array(
+					'login'      => '',
+					'user_email' => '',
+					'changed'    => array(),
+					'role'       => '',
+					'change'     => '',
+					'caps'       => array(),
+				),
+				$details,
+				array(
+					'variant'   => $variant,
+					'label'     => isset( $grant['label'] ) ? (string) $grant['label'] : '',
+					'time'      => self::format_time( Clock::now() ),
+					'users_url' => admin_url( 'users.php' ),
+					'more'      => $is_last,
+					'log_url'   => admin_url( 'users.php?page=happyaccess' ),
+				)
 			)
 		);
 

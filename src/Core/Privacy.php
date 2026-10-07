@@ -69,6 +69,7 @@ final class Privacy {
 		'wc_key_blocked',
 		'admin_account_created',
 		'admin_account_changed',
+		'admin_role_granted',
 	);
 
 	/**

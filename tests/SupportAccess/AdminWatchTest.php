@@ -10,6 +10,7 @@ use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\ActivityTracker;
 use HappyAccess\Features\SupportAccess\AdminWatch;
+use HappyAccess\Features\SupportAccess\CapabilityGuard;
 use HappyAccess\Features\SupportAccess\Feature;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
@@ -47,7 +48,39 @@ class AdminWatchTest extends WP_UnitTestCase {
 	public function tear_down() {
 		AdminWatch::reset();
 		ActivityTracker::reset();
+		CapabilityGuard::reset();
+		remove_role( 'happyaccess_promoter' );
 		parent::tear_down();
+	}
+
+	/**
+	 * Saves a change to one role straight to the role table, as core's add_cap() does.
+	 *
+	 * @param string $role Role slug.
+	 * @param string $cap  Cap to add.
+	 * @return void
+	 */
+	private function add_role_cap( $role, $cap ) {
+		global $wpdb;
+		$key   = $wpdb->prefix . 'user_roles';
+		$table = get_option( $key );
+		$table[ $role ]['capabilities'][ $cap ] = true;
+		update_option( $key, $table );
+	}
+
+	private function custom_temp( array $caps ) {
+		wp_set_current_user( $this->owner );
+		$made = Grants::create(
+			array(
+				'label'        => 'Custom',
+				'level'        => 'custom',
+				'caps'         => $caps,
+				'confirm_full' => true,
+			)
+		);
+		$temp = TempUsers::get_or_create( Grants::get( $made['id'] ) );
+		reset_phpmailer_instance();
+		return $temp;
 	}
 
 	private function sent() {
@@ -300,5 +333,140 @@ class AdminWatchTest extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $this->rows( 'admin_account_created' ) );
 		$this->assertFalse( $this->counter() );
+	}
+
+	public function test_a_user_with_promote_users_but_not_manage_options_is_flagged() {
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'list_users' => true, 'promote_users' => true ) );
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'promoter', 'user_pass' => 'x', 'role' => 'happyaccess_promoter' ) );
+
+		$this->assertCount( 1, $this->rows( 'admin_account_created' ) );
+		$this->assertCount( 1, $this->sent() );
+	}
+
+	public function test_adding_a_role_with_edit_users_is_flagged() {
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'edit_users' => true ) );
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $this->temp );
+		( new WP_User( $subscriber ) )->add_role( 'happyaccess_promoter' );
+
+		$this->assertCount( 1, $this->rows( 'admin_account_created' ) );
+	}
+
+	public function test_changing_a_promote_users_holders_email_is_flagged() {
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'promote_users' => true ) );
+		$promoter = self::factory()->user->create( array( 'role' => 'happyaccess_promoter' ) );
+		reset_phpmailer_instance();
+		wp_set_current_user( $this->temp );
+		wp_update_user( array( 'ID' => $promoter, 'user_email' => 'moved@example.org' ) );
+
+		$this->assertCount( 1, $this->rows( 'admin_account_changed' ) );
+	}
+
+	public function test_full_pass_giving_a_role_manage_options_logs_and_emails() {
+		wp_set_current_user( $this->temp );
+		$this->add_role_cap( 'subscriber', 'manage_options' );
+
+		$rows = $this->rows( 'admin_role_granted' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $this->grant_id, (int) $rows[0]['token_id'] );
+		$this->assertSame( 'subscriber', $rows[0]['meta']['role'] );
+		$this->assertSame( array( 'manage_options' ), $rows[0]['meta']['caps'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertSame( 'owner@example.org', $this->sent()[0]['to'][0][0] );
+		$this->assertStringContainsString( 'admin-level', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( 'Subscriber', $this->sent()[0]['body'] );
+	}
+
+	public function test_a_role_gaining_admin_caps_is_flagged_once_per_request() {
+		wp_set_current_user( $this->temp );
+		$this->add_role_cap( 'subscriber', 'promote_users' );
+		$this->add_role_cap( 'subscriber', 'edit_users' );
+
+		$this->assertCount( 1, $this->rows( 'admin_role_granted' ) );
+		$this->assertCount( 1, $this->sent() );
+	}
+
+	public function test_a_role_gaining_other_caps_writes_nothing() {
+		wp_set_current_user( $this->temp );
+		$this->add_role_cap( 'subscriber', 'edit_posts' );
+		$this->add_role_cap( 'administrator', 'manage_options' );
+
+		$this->assertCount( 0, $this->rows( 'admin_role_granted' ) );
+		$this->assertCount( 0, $this->sent() );
+	}
+
+	public function test_a_new_role_with_admin_caps_is_flagged() {
+		wp_set_current_user( $this->temp );
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'edit_users' => true ) );
+
+		// Roles other tests left in memory are saved with it, so look for this one.
+		$rows = array_values(
+			array_filter(
+				$this->rows( 'admin_role_granted' ),
+				static function ( $row ) {
+					return 'happyaccess_promoter' === $row['meta']['role'];
+				}
+			)
+		);
+		$this->assertCount( 1, $rows );
+		$this->assertSame( array( 'edit_users' ), $rows[0]['meta']['caps'] );
+	}
+
+	public function test_full_pass_pointing_default_role_at_an_admin_role_logs_and_emails() {
+		wp_set_current_user( $this->temp );
+		update_option( 'default_role', 'editor' );
+		$this->assertCount( 0, $this->rows( 'admin_role_granted' ) );
+
+		update_option( 'default_role', 'administrator' );
+
+		$rows = $this->rows( 'admin_role_granted' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'administrator', $rows[0]['meta']['role'] );
+		$this->assertSame( 'default_role', $rows[0]['meta']['change'] );
+		$this->assertCount( 1, $this->sent() );
+	}
+
+	public function test_default_role_through_another_letter_case_is_flagged() {
+		wp_set_current_user( $this->temp );
+		update_option( 'Default_Role', 'administrator' );
+
+		$this->assertCount( 1, $this->rows( 'admin_role_granted' ) );
+	}
+
+	public function test_custom_pass_with_trust_is_flagged_during_plugin_work() {
+		$temp = $this->custom_temp( array( 'activate_plugins' ) );
+		wp_set_current_user( $temp );
+		CapabilityGuard::plugin_work_started();
+		$this->add_role_cap( 'subscriber', 'manage_options' );
+		CapabilityGuard::plugin_work_finished();
+
+		$this->assertCount( 1, $this->rows( 'admin_role_granted' ) );
+		$this->assertCount( 1, $this->sent() );
+	}
+
+	public function test_role_alerts_share_the_email_cap() {
+		wp_set_current_user( $this->temp );
+		for ( $i = 1; $i <= 5; $i++ ) {
+			wp_insert_user( array( 'user_login' => 'capadmin' . $i, 'user_pass' => 'x', 'role' => 'administrator' ) );
+		}
+		$this->add_role_cap( 'subscriber', 'manage_options' );
+
+		$this->assertCount( 1, $this->rows( 'admin_role_granted' ) );
+		$this->assertCount( 5, $this->sent() );
+	}
+
+	public function test_role_changes_by_a_real_administrator_or_happyaccess_write_nothing() {
+		$this->add_role_cap( 'subscriber', 'manage_options' );
+		update_option( 'default_role', 'administrator' );
+		wp_set_current_user( $this->temp );
+		\HappyAccess\Core\Internal::run(
+			function () {
+				$this->add_role_cap( 'contributor', 'edit_users' );
+			}
+		);
+
+		$this->assertCount( 0, $this->rows( 'admin_role_granted' ) );
+		$this->assertCount( 0, $this->sent() );
 	}
 }
