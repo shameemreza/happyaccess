@@ -37,6 +37,7 @@ final class Privacy {
 		'temp_user_delete_failed',
 		'bundle_emailed',
 		'emergency_lock',
+		'settings_changed',
 	);
 
 	/**

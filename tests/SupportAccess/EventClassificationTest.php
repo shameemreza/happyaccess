@@ -36,19 +36,31 @@ class EventClassificationTest extends WP_UnitTestCase {
 	 * @return array{0: array<string, string[]>, 1: string[]} Keys with the files that write them, then problems.
 	 */
 	private function scan() {
+		$sources = array();
+		$root    = dirname( __DIR__, 2 ) . '/src';
+		$files   = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $files as $file ) {
+			if ( 'php' === $file->getExtension() ) {
+				$sources[ substr( $file->getPathname(), strlen( $root ) - 3 ) ] = (string) file_get_contents( $file->getPathname() );
+			}
+		}
+		return $this->scan_sources( $sources );
+	}
+
+	/**
+	 * Event keys found in some PHP sources, and the places where a key could not be read.
+	 *
+	 * @param array<string, string> $sources PHP code by path.
+	 * @return array{0: array<string, string[]>, 1: string[]} Keys with the files that write them, then problems.
+	 */
+	private function scan_sources( array $sources ) {
 		$keys     = array();
 		$problems = array();
-		$root     = dirname( __DIR__, 2 ) . '/src';
-		$files    = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
 
-		foreach ( $files as $file ) {
-			if ( 'php' !== $file->getExtension() ) {
-				continue;
-			}
-			$path   = substr( $file->getPathname(), strlen( $root ) - 3 );
+		foreach ( $sources as $path => $code ) {
 			$tokens = array_values(
 				array_filter(
-					token_get_all( (string) file_get_contents( $file->getPathname() ) ),
+					token_get_all( $code ),
 					static function ( $token ) {
 						return ! is_array( $token ) || ! in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true );
 					}
@@ -109,20 +121,33 @@ class EventClassificationTest extends WP_UnitTestCase {
 
 	/**
 	 * Whether the tokens at an index open one of the watched calls: Class, ::, method, (.
+	 * static:: and $this-> count as self::, and a qualified class name counts
+	 * by its last part, so \HappyAccess\Core\AuditLog::add() is AuditLog::add().
 	 *
 	 * @param array $tokens Tokens without whitespace or comments.
 	 * @param int   $i      Index.
 	 * @return string The call as text, or an empty string.
 	 */
 	private function call_at( array $tokens, $i ) {
-		if ( ! isset( $tokens[ $i + 3 ] ) || ! is_array( $tokens[ $i ] ) || ! is_array( $tokens[ $i + 2 ] ) ) {
+		if ( ! isset( $tokens[ $i + 3 ] ) || ! is_array( $tokens[ $i ] ) || ! is_array( $tokens[ $i + 1 ] ) || ! is_array( $tokens[ $i + 2 ] ) ) {
 			return '';
 		}
-		if ( T_DOUBLE_COLON !== $tokens[ $i + 1 ][0] || '(' !== $tokens[ $i + 3 ] ) {
+		if ( '(' !== $tokens[ $i + 3 ] ) {
+			return '';
+		}
+		$class = $tokens[ $i ][1];
+		if ( T_DOUBLE_COLON === $tokens[ $i + 1 ][0] ) {
+			if ( 'static' === strtolower( $class ) ) {
+				$class = 'self';
+			}
+			$class = substr( (string) strrchr( '\\' . $class, '\\' ), 1 );
+		} elseif ( T_OBJECT_OPERATOR === $tokens[ $i + 1 ][0] && '$this' === $class ) {
+			$class = 'self';
+		} else {
 			return '';
 		}
 		foreach ( self::CALLS as $call ) {
-			if ( $call[0] === $tokens[ $i ][1] && $call[1] === $tokens[ $i + 2 ][1] ) {
+			if ( $call[0] === $class && $call[1] === $tokens[ $i + 2 ][1] ) {
 				return $call[0] . '::' . $call[1] . '()';
 			}
 		}
@@ -187,5 +212,31 @@ class EventClassificationTest extends WP_UnitTestCase {
 	public function test_no_event_is_in_two_lists() {
 		$all = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS );
 		$this->assertSame( array(), array_values( array_diff_key( $all, array_unique( $all ) ) ), 'An event key appears in more than one list.' );
+	}
+
+	public function test_the_scan_reads_static_this_and_qualified_calls() {
+		$code = '<?php
+		final class Sample {
+			public function a() {
+				static::log( \'grant_created\', array() );
+				$this->record( \'post_created\', \'x\' );
+				\HappyAccess\Core\AuditLog::add( \'plugin_upgraded\' );
+				HappyAccess\Core\AuditLog::add( \'login_success\' );
+				$this->record( $event, \'x\' );
+				static::record_post( $other, \'Updated\', $post );
+				$that->record( \'not_watched\' );
+			}
+		}';
+
+		list( $keys, $problems ) = $this->scan_sources( array( 'Sample.php' => $code ) );
+
+		$this->assertSame( array( 'grant_created', 'post_created', 'plugin_upgraded', 'login_success' ), array_keys( $keys ) );
+		$this->assertCount( 2, $problems, implode( "\n", $problems ) );
+	}
+
+	public function test_every_agent_and_core_event_is_still_written_somewhere() {
+		list( $keys, ) = $this->scan();
+		$unused        = array_values( array_diff( array_merge( Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS ), array_keys( $keys ) ) );
+		$this->assertSame( array(), $unused, "These events are listed but nothing in src/ writes them:\n" . implode( "\n", $unused ) );
 	}
 }

@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\Grants;
 
@@ -429,5 +430,16 @@ class GrantsControllerTest extends RestTestCase {
 			$keys   = array_merge( $keys, $this->keys( $value ) );
 		}
 		return $keys;
+	}
+
+	public function test_revoke_all_counts_only_current_passes() {
+		$old = Grants::create( array( 'label' => 'Old', 'duration' => HOUR_IN_SECONDS ) );
+		Clock::freeze( 1790000000 + 2 * HOUR_IN_SECONDS );
+		Grants::create( array( 'label' => 'Now' ) );
+
+		$response = $this->request( 'POST', '/grants/revoke-all' );
+
+		$this->assertSame( array( 'count' => 1 ), $response->get_data() );
+		$this->assertNotSame( 0, Grants::get( $old['id'] )['revoked_at'] );
 	}
 }

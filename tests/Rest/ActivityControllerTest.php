@@ -373,4 +373,85 @@ class ActivityControllerTest extends RestTestCase {
 		fclose( $handle );
 		return $rows;
 	}
+
+	/**
+	 * @dataProvider routes_provider
+	 */
+	public function test_custom_temp_user_gets_403( $path, $params ) {
+		$this->as_temp_user(
+			array(
+				'level'        => 'custom',
+				'caps'         => array( 'manage_options', 'list_users' ),
+				'confirm_full' => true,
+			)
+		);
+		$this->assertTrue( current_user_can( 'manage_options' ) );
+		$this->assertSame( 403, $this->get( $path, $params )->get_status() );
+	}
+
+	public function test_since_and_until_cover_a_whole_dst_change_day() {
+		update_option( 'timezone_string', 'America/New_York' );
+
+		// 2026-03-08 is 23 hours long in New York: it starts at 05:00 UTC and ends at 03:59:59 UTC the next day.
+		Clock::freeze( gmmktime( 4, 59, 59, 3, 8, 2026 ) );
+		AuditLog::add( 'login_success', array( 'summary' => 'day before' ) );
+		Clock::freeze( gmmktime( 5, 0, 0, 3, 8, 2026 ) );
+		AuditLog::add( 'login_success', array( 'summary' => 'first second' ) );
+		Clock::freeze( gmmktime( 3, 59, 59, 3, 9, 2026 ) );
+		AuditLog::add( 'login_success', array( 'summary' => 'last second' ) );
+		Clock::freeze( gmmktime( 4, 0, 0, 3, 9, 2026 ) );
+		AuditLog::add( 'login_success', array( 'summary' => 'day after' ) );
+
+		$data = $this->get(
+			'/activity',
+			array(
+				'since' => '2026-03-08',
+				'until' => '2026-03-08',
+			)
+		)->get_data();
+
+		$this->assertSame( array( 'last second', 'first second' ), wp_list_pluck( $data['items'], 'summary' ) );
+	}
+
+	public function test_export_guards_formulas_behind_leading_spaces_and_tabs() {
+		global $wpdb;
+		foreach ( array( ' =1+1', "\t\t+1", " \t@sum", '  plain', ' -' ) as $summary ) {
+			$wpdb->insert(
+				Installer::table( 'logs' ),
+				array(
+					'feature'    => 'support',
+					'event_type' => 'post_updated',
+					'summary'    => $summary,
+					'created_at' => Clock::mysql(),
+				)
+			);
+		}
+
+		$rows = $this->parse_csv( $this->get( '/activity/export' )->get_data()['csv'] );
+		array_shift( $rows );
+
+		$this->assertSame( array( "' -", '  plain', "' \t@sum", "'\t\t+1", "' =1+1" ), array_column( $rows, 3 ) );
+	}
+
+	public function test_export_reads_the_log_in_one_query() {
+		global $wpdb;
+		AuditLog::add( 'post_updated', array( 'summary' => 'one' ) );
+		AuditLog::add( 'post_updated', array( 'summary' => 'two' ) );
+		$logs  = Installer::table( 'logs' );
+		$reads = array();
+		$spy   = static function ( $query ) use ( &$reads, $logs ) {
+			if ( false !== strpos( $query, $logs ) ) {
+				$reads[] = $query;
+			}
+			return $query;
+		};
+		add_filter( 'query', $spy );
+		$csv = $this->get( '/activity/export' )->get_data()['csv'];
+		remove_filter( 'query', $spy );
+
+		$this->assertCount( 3, $this->parse_csv( $csv ) );
+		$this->assertCount( 1, $reads, implode( "\n", $reads ) );
+		$this->assertStringContainsString( 'LIMIT 5000', $reads[0] );
+		$this->assertStringNotContainsString( 'COUNT(', $reads[0] );
+	}
 }

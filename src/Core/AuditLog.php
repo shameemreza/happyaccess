@@ -111,6 +111,77 @@ final class AuditLog {
 		$f = wp_parse_args(
 			$filters,
 			array(
+				'page'     => 1,
+				'per_page' => 25,
+			)
+		);
+
+		list( $where_sql, $params ) = self::where( $f );
+
+		$per_page = max( 1, min( 100, (int) $f['per_page'] ) );
+		$page     = max( 1, (int) $f['page'] );
+		$table    = Installer::table( 'logs' );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom table; WHERE parts are fixed strings with placeholders.
+		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", $params ) );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d",
+				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
+			),
+			ARRAY_A
+		);
+		// phpcs:enable
+
+		return array(
+			'items'    => self::decode_rows( (array) $rows ),
+			'total'    => $total,
+			'page'     => $page,
+			'per_page' => $per_page,
+		);
+	}
+
+	/**
+	 * Reads up to a number of entries, newest first, in one query with no
+	 * count. Takes the same filters as query(), without the paging.
+	 *
+	 * @param array $filters Filters, as for query().
+	 * @param int   $limit   Most rows to return, 1 to 5000.
+	 * @return array Rows with decoded meta.
+	 */
+	public static function rows( array $filters, $limit ) {
+		global $wpdb;
+
+		list( $where_sql, $params ) = self::where( $filters );
+
+		$limit = max( 1, min( 5000, (int) $limit ) );
+		$table = Installer::table( 'logs' );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom table; WHERE parts are fixed strings with placeholders.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d",
+				array_merge( $params, array( $limit ) )
+			),
+			ARRAY_A
+		);
+		// phpcs:enable
+
+		return self::decode_rows( (array) $rows );
+	}
+
+	/**
+	 * The WHERE clause and its values for a set of filters.
+	 *
+	 * @param array $filters feature, features, event, event_in, user_id, token_id, search, since, until.
+	 * @return array The clause with placeholders, then the values.
+	 */
+	private static function where( array $filters ) {
+		global $wpdb;
+
+		$f = wp_parse_args(
+			$filters,
+			array(
 				'feature'  => '',
 				'features' => array(),
 				'event'    => '',
@@ -120,8 +191,6 @@ final class AuditLog {
 				'search'   => '',
 				'since'    => '',
 				'until'    => '',
-				'page'     => 1,
-				'per_page' => 25,
 			)
 		);
 
@@ -178,35 +247,23 @@ final class AuditLog {
 			$params[] = sanitize_text_field( $f['until'] );
 		}
 
-		$per_page  = max( 1, min( 100, (int) $f['per_page'] ) );
-		$page      = max( 1, (int) $f['page'] );
-		$table     = Installer::table( 'logs' );
-		$where_sql = implode( ' AND ', $where );
+		return array( implode( ' AND ', $where ), $params );
+	}
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom table; WHERE parts are fixed strings with placeholders.
-		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", $params ) );
-		$rows  = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d",
-				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
-			),
-			ARRAY_A
-		);
-		// phpcs:enable
-
+	/**
+	 * Turns each row's stored metadata into a meta array.
+	 *
+	 * @param array $rows Table rows.
+	 * @return array
+	 */
+	private static function decode_rows( array $rows ) {
 		$items = array();
-		foreach ( (array) $rows as $row ) {
+		foreach ( $rows as $row ) {
 			$row['meta'] = empty( $row['metadata'] ) ? array() : (array) json_decode( $row['metadata'], true );
 			unset( $row['metadata'] );
 			$items[] = $row;
 		}
-
-		return array(
-			'items'    => $items,
-			'total'    => $total,
-			'page'     => $page,
-			'per_page' => $per_page,
-		);
+		return $items;
 	}
 
 	/**

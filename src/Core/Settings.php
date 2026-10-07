@@ -148,7 +148,7 @@ final class Settings {
 			return self::all();
 		}
 
-		$merged = self::clean( self::defaults(), array_replace_recursive( self::all(), $changes ), '' );
+		$merged = self::merge( $changes );
 		Internal::run(
 			static function () use ( $merged ) {
 				update_option( self::OPTION, $merged, true );
@@ -156,6 +156,16 @@ final class Settings {
 		);
 		self::flush_cache();
 		return $merged;
+	}
+
+	/**
+	 * The settings as they would be after an update(), without saving them.
+	 *
+	 * @param array $changes Nested array of changes.
+	 * @return array
+	 */
+	public static function merge( array $changes ) {
+		return self::clean( self::defaults(), array_replace_recursive( self::all(), $changes ), '' );
 	}
 
 	/**

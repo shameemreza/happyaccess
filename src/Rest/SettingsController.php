@@ -8,6 +8,7 @@
 
 namespace HappyAccess\Rest;
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Internal;
@@ -185,9 +186,10 @@ final class SettingsController {
 		}
 		unset( $changes['security']['recaptcha_secret_key'] );
 
-		$extra = self::apply( $changes );
+		$secret_changed = is_string( $secret ) && (string) get_option( self::SECRET_OPTION, '' ) !== $secret;
+		$extra          = self::apply( $changes, $secret_changed ? array( 'security.recaptcha_secret_key' ) : array() );
 
-		if ( is_string( $secret ) ) {
+		if ( $secret_changed ) {
 			self::write_secret( $secret );
 		}
 
@@ -244,9 +246,7 @@ final class SettingsController {
 	 * @return \WP_REST_Response
 	 */
 	public static function lock() {
-		$current = count( Grants::list_current() );
-		AdminBar::emergency_lock();
-		return rest_ensure_response( array( 'revoked' => $current ) );
+		return rest_ensure_response( array( 'revoked' => AdminBar::emergency_lock() ) );
 	}
 
 	/**
@@ -263,22 +263,79 @@ final class SettingsController {
 	}
 
 	/**
-	 * Saves changes. When Support Access goes from on to off, every pass ends.
+	 * Saves changes and logs the names of the keys that changed. When Support
+	 * Access goes from on to off, every pass ends.
 	 *
-	 * @param array $changes Nested changes, known groups only.
+	 * The row is written before the save while logging is on, so turning
+	 * logging off is the last row logged, and after the save otherwise, so
+	 * turning it back on is the first.
+	 *
+	 * @param array    $changes    Nested changes, known groups only.
+	 * @param string[] $extra_keys Other changed keys to name, such as the secret.
 	 * @return array Extra response fields: "revoked" when passes were ended.
 	 */
-	private static function apply( array $changes ) {
+	private static function apply( array $changes, array $extra_keys = array() ) {
 		$was_on  = Features::is_enabled( 'support_access' );
 		$pending = $was_on ? count( Grants::list_current() ) : 0;
+		$keys    = array_merge( self::changed_keys( Settings::all(), Settings::merge( $changes ) ), $extra_keys );
+		sort( $keys );
+		$log_first = (bool) Settings::get( 'privacy.logging' );
 
+		if ( $log_first ) {
+			self::log_change( $keys );
+		}
 		Settings::update( $changes );
+		if ( ! $log_first ) {
+			self::log_change( $keys );
+		}
 
 		if ( $was_on && ! Features::is_enabled( 'support_access' ) ) {
 			Feature::on_disable();
 			return array( 'revoked' => $pending );
 		}
 		return array();
+	}
+
+	/**
+	 * Dotted names of the settings whose values differ. Values never leave this method.
+	 *
+	 * @param array  $before Settings before.
+	 * @param array  $after  Settings after.
+	 * @param string $prefix Dotted path of this level.
+	 * @return string[]
+	 */
+	private static function changed_keys( array $before, array $after, $prefix = '' ) {
+		$keys = array();
+		foreach ( $after as $key => $value ) {
+			$path = '' === $prefix ? (string) $key : $prefix . '.' . $key;
+			$old  = array_key_exists( $key, $before ) ? $before[ $key ] : null;
+			if ( is_array( $value ) ) {
+				$keys = array_merge( $keys, self::changed_keys( is_array( $old ) ? $old : array(), $value, $path ) );
+			} elseif ( $old !== $value ) {
+				$keys[] = $path;
+			}
+		}
+		return $keys;
+	}
+
+	/**
+	 * Logs an admin settings change by key name only.
+	 *
+	 * @param string[] $keys Changed dotted keys.
+	 * @return void
+	 */
+	private static function log_change( array $keys ) {
+		if ( ! $keys ) {
+			return;
+		}
+		AuditLog::add(
+			'settings_changed',
+			array(
+				'feature' => 'core',
+				'summary' => sprintf( 'Changed settings: %s', implode( ', ', $keys ) ),
+				'meta'    => array( 'keys' => $keys ),
+			)
+		);
 	}
 
 	/**

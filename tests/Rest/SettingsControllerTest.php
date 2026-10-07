@@ -9,6 +9,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Rest\SettingsController;
 
 require_once __DIR__ . '/RestTestCase.php';
 
@@ -378,5 +379,71 @@ class SettingsControllerTest extends RestTestCase {
 		$data = $this->request( 'POST', '/settings', array( 'features' => array( 'support_access' => false ) ) )->get_data();
 
 		$this->assertSame( 1, $data['revoked'] );
+	}
+
+	/**
+	 * settings_changed rows, newest first.
+	 *
+	 * @return array
+	 */
+	private function settings_rows() {
+		return AuditLog::query( array( 'event' => 'settings_changed' ) )['items'];
+	}
+
+	public function test_a_save_logs_the_changed_key_names_without_values() {
+		$this->request(
+			'POST',
+			'/settings',
+			array(
+				'security'             => array(
+					'max_attempts' => 9,
+					'proxy_header' => '',
+				),
+				'privacy'              => array( 'retention_days' => 45 ),
+				'recaptcha_secret_key' => 'sk_live_value',
+			)
+		);
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'core', $rows[0]['feature'] );
+		$this->assertSame( $this->owner, (int) $rows[0]['user_id'] );
+		$this->assertSame( array( 'privacy.retention_days', 'security.max_attempts', 'security.recaptcha_secret_key' ), $rows[0]['meta']['keys'] );
+		$encoded = wp_json_encode( $rows[0] );
+		$this->assertStringNotContainsString( 'sk_live_value', $encoded );
+		$this->assertStringNotContainsString( '45', $rows[0]['summary'] );
+		$this->assertContains( 'settings_changed', \HappyAccess\Core\Privacy::ADMIN_EVENTS );
+	}
+
+	public function test_a_save_that_changes_nothing_logs_nothing() {
+		$this->request( 'POST', '/settings', array( 'security' => array( 'max_attempts' => Settings::get( 'security.max_attempts' ) ) ) );
+		update_option( SettingsController::SECRET_OPTION, 'same', false );
+		$this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => 'same' ) );
+
+		$this->assertSame( array(), $this->settings_rows() );
+	}
+
+	public function test_turning_logging_off_is_the_last_row_logged() {
+		$this->request( 'POST', '/settings', array( 'privacy' => array( 'logging' => false ) ) );
+		$this->request( 'POST', '/settings', array( 'privacy' => array( 'retention_days' => 60 ) ) );
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( array( 'privacy.logging' ), $rows[0]['meta']['keys'] );
+		$this->assertFalse( Settings::get( 'privacy.logging' ) );
+
+		$this->request( 'POST', '/settings', array( 'privacy' => array( 'logging' => true ) ) );
+		$rows = $this->settings_rows();
+		$this->assertCount( 2, $rows );
+		$this->assertSame( array( 'privacy.logging' ), $rows[0]['meta']['keys'] );
+	}
+
+	public function test_clearing_the_secret_logs_its_key_name() {
+		update_option( SettingsController::SECRET_OPTION, 'old', false );
+		$this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => '' ) );
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( array( 'security.recaptcha_secret_key' ), $rows[0]['meta']['keys'] );
 	}
 }

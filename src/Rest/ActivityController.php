@@ -235,27 +235,7 @@ final class ActivityController {
 	 * @return \WP_REST_Response
 	 */
 	public static function export( \WP_REST_Request $request ) {
-		$filters = self::filters( $request );
-		$rows    = array();
-		$page    = 1;
-		$wanted  = self::EXPORT_LIMIT;
-		$have    = 0;
-		do {
-			$result = AuditLog::query(
-				array_merge(
-					$filters,
-					array(
-						'page'     => $page,
-						'per_page' => 100,
-					)
-				)
-			);
-			$rows   = array_merge( $rows, $result['items'] );
-			$have   = count( $rows );
-			$wanted = min( self::EXPORT_LIMIT, (int) $result['total'] );
-			++$page;
-		} while ( $result['items'] && $have < $wanted );
-		$rows = array_slice( $rows, 0, self::EXPORT_LIMIT );
+		$rows = AuditLog::rows( self::filters( $request ), self::EXPORT_LIMIT );
 
 		$out = fopen( 'php://temp', 'w+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- In-memory stream, not the filesystem.
 		fputcsv( $out, array( 'time', 'feature', 'event', 'summary', 'user', 'pass', 'ip' ), ',', '"', '' );
@@ -284,14 +264,17 @@ final class ActivityController {
 	}
 
 	/**
-	 * Stops a spreadsheet from running a cell as a formula.
+	 * Stops a spreadsheet from running a cell as a formula. A cell that starts
+	 * with a tab, or with a formula character after any spaces and tabs, gets
+	 * a leading quote.
 	 *
 	 * @param mixed $value Cell value.
 	 * @return string
 	 */
 	public static function guard_cell( $value ) {
 		$value = (string) $value;
-		if ( '' !== $value && false !== strpos( "=+-@\t\r", $value[0] ) ) {
+		$start = ltrim( $value, " \t" );
+		if ( ( '' !== $value && "\t" === $value[0] ) || ( '' !== $start && false !== strpos( "=+-@\t\r", $start[0] ) ) ) {
 			return "'" . $value;
 		}
 		return $value;

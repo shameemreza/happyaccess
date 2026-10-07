@@ -49,6 +49,7 @@ final class EventLabels {
 			'temp_user_delete_failed' => __( 'Temporary user could not be deleted', 'happyaccess' ),
 			'bundle_emailed'          => __( 'Access details emailed', 'happyaccess' ),
 			'emergency_lock'          => __( 'Emergency Lock turned on', 'happyaccess' ),
+			'settings_changed'        => __( 'HappyAccess settings changed', 'happyaccess' ),
 			'login_success'           => __( 'Logged in', 'happyaccess' ),
 			'login_failed'            => __( 'Login failed', 'happyaccess' ),
 			'access_blocked'          => __( 'Login blocked', 'happyaccess' ),

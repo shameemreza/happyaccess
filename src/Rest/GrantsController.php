@@ -380,12 +380,15 @@ final class GrantsController {
 	}
 
 	/**
-	 * POST /grants/revoke-all.
+	 * POST /grants/revoke-all. Ends every unrevoked row and reports the passes
+	 * that were current, as /lock does.
 	 *
 	 * @return \WP_REST_Response
 	 */
 	public static function revoke_all() {
-		return rest_ensure_response( array( 'count' => (int) Grants::revoke_all( 'revoked' ) ) );
+		$current = count( Grants::list_current() );
+		Grants::revoke_all( 'revoked' );
+		return rest_ensure_response( array( 'count' => $current ) );
 	}
 
 	/**
