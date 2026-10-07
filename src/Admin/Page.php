@@ -149,7 +149,24 @@ final class Page {
 			'menus'       => MenuGuard::menu_snapshot(),
 			'maxDays'     => self::MAX_DAYS,
 			'isMultisite' => is_multisite(),
+			'roles'       => self::roles(),
 		);
+	}
+
+	/**
+	 * Roles a protected pass can use instead of administrator, as slug and name.
+	 *
+	 * @return array
+	 */
+	private static function roles() {
+		$roles = array();
+		foreach ( wp_roles()->get_names() as $slug => $name ) {
+			$roles[] = array(
+				'slug' => (string) $slug,
+				'name' => translate_user_role( $name ),
+			);
+		}
+		return $roles;
 	}
 
 	/**

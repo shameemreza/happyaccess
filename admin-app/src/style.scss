@@ -1,9 +1,18 @@
+@use "support/form";
+@use "support/editor";
+@use "support/preview";
+@use "support/ring";
+
 .happyaccess-app {
 	--ha-text: #1e1e1e;
 	--ha-muted: #50575e;
 	--ha-line: #dcdcde;
 	--ha-accent: var(--wp-admin-theme-color, #2271b1);
 	--ha-danger: #cc1818;
+	--ha-danger-bg: #fcf0f1;
+	--ha-danger-text: #8a2424;
+	--ha-surface: #f6f7f7;
+	--ha-line-soft: #f0f0f1;
 
 	display: flex;
 	flex-direction: column;

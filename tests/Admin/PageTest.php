@@ -122,7 +122,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );
@@ -134,6 +134,16 @@ class PageTest extends WP_UnitTestCase {
 		foreach ( array( 'link_key', '_hash', 'recaptcha', 'otp_code', '"code"' ) as $needle ) {
 			$this->assertStringNotContainsString( $needle, $json );
 		}
+	}
+
+	public function test_boot_data_lists_roles_as_slug_and_name() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$roles = Page::boot_data()['roles'];
+
+		$this->assertSame( array( 'slug', 'name' ), array_keys( $roles[0] ) );
+		$this->assertContains( 'editor', wp_list_pluck( $roles, 'slug' ) );
+		$this->assertSame( array_values( $roles ), $roles );
 	}
 
 	public function test_boot_data_needs_setup_follows_consent() {

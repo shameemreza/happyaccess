@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from '@wordpress/element';
 import { AnnounceProvider } from './Announcer';
 import Header from './Header';
+import GrantForm from './support/GrantForm';
 import SetupPlaceholder from './SetupPlaceholder';
 import TabNav from './TabNav';
 import { getVisibleTabs, pickInitialTab, storeTab, tabUrl } from './tabList';
@@ -44,12 +45,17 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 						current={ active.slug }
 						onSelect={ select }
 					/>
-					<section
-						className="ha-panel"
-						aria-labelledby="ha-panel-title"
-					>
-						<h2 id="ha-panel-title">{ active.label }</h2>
-					</section>
+					{ /* Temporary mount. The Support access tab replaces it. */ }
+					{ 'support' === active.slug ? (
+						<GrantForm boot={ boot } onCreated={ () => {} } />
+					) : (
+						<section
+							className="ha-panel"
+							aria-labelledby="ha-panel-title"
+						>
+							<h2 id="ha-panel-title">{ active.label }</h2>
+						</section>
+					) }
 				</>
 			) }
 		</AnnounceProvider>

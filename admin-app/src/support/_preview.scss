@@ -1,0 +1,70 @@
+.happyaccess-app {
+
+	.ha-preview {
+		overflow: hidden;
+		border: 1px solid var(--ha-line);
+		border-radius: 12px;
+		background: var(--ha-surface);
+	}
+
+	.ha-preview__top {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 14px 16px 12px;
+	}
+
+	.ha-preview__meta {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+	}
+
+	.ha-preview__tag {
+		color: var(--ha-accent);
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.ha-preview__until {
+		margin-inline-start: auto;
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+
+	.ha-preview__label {
+		font-size: 16px;
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.ha-preview__level {
+		color: var(--ha-muted);
+	}
+
+	.ha-preview__cut {
+		margin-inline: 12px;
+		border-block-start: 2px dashed #c3c4c7;
+	}
+
+	.ha-preview__bottom {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 16px 14px;
+		color: var(--ha-muted);
+	}
+
+	.ha-preview__dots {
+		color: #a7aaad;
+		font-family: Menlo, Consolas, monospace;
+		font-size: 18px;
+		letter-spacing: 0.14em;
+	}
+
+	.ha-preview__note {
+		font-size: 12px;
+	}
+}

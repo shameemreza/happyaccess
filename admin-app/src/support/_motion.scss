@@ -1,0 +1,8 @@
+// Every transition and animation goes through this, so a reduced-motion
+// preference turns them all off.
+@mixin motion {
+
+	@media (prefers-reduced-motion: no-preference) {
+		@content;
+	}
+}

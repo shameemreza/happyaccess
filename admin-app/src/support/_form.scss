@@ -1,0 +1,277 @@
+@use "motion";
+
+@keyframes ha-in {
+
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.happyaccess-app {
+
+	.ha-grant {
+		min-width: 0;
+		border: 1px solid var(--ha-line);
+		border-radius: 8px;
+		background: #fff;
+	}
+
+	.ha-grant__head {
+		padding: 20px 24px 8px;
+
+		h2 {
+			margin: 0;
+			padding: 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+		p {
+			margin: 4px 0 0;
+			color: var(--ha-muted);
+		}
+	}
+
+	.ha-form {
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
+		padding: 12px 24px 24px;
+
+		.ha-field .components-base-control__label,
+		.ha-field .components-input-control__label,
+		.ha-legend {
+			font-size: 11px;
+			font-weight: 500;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+
+		.components-base-control__help {
+			margin: 0;
+			color: var(--ha-muted);
+			font-size: 12px;
+		}
+	}
+
+	.ha-fieldset {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		min-width: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
+	.ha-legend {
+		margin-block-end: 6px;
+		padding: 0;
+	}
+
+	.ha-help {
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+
+	p.ha-help {
+		margin: 0;
+	}
+
+	.ha-level {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 12px 14px;
+		border: 1px solid #c3c4c7;
+		border-radius: 8px;
+		cursor: pointer;
+
+		@include motion.motion {
+			transition: border-color 0.15s, box-shadow 0.15s;
+		}
+
+		input[type="radio"] {
+			flex-shrink: 0;
+			margin: 1px 0 0;
+			accent-color: var(--ha-accent);
+		}
+
+		&.is-selected {
+			border-color: var(--ha-accent);
+			box-shadow: inset 0 0 0 1px var(--ha-accent);
+		}
+
+		&.is-full input[type="radio"] {
+			accent-color: var(--ha-danger);
+		}
+
+		&.is-full.is-selected {
+			border-color: var(--ha-danger);
+			box-shadow: inset 0 0 0 1px var(--ha-danger);
+		}
+
+		&:has(input:focus-visible) {
+			outline: 2px solid var(--ha-accent);
+			outline-offset: 2px;
+		}
+	}
+
+	.ha-level__text {
+		min-width: 0;
+	}
+
+	.ha-level__name,
+	.ha-level__desc {
+		display: block;
+	}
+
+	.ha-level__name {
+		font-weight: 600;
+	}
+
+	.ha-level__desc {
+		color: var(--ha-muted);
+	}
+
+	.ha-note {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: 12px 14px;
+		border-radius: 6px;
+		background: var(--ha-surface);
+		color: var(--ha-muted);
+	}
+
+	.ha-note__title {
+		color: var(--ha-text);
+		font-weight: 600;
+	}
+
+	.ha-trust {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 12px 14px;
+		border-radius: 6px;
+		background: var(--ha-danger-bg);
+		color: var(--ha-danger-text);
+
+		p {
+			margin: 0;
+		}
+
+		.components-checkbox-control__label {
+			color: var(--ha-text);
+			font-weight: 500;
+		}
+	}
+
+	.ha-segments {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		overflow: hidden;
+		border: 1px solid #949494;
+		border-radius: 4px;
+	}
+
+	.ha-segment {
+		height: 40px;
+		padding: 0;
+		border: 0;
+		border-inline-start: 1px solid #949494;
+		background: #fff;
+		color: var(--ha-text);
+		font: inherit;
+		font-weight: 500;
+		cursor: pointer;
+
+		@include motion.motion {
+			transition: background 0.15s, color 0.15s;
+		}
+
+		&:first-child {
+			border-inline-start: 0;
+		}
+
+		&[aria-pressed="true"] {
+			background: var(--ha-accent);
+			color: #fff;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--ha-accent);
+			outline-offset: -4px;
+		}
+
+		&[aria-pressed="true"]:focus-visible {
+			outline-color: #fff;
+		}
+	}
+
+	.ha-custom-date {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px;
+		border: 1px solid var(--ha-line);
+		border-radius: 6px;
+	}
+
+	.ha-disclosure {
+		display: inline-flex;
+		align-items: center;
+		align-self: flex-start;
+		gap: 4px;
+		padding: 4px 0;
+		border: 0;
+		background: none;
+		color: var(--ha-accent);
+		font: inherit;
+		font-weight: 500;
+		cursor: pointer;
+
+		&:focus-visible {
+			outline: 2px solid var(--ha-accent);
+			outline-offset: 2px;
+		}
+	}
+
+	.ha-more {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		padding: 16px;
+		border-radius: 6px;
+		background: var(--ha-surface);
+	}
+
+	.ha-more__pair {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px;
+	}
+
+	.ha-create {
+		justify-content: center;
+		width: 100%;
+		height: 44px;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.ha-trust,
+	.ha-editor {
+
+		@include motion.motion {
+			animation: ha-in 0.25s ease-out;
+		}
+	}
+}

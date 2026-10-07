@@ -1,0 +1,220 @@
+@use "motion";
+
+.happyaccess-app {
+
+	.ha-editor {
+		overflow: hidden;
+		border: 1px solid var(--ha-line);
+		border-radius: 8px;
+	}
+
+	.ha-editor__bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 12px 14px;
+		background: var(--ha-surface);
+	}
+
+	.ha-editor__total {
+		margin-inline-start: auto;
+		color: var(--ha-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.ha-editor__search {
+		padding: 10px 14px;
+		border-block-start: 1px solid var(--ha-line);
+	}
+
+	.ha-editor__loading,
+	.ha-editor__empty {
+		margin: 0;
+		padding: 12px 14px;
+		color: var(--ha-muted);
+	}
+
+	.ha-editor__foot {
+		margin: 0;
+		padding: 10px 14px;
+		border-block-start: 1px solid var(--ha-line);
+		background: var(--ha-surface);
+		color: var(--ha-muted);
+	}
+
+	.ha-groups,
+	.ha-caps {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.ha-group {
+		margin: 0;
+		border-block-start: 1px solid var(--ha-line-soft);
+	}
+
+	.ha-group__row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 14px;
+	}
+
+	.ha-group__toggle {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+
+		&:focus-visible {
+			outline: 2px solid var(--ha-accent);
+			outline-offset: 2px;
+		}
+	}
+
+	.ha-group__text {
+		min-width: 0;
+	}
+
+	.ha-group__name,
+	.ha-group__hint {
+		display: block;
+	}
+
+	.ha-group__name {
+		font-weight: 600;
+	}
+
+	.ha-group__hint {
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+
+	.ha-group__count {
+		color: var(--ha-muted);
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+
+	.ha-switch {
+		position: relative;
+		flex-shrink: 0;
+		width: 36px;
+		height: 20px;
+		padding: 0;
+		border: 1px solid #949494;
+		border-radius: 10px;
+		background: #fff;
+		cursor: pointer;
+
+		@include motion.motion {
+			transition: background 0.15s;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--ha-accent);
+			outline-offset: 2px;
+		}
+
+		&[data-state="on"],
+		&[data-state="mixed"] {
+			border-color: var(--ha-accent);
+		}
+
+		&[data-state="on"] {
+			background: var(--ha-accent);
+		}
+
+		&[data-state="mixed"] {
+			background: color-mix(in srgb, var(--ha-accent) 35%, #fff);
+		}
+	}
+
+	.ha-switch__knob {
+		position: absolute;
+		inset-block-start: 3px;
+		inset-inline-start: 3px;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: var(--ha-text);
+
+		@include motion.motion {
+			transition: inset-inline-start 0.15s;
+		}
+
+		.ha-switch[data-state="mixed"] & {
+			inset-inline-start: 11px;
+			background: #fff;
+		}
+
+		.ha-switch[data-state="on"] & {
+			inset-inline-start: 20px;
+			background: #fff;
+		}
+	}
+
+	.ha-caps {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 0 14px 12px 36px;
+
+		&:dir(rtl) {
+			padding: 0 36px 12px 14px;
+		}
+	}
+
+	.ha-cap {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		cursor: pointer;
+
+		input[type="checkbox"] {
+			flex-shrink: 0;
+			margin: 2px 0 0;
+		}
+	}
+
+	.ha-cap__text {
+		min-width: 0;
+	}
+
+	.ha-cap__label {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.ha-cap__code {
+		display: block;
+		padding: 0;
+		background: none;
+		color: var(--ha-muted);
+		font-size: 11px;
+	}
+
+	.ha-badge {
+		padding: 0 6px;
+		border-radius: 8px;
+		background: var(--ha-danger-bg);
+		color: var(--ha-danger-text);
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 18px;
+	}
+}
