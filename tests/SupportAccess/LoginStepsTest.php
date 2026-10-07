@@ -169,6 +169,29 @@ class LoginStepsTest extends WP_UnitTestCase {
 		update_option( 'happyaccess_db_version', '1.0.4' );
 		$res = $this->post_code( $made['code'] );
 		$this->assertSame( array( 'updating' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 'Support access is getting ready. Try again in a minute.', $res['errors']->get_error_message() );
+		$this->assertSame( 0, (int) Grants::get( $made['id'] )['login_count'] );
+	}
+
+	public function test_db_gate_blocks_the_link_step_while_the_version_lags() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		update_option( 'happyaccess_db_version', '1.0.4' );
+
+		$get  = LoginSteps::handle_link( 'GET', array( 'k' => $made['link_key'] ), array() );
+		$post = LoginSteps::handle_link(
+			'POST',
+			array(),
+			array(
+				'k'        => $made['link_key'],
+				'_wpnonce' => wp_create_nonce( 'happyaccess_link' ),
+			)
+		);
+
+		foreach ( array( $get, $post ) as $res ) {
+			$this->assertSame( array( 'updating' ), $res['errors']->get_error_codes() );
+			$this->assertSame( 'Support access is getting ready. Try again in a minute.', $res['errors']->get_error_message() );
+		}
+		$this->assertSame( 0, (int) Grants::get( $made['id'] )['login_count'] );
 	}
 
 	public function test_login_form_link_only_with_current_grants() {

@@ -436,7 +436,7 @@ final class LoginSteps {
 	 * @return string
 	 */
 	private static function updating_text() {
-		return esc_html__( 'Support access is updating. Try again in a minute.', 'happyaccess' );
+		return esc_html__( 'Support access is getting ready. Try again in a minute.', 'happyaccess' );
 	}
 
 	/**

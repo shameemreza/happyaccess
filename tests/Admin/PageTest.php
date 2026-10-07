@@ -63,7 +63,43 @@ class PageTest extends WP_UnitTestCase {
 		$wp_rest_server = null;
 		wp_scripts()->add_data( 'wp-api-fetch', 'after', array() );
 		Clock::freeze( null );
+		unset( $_GET['happyaccess_locked'] );
 		parent::tear_down();
+	}
+
+	private function lock_notice() {
+		ob_start();
+		Page::lock_notice();
+		return ob_get_clean();
+	}
+
+	public function test_register_hooks_the_lock_notice_and_drops_its_query_arg() {
+		Page::register();
+
+		$this->assertNotFalse( has_action( 'admin_notices', array( Page::class, 'lock_notice' ) ) );
+		$this->assertContains( 'happyaccess_locked', wp_removable_query_args() );
+	}
+
+	public function test_lock_notice_says_how_many_passes_ended() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$_GET['happyaccess_locked'] = '3';
+		$this->assertStringContainsString( 'Emergency lock ended 3 support passes.', $this->lock_notice() );
+
+		$_GET['happyaccess_locked'] = '1';
+		$this->assertStringContainsString( 'Emergency lock ended 1 support pass.', $this->lock_notice() );
+	}
+
+	public function test_lock_notice_is_only_for_managers_and_needs_the_arg() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertSame( '', $this->lock_notice() );
+
+		$_GET['happyaccess_locked'] = 'abc';
+		$this->assertSame( '', $this->lock_notice() );
+
+		$_GET['happyaccess_locked'] = '2';
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->assertSame( '', $this->lock_notice() );
 	}
 
 	public function test_register_hooks_the_menu_and_the_assets() {

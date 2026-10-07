@@ -24,6 +24,17 @@ final class Installer {
 
 	const LEGACY_CODE_MAX_AGE = 7 * DAY_IN_SECONDS;
 
+	const LEGACY_CRON_HOOKS = array( 'happyaccess_cleanup_expired', 'happyaccess_cleanup_attempts' );
+
+	const NETWORK_HOOK = 'happyaccess_network_upgrade';
+
+	/**
+	 * Network option set to DB_VERSION once every site of the network is there.
+	 */
+	const NETWORK_OPTION = 'happyaccess_network_db_version';
+
+	const NETWORK_BATCH = 20;
+
 	/**
 	 * Columns 1.1.0 needs that 1.0.6 didn't have, by short table name. A table
 	 * with an empty list only has to exist.
@@ -114,6 +125,84 @@ final class Installer {
 		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
 			self::migrate();
 		}
+		self::maybe_schedule_network_upgrade();
+	}
+
+	/**
+	 * On the main site of a network where the plugin is network active,
+	 * schedules the loop that brings every other site to DB_VERSION. Sites
+	 * without traffic would otherwise never run their own migration.
+	 *
+	 * @return void
+	 */
+	private static function maybe_schedule_network_upgrade() {
+		if ( ! is_multisite() || ! is_main_site() || doing_action( self::NETWORK_HOOK ) ) {
+			return;
+		}
+		if ( self::DB_VERSION === get_site_option( self::NETWORK_OPTION ) || ! self::network_active() ) {
+			return;
+		}
+		if ( ! wp_next_scheduled( self::NETWORK_HOOK ) ) {
+			wp_schedule_single_event( time(), self::NETWORK_HOOK );
+		}
+	}
+
+	/**
+	 * The network upgrade event. Migrates up to NETWORK_BATCH sites that are
+	 * behind, then schedules itself again while any site is still behind. A
+	 * run that moved no site forward waits out the failure backoff first.
+	 *
+	 * @return void
+	 */
+	public static function network_upgrade() {
+		if ( ! is_multisite() || ! self::network_active() ) {
+			return;
+		}
+
+		$migrated = 0;
+		$moved    = 0;
+		$behind   = 0;
+		foreach ( get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 0,
+			)
+		) as $site_id ) {
+			switch_to_blog( (int) $site_id );
+			try {
+				if ( self::DB_VERSION !== get_option( 'happyaccess_db_version' ) ) {
+					if ( $migrated < self::NETWORK_BATCH ) {
+						++$migrated;
+						self::maybe_upgrade();
+					}
+					if ( self::DB_VERSION === get_option( 'happyaccess_db_version' ) ) {
+						++$moved;
+					} else {
+						++$behind;
+					}
+				}
+			} finally {
+				restore_current_blog();
+			}
+		}
+
+		if ( $behind > 0 ) {
+			wp_schedule_single_event( time() + ( $moved > 0 ? 0 : 15 * MINUTE_IN_SECONDS ), self::NETWORK_HOOK );
+			return;
+		}
+		update_site_option( self::NETWORK_OPTION, self::DB_VERSION );
+	}
+
+	/**
+	 * Whether the plugin is network active.
+	 *
+	 * @return bool
+	 */
+	private static function network_active() {
+		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		return is_plugin_active_for_network( HAPPYACCESS_PLUGIN_BASENAME );
 	}
 
 	/**
@@ -157,6 +246,11 @@ final class Installer {
 		$is_upgrade = ( '0.0.0' !== $previous && version_compare( $previous, self::DB_VERSION, '<' ) ) || false !== get_option( 'happyaccess_version', false );
 
 		self::install();
+
+		// The 1.0.6 cleanup events have no callback anymore.
+		foreach ( self::LEGACY_CRON_HOOKS as $hook ) {
+			wp_clear_scheduled_hook( $hook );
+		}
 
 		// dbDelta reports nothing when an ALTER fails, so look at the tables before any data step relies on the new columns.
 		$missing = self::missing_schema();
@@ -324,10 +418,7 @@ final class Installer {
 	 * @return void
 	 */
 	public static function on_new_site( $site ) {
-		if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		}
-		if ( ! is_plugin_active_for_network( HAPPYACCESS_PLUGIN_BASENAME ) ) {
+		if ( ! self::network_active() ) {
 			return;
 		}
 		switch_to_blog( (int) $site->blog_id );

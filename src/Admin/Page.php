@@ -54,6 +54,45 @@ final class Page {
 	public static function register() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'lock_notice' ) );
+		add_filter( 'removable_query_args', array( __CLASS__, 'removable_query_args' ) );
+	}
+
+	/**
+	 * After the admin bar Emergency lock, says how many passes it ended. The
+	 * count comes from the happyaccess_locked query arg, which core then drops
+	 * from the address bar, so a reload doesn't show the notice again.
+	 *
+	 * @return void
+	 */
+	public static function lock_notice() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only count for a notice; the lock itself checked its nonce.
+		$raw = isset( $_GET['happyaccess_locked'] ) ? sanitize_text_field( wp_unslash( $_GET['happyaccess_locked'] ) ) : '';
+		if ( '' === $raw || ! ctype_digit( $raw ) || ! current_user_can( Capabilities::MANAGE ) ) {
+			return;
+		}
+		$count = (int) $raw;
+		printf(
+			'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %d: number of support passes ended. */
+					_n( 'Emergency lock ended %d support pass.', 'Emergency lock ended %d support passes.', $count, 'happyaccess' ),
+					$count
+				)
+			)
+		);
+	}
+
+	/**
+	 * Adds happyaccess_locked to the query args core removes after load.
+	 *
+	 * @param array $args Removable query args.
+	 * @return array
+	 */
+	public static function removable_query_args( $args ) {
+		$args[] = 'happyaccess_locked';
+		return $args;
 	}
 
 	/**

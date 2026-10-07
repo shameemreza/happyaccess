@@ -7,17 +7,19 @@
 
 namespace HappyAccess;
 
+use HappyAccess\Admin\Page;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Cron;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Privacy;
 use HappyAccess\Features\SupportAccess\Feature;
+use HappyAccess\Login\Router;
 use HappyAccess\Rest\Routes;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Wires every 1.1.0 class. It runs only when HAPPYACCESS_NEXT is true.
+ * Wires every class. happyaccess.php calls boot() on every load.
  */
 final class Plugin {
 
@@ -36,17 +38,17 @@ final class Plugin {
 	 * @return void
 	 */
 	public static function init() {
+		add_action( 'wp_initialize_site', array( Installer::class, 'on_new_site' ), 11 );
+		add_action( Installer::NETWORK_HOOK, array( Installer::class, 'network_upgrade' ) );
 		Installer::maybe_upgrade();
 		Capabilities::register();
 		Cron::register();
 		Privacy::register();
+		// Hooked whether or not Support Access is on: with no steps added, the dispatcher sends visitors to the normal login.
+		Router::register();
 		Feature::register();
 		Routes::register();
-
-		// The admin page arrives in a later task, so skip it until the class exists.
-		if ( class_exists( '\HappyAccess\Admin\Page' ) ) {
-			\HappyAccess\Admin\Page::register();
-		}
+		Page::register();
 	}
 
 	/**

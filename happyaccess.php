@@ -13,324 +13,40 @@
  * Requires at least: 6.7
  * Tested up to:      6.9
  * Requires PHP:      7.4
+ *
+ * @package HappyAccess
  */
 
-// Exit if accessed directly.
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+use HappyAccess\Plugin;
 
-// Define plugin constants.
-define( 'HAPPYACCESS_VERSION', '1.0.6' );
-define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
-define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
-define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'HAPPYACCESS_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
+defined( 'ABSPATH' ) || exit;
 
-// Namespaced 1.1.0 code. Stage 2 boots it; for now it is only loadable.
+// The test bootstrap defines these first, so each one is guarded.
+defined( 'HAPPYACCESS_VERSION' ) || define( 'HAPPYACCESS_VERSION', '1.0.6' );
+defined( 'HAPPYACCESS_PLUGIN_FILE' ) || define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
+defined( 'HAPPYACCESS_PLUGIN_DIR' ) || define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+defined( 'HAPPYACCESS_PLUGIN_URL' ) || define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+defined( 'HAPPYACCESS_PLUGIN_BASENAME' ) || define( 'HAPPYACCESS_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
+
 require_once HAPPYACCESS_PLUGIN_DIR . 'src/Autoloader.php';
 \HappyAccess\Autoloader::register();
 
-// Declare HPOS compatibility (if WooCommerce is active).
-add_action( 'before_woocommerce_init', function() {
-	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
-		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
-			'custom_order_tables',
-			__FILE__,
-			true
-		);
-		
-		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
-			'cart_checkout_blocks',
-			__FILE__,
-			true
-		);
-	}
-} );
-
-// Development switch: boot the 1.1.0 code instead of the legacy plugin.
-if ( defined( 'HAPPYACCESS_NEXT' ) && HAPPYACCESS_NEXT ) {
-	register_activation_hook( __FILE__, array( \HappyAccess\Plugin::class, 'activate' ) );
-	register_deactivation_hook( __FILE__, array( \HappyAccess\Plugin::class, 'deactivate' ) );
-	\HappyAccess\Plugin::boot();
-	return;
-}
-
 /**
- * Main plugin class.
+ * Declares support for WooCommerce order storage (HPOS) and the cart and
+ * checkout blocks.
  *
- * @since 1.0.0
+ * @return void
  */
-class HappyAccess {
-
-	/**
-	 * Plugin instance.
-	 *
-	 * @var HappyAccess|null
-	 */
-	private static $instance = null;
-	
-	/**
-	 * Admin instance.
-	 *
-	 * @var HappyAccess_Admin|null
-	 */
-	private $admin = null;
-
-	/**
-	 * Get plugin instance.
-	 *
-	 * @return HappyAccess
-	 */
-	public static function get_instance() {
-		if ( null === self::$instance ) {
-			self::$instance = new self();
-		}
-		return self::$instance;
+function happyaccess_declare_woocommerce_compatibility() {
+	if ( ! class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+		return;
 	}
-
-	/**
-	 * Constructor.
-	 */
-	private function __construct() {
-		$this->load_dependencies();
-		$this->init_hooks();
-	}
-
-	/**
-	 * Load plugin dependencies.
-	 *
-	 * @return void
-	 */
-	private function load_dependencies() {
-		// Core classes.
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-activator.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-deactivator.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-token-manager.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-otp-handler.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-temp-user.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-cleanup.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-logger.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-gdpr.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-rate-limiter.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-login-handler.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-magic-link.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-recaptcha.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-otp-share.php';
-		require_once HAPPYACCESS_PLUGIN_DIR . 'includes/class-happyaccess-access-guard.php';
-
-		// Initialize GDPR compliance (WordPress privacy tools integration).
-		new HappyAccess_GDPR();
-
-		// Admin classes.
-		if ( is_admin() ) {
-			require_once HAPPYACCESS_PLUGIN_DIR . 'admin/class-happyaccess-admin.php';
-			$this->admin = new HappyAccess_Admin();
-		}
-	}
-
-	/**
-	 * Initialize plugin hooks.
-	 *
-	 * @return void
-	 */
-	private function init_hooks() {
-		// Activation/deactivation hooks.
-		register_activation_hook( __FILE__, array( 'HappyAccess_Activator', 'activate' ) );
-		register_deactivation_hook( __FILE__, array( 'HappyAccess_Deactivator', 'deactivate' ) );
-
-		// Initialize components.
-		add_action( 'init', array( $this, 'init' ) );
-		add_action( 'admin_init', array( $this, 'admin_init' ) );
-
-		// Cron events.
-		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_Cleanup', 'cleanup_expired_tokens' ) );
-		add_action( 'happyaccess_cleanup_attempts', array( 'HappyAccess_Cleanup', 'cleanup_old_attempts' ) );
-
-		// Login form modifications.
-		add_action( 'login_form', array( 'HappyAccess_Login_Handler', 'add_otp_field' ) );
-		add_filter( 'authenticate', array( 'HappyAccess_Login_Handler', 'authenticate_otp' ), 10, 3 );
-		add_action( 'login_enqueue_scripts', array( 'HappyAccess_Login_Handler', 'enqueue_login_scripts' ) );
-		
-		// reCAPTCHA v3 integration (optional).
-		add_action( 'login_enqueue_scripts', array( 'HappyAccess_ReCaptcha', 'enqueue_scripts' ) );
-		
-		// Magic link and OTP share cleanup with token cleanup.
-		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_Magic_Link', 'cleanup_expired' ) );
-		add_action( 'happyaccess_cleanup_expired', array( 'HappyAccess_OTP_Share', 'cleanup_expired' ) );
-		
-		// Access guard for temp users (menu restrictions, URL blocking, admin protection).
-		add_action( 'admin_init', array( 'HappyAccess_Access_Guard', 'init' ) );
-
-		// Admin bar modifications.
-		if ( is_admin() && $this->admin ) {
-			add_action( 'admin_bar_menu', array( $this->admin, 'add_emergency_lock_button' ), 999 );
-			add_action( 'wp_ajax_happyaccess_emergency_lock', array( $this->admin, 'ajax_emergency_lock' ) );
-		}
-		
-		// Plugin action links (Settings).
-		add_filter( 'plugin_action_links_' . HAPPYACCESS_PLUGIN_BASENAME, array( $this, 'add_plugin_action_links' ) );
-		
-		// Plugin row meta (Get Support link in description area).
-		add_filter( 'plugin_row_meta', array( $this, 'add_plugin_row_meta' ), 10, 2 );
-	}
-	
-	/**
-	 * Add plugin action links on plugins page.
-	 *
-	 * @since 1.0.1
-	 * @since 1.0.2 Removed Support link (moved to row meta).
-	 *
-	 * @param array $links Existing links.
-	 * @return array Modified links.
-	 */
-	public function add_plugin_action_links( $links ) {
-		$settings_link = sprintf(
-			'<a href="%s">%s</a>',
-			esc_url( admin_url( 'users.php?page=happyaccess&tab=settings' ) ),
-			esc_html__( 'Settings', 'happyaccess' )
-		);
-		
-		// Add at the beginning of the array.
-		array_unshift( $links, $settings_link );
-		
-		return $links;
-	}
-	
-	/**
-	 * Add plugin row meta links (in description area).
-	 *
-	 * @since 1.0.2
-	 *
-	 * @param array  $links Plugin meta links.
-	 * @param string $file  Plugin file path.
-	 * @return array Modified links.
-	 */
-	public function add_plugin_row_meta( $links, $file ) {
-		if ( HAPPYACCESS_PLUGIN_BASENAME !== $file ) {
-			return $links;
-		}
-		
-		$support_link = sprintf(
-			'<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>',
-			esc_url( 'https://github.com/shameemreza/happyaccess/issues' ),
-			esc_html__( 'Get Support', 'happyaccess' )
-		);
-		
-		$links[] = $support_link;
-		
-		return $links;
-	}
-
-	/**
-	 * Initialize plugin.
-	 *
-	 * @return void
-	 */
-	public function init() {
-		// WordPress automatically loads translations for plugins on WordPress.org since 4.6.
-		// No need to manually call load_plugin_textdomain().
-
-		// Ensure database tables exist (for upgrades without deactivation).
-		$this->ensure_tables_exist();
-
-		// Check for plugin upgrades.
-		$this->maybe_upgrade();
-
-		// Schedule cleanup crons if not already scheduled.
-		if ( ! wp_next_scheduled( 'happyaccess_cleanup_expired' ) ) {
-			wp_schedule_event( time(), 'hourly', 'happyaccess_cleanup_expired' );
-		}
-		if ( ! wp_next_scheduled( 'happyaccess_cleanup_attempts' ) ) {
-			wp_schedule_event( time(), 'daily', 'happyaccess_cleanup_attempts' );
-		}
-	}
-
-	/**
-	 * Check for plugin upgrades and run migrations.
-	 *
-	 * @since 1.0.0
-	 * @since 1.0.3 Added magic links table creation.
-	 *
-	 * @return void
-	 */
-	private function maybe_upgrade() {
-		global $wpdb;
-		$current_version = get_option( 'happyaccess_version', '0.0.0' );
-		
-		// Only run upgrades if version has changed.
-		if ( version_compare( $current_version, HAPPYACCESS_VERSION, '<' ) ) {
-			// Migrate token_expiry from old 24 hours default to new 7 days default.
-			$token_expiry = get_option( 'happyaccess_token_expiry' );
-			if ( 86400 === (int) $token_expiry ) {
-				update_option( 'happyaccess_token_expiry', 604800 );
-			}
-			
-			// Fix for 1.0.1: Update existing tokens to allow unlimited reuse.
-			// Old tokens had max_uses=1 which prevented reuse.
-			if ( version_compare( $current_version, '1.0.1', '<' ) ) {
-				$table = esc_sql( $wpdb->prefix . 'happyaccess_tokens' );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Upgrade migration.
-				$wpdb->query(
-					$wpdb->prepare(
-						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is escaped.
-						"UPDATE `$table` SET max_uses = %d WHERE max_uses = %d AND revoked_at IS NULL",
-						0,
-						1
-					)
-				);
-			}
-			
-			// Upgrade for 1.0.3: Create magic links table.
-			if ( version_compare( $current_version, '1.0.3', '<' ) ) {
-				HappyAccess_Magic_Link::create_table();
-			}
-			
-			
-			// Update version.
-			update_option( 'happyaccess_version', HAPPYACCESS_VERSION );
-		}
-	}
-
-	/**
-	 * Initialize admin settings registration.
-	 *
-	 * Note: HappyAccess_Admin instance is created in load_dependencies().
-	 * This hook is only for registering settings that require admin_init.
-	 *
-	 * @return void
-	 */
-	public function admin_init() {
-		// Settings are registered via HappyAccess_Admin->handle_settings().
-		// No additional instantiation needed here.
-	}
-
-	/**
-	 * Ensure all database tables exist.
-	 *
-	 * Uses the stored DB version to avoid running SHOW TABLES on every request.
-	 * Only checks for missing tables when the DB version is outdated.
-	 *
-	 * @since 1.0.3
-	 * @since 1.0.4 Uses version check instead of SHOW TABLES on every init.
-	 *
-	 * @return void
-	 */
-	private function ensure_tables_exist() {
-		$db_version = get_option( 'happyaccess_db_version', '0.0.0' );
-
-		if ( version_compare( $db_version, '1.0.4', '>=' ) ) {
-			return;
-		}
-
-		if ( version_compare( $db_version, '1.0.3', '<' ) ) {
-			HappyAccess_Magic_Link::create_table();
-		}
-
-		HappyAccess_OTP_Share::maybe_create_table();
-		update_option( 'happyaccess_db_version', '1.0.4' );
-	}
+	\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', HAPPYACCESS_PLUGIN_FILE, true );
+	\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', HAPPYACCESS_PLUGIN_FILE, true );
 }
+add_action( 'before_woocommerce_init', 'happyaccess_declare_woocommerce_compatibility' );
 
-// Initialize the plugin.
-HappyAccess::get_instance();
+register_activation_hook( __FILE__, array( Plugin::class, 'activate' ) );
+register_deactivation_hook( __FILE__, array( Plugin::class, 'deactivate' ) );
+
+Plugin::boot();

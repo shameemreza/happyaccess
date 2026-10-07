@@ -24,6 +24,10 @@
 	},
 	"scripts": {
 		"test": "phpunit",
+		"test:multisite": [
+			"@putenv WP_MULTISITE=1",
+			"phpunit --exclude-group ms-excluded"
+		],
 		"lint": "phpcs",
 		"lint:fix": "phpcbf"
 	}
