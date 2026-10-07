@@ -120,4 +120,16 @@ class OwnerTest extends WP_UnitTestCase {
 		$this->assertTrue( user_can( $temp, 'read' ) );
 		$this->assertSame( 0, Grants::owner_id( $grant ) );
 	}
+
+	public function test_finds_a_real_admin_behind_more_than_five_temp_admins() {
+		$this->hide_admins_before( $this->first_admin );
+		update_user_meta( $this->first_admin, 'happyaccess_temp_user', 1 );
+		update_user_meta( $this->second_admin, 'happyaccess_temp_user', 1 );
+		for ( $i = 0; $i < 5; $i++ ) {
+			update_user_meta( self::factory()->user->create( array( 'role' => 'administrator' ) ), 'happyaccess_temp_user', 1 );
+		}
+		$real = self::factory()->user->create( array( 'role' => 'administrator' ) );
+
+		$this->assertSame( $real, Grants::owner_id( array( 'created_by' => 0 ) ) );
+	}
 }

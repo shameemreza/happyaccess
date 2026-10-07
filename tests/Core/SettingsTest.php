@@ -97,4 +97,39 @@ class SettingsTest extends WP_UnitTestCase {
 
 		$this->assertFalse( Settings::get( 'privacy.logging' ) );
 	}
+
+	public function test_all_reads_the_option_once_until_a_write_or_a_blog_switch() {
+		Settings::update( array( 'privacy' => array( 'retention_days' => 9 ) ) );
+		$reads = 0;
+		$count = static function ( $value ) use ( &$reads ) {
+			++$reads;
+			return $value;
+		};
+		add_filter( 'option_' . Settings::OPTION, $count );
+		Settings::flush_cache();
+
+		Settings::all();
+		Settings::get( 'privacy.logging' );
+		Settings::all();
+		$this->assertSame( 1, $reads );
+
+		Settings::update( array( 'privacy' => array( 'retention_days' => 12 ) ) );
+		$this->assertSame( 12, Settings::get( 'privacy.retention_days' ) );
+
+		$stored                              = get_option( Settings::OPTION );
+		$stored['privacy']['retention_days'] = 15;
+		update_option( Settings::OPTION, $stored );
+		$this->assertSame( 15, Settings::get( 'privacy.retention_days' ) );
+
+		$before = $reads;
+		Settings::all();
+		$this->assertSame( $before, $reads );
+		do_action( 'switch_blog', get_current_blog_id(), get_current_blog_id(), 'switch' );
+		Settings::all();
+		$this->assertSame( $before + 1, $reads );
+
+		delete_option( Settings::OPTION );
+		$this->assertSame( 30, Settings::get( 'privacy.retention_days' ) );
+		remove_filter( 'option_' . Settings::OPTION, $count );
+	}
 }

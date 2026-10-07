@@ -173,12 +173,15 @@ final class AdminBar {
 	}
 
 	/**
-	 * Revokes every current grant.
+	 * Revokes every grant that is not revoked yet. The count, which the
+	 * notice and the log show, is the passes that were current, so rows that
+	 * had expired and were waiting for cleanup don't count as ended now.
 	 *
-	 * @return int How many grants were revoked.
+	 * @return int How many current passes were ended.
 	 */
 	public static function emergency_lock() {
-		$count = Grants::revoke_all( 'emergency_lock' );
+		$count = count( Grants::list_current() );
+		Grants::revoke_all( 'emergency_lock' );
 		AuditLog::add(
 			'emergency_lock',
 			array(

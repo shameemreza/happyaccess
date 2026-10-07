@@ -38,6 +38,13 @@ final class Settings {
 	);
 
 	/**
+	 * Cleaned settings per site for this request.
+	 *
+	 * @var array
+	 */
+	private static $memo = array();
+
+	/**
 	 * Default settings. Later stages add groups here.
 	 *
 	 * @return array
@@ -79,8 +86,36 @@ final class Settings {
 	 * @return array
 	 */
 	public static function all() {
-		$stored = get_option( self::OPTION, array() );
-		return self::clean( self::defaults(), is_array( $stored ) ? $stored : array(), '' );
+		$blog_id = get_current_blog_id();
+		if ( ! isset( self::$memo[ $blog_id ] ) ) {
+			self::watch();
+			$stored                 = get_option( self::OPTION, array() );
+			self::$memo[ $blog_id ] = self::clean( self::defaults(), is_array( $stored ) ? $stored : array(), '' );
+		}
+		return self::$memo[ $blog_id ];
+	}
+
+	/**
+	 * Forgets the settings read in this request.
+	 *
+	 * @return void
+	 */
+	public static function flush_cache() {
+		self::$memo = array();
+	}
+
+	/**
+	 * Clears the memo whenever the option is written or deleted, by any code,
+	 * and when the request switches to another site. Adding the same hooks
+	 * again is harmless.
+	 *
+	 * @return void
+	 */
+	private static function watch() {
+		foreach ( array( 'add_option_', 'update_option_', 'delete_option_' ) as $hook ) {
+			add_action( $hook . self::OPTION, array( __CLASS__, 'flush_cache' ) );
+		}
+		add_action( 'switch_blog', array( __CLASS__, 'flush_cache' ) );
 	}
 
 	/**
@@ -119,6 +154,7 @@ final class Settings {
 				update_option( self::OPTION, $merged, true );
 			}
 		);
+		self::flush_cache();
 		return $merged;
 	}
 

@@ -174,7 +174,7 @@ final class Privacy {
 		global $wpdb;
 
 		$email = trim( (string) $email );
-		if ( '' === $email ) {
+		if ( '' === $email || Capabilities::is_temp_user( get_current_user_id() ) ) {
 			return array(
 				'data' => array(),
 				'done' => true,

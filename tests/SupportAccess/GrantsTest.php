@@ -145,4 +145,28 @@ class GrantsTest extends WP_UnitTestCase {
 		$this->expectException( RuntimeException::class );
 		Grants::create( array( 'label' => 'x' ) );
 	}
+
+	public function test_has_current_is_read_once_until_a_write_the_next_expiry_or_a_blog_switch() {
+		global $wpdb;
+		$this->assertFalse( Grants::has_current() );
+		$short = Grants::create( array( 'label' => 'short', 'duration' => HOUR_IN_SECONDS ) );
+		$this->assertTrue( Grants::has_current() );
+
+		$queries = $wpdb->num_queries;
+		$this->assertTrue( Grants::has_current() );
+		$this->assertSame( $queries, $wpdb->num_queries );
+
+		Clock::freeze( 1790000000 + 2 * HOUR_IN_SECONDS );
+		$this->assertFalse( Grants::has_current() );
+
+		Clock::freeze( 1790000000 );
+		$this->assertTrue( Grants::has_current() );
+		$queries = $wpdb->num_queries;
+		do_action( 'switch_blog', get_current_blog_id(), get_current_blog_id(), 'switch' );
+		$this->assertTrue( Grants::has_current() );
+		$this->assertSame( $queries + 1, $wpdb->num_queries );
+
+		Grants::revoke( $short['id'] );
+		$this->assertFalse( Grants::has_current() );
+	}
 }

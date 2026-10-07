@@ -347,4 +347,21 @@ class PrivacyTest extends WP_UnitTestCase {
 		$id = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM ' . Installer::table( 'tokens' ) . ' WHERE label = %s', $label ) );
 		return Grants::get( $id );
 	}
+
+	public function test_export_as_a_temp_user_returns_nothing() {
+		$temp = TempUsers::get_or_create( $this->grant_by_label( 'Acme' ) );
+		wp_set_current_user( $temp );
+
+		$this->assertSame(
+			array(
+				'data' => array(),
+				'done' => true,
+			),
+			Privacy::export( 'me@example.org', 1 )
+		);
+		$this->assertSame( array( 'data' => array(), 'done' => true ), Privacy::export( 'agent@example.org', 1 ) );
+
+		wp_set_current_user( $this->user );
+		$this->assertNotEmpty( Privacy::export( 'me@example.org', 1 )['data'] );
+	}
 }

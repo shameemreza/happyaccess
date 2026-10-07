@@ -19,6 +19,13 @@ defined( 'ABSPATH' ) || exit;
 final class TempUsers {
 
 	/**
+	 * Whether any temp user exists, read once per request. Null when unknown.
+	 *
+	 * @var bool|null
+	 */
+	private static $any = null;
+
+	/**
 	 * Creates the temp user for a grant and links it on the grant row.
 	 *
 	 * A custom pass gets no role, only its chosen capabilities.
@@ -255,6 +262,89 @@ final class TempUsers {
 	}
 
 	/**
+	 * Takes the role, every capability, the sessions and the WooCommerce API
+	 * keys off a user, so an account that has to stay can do nothing.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	public static function strip( $user_id ) {
+		$user = new \WP_User( (int) $user_id );
+		$user->set_role( '' );
+		$user->remove_all_caps();
+		self::delete_wc_api_keys( $user_id );
+		self::destroy_sessions( $user_id );
+	}
+
+	/**
+	 * Deletes temp users of this site that no grant row links to and that
+	 * were registered before a time, such as a user left by a crash between
+	 * create and link. Their content goes to the owner of the grant they
+	 * name, or the first administrator. With nobody to inherit it, the
+	 * account stays, stripped, and keeps its posts.
+	 *
+	 * @param int $registered_before Unix time.
+	 * @return int How many users were deleted.
+	 */
+	public static function delete_unlinked( $registered_before ) {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Cron cleanup, 50 rows at most; table names from the prefix.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT u.ID FROM {$wpdb->users} u
+				INNER JOIN {$wpdb->usermeta} m ON m.user_id = u.ID AND m.meta_key = %s
+				LEFT JOIN {$wpdb->usermeta} b ON b.user_id = u.ID AND b.meta_key = %s
+				WHERE u.user_registered < %s AND ( b.meta_value IS NULL OR b.meta_value = %s )
+				AND u.ID NOT IN ( SELECT user_id FROM {$table} WHERE user_id > 0 )
+				ORDER BY u.ID ASC LIMIT %d",
+				'happyaccess_temp_user',
+				'happyaccess_blog_id',
+				gmdate( 'Y-m-d H:i:s', (int) $registered_before ),
+				(string) get_current_blog_id(),
+				50
+			)
+		);
+		// phpcs:enable
+
+		$count = 0;
+		foreach ( array_map( 'intval', (array) $ids ) as $user_id ) {
+			$user = get_userdata( $user_id );
+			if ( false === $user || ( is_multisite() && ! is_user_member_of_blog( $user_id ) ) ) {
+				continue;
+			}
+			$grant    = Grants::get( (int) get_user_meta( $user_id, 'happyaccess_token_id', true ) );
+			$owner_id = Grants::owner_id( null === $grant ? array( 'created_by' => 0 ) : $grant );
+			if ( $owner_id < 1 || $owner_id === $user_id ) {
+				self::strip( $user_id );
+				continue;
+			}
+
+			self::destroy_sessions( $user_id );
+			self::delete_wc_api_keys( $user_id );
+			$login = $user->user_login;
+			if ( ! self::remove_user( $user_id, $owner_id ) ) {
+				self::strip( $user_id );
+				continue;
+			}
+			++$count;
+			AuditLog::add(
+				'temp_user_deleted',
+				array(
+					'feature'  => 'support',
+					'token_id' => 0,
+					'user_id'  => 0,
+					'meta'     => array(
+						'user_login' => $login,
+						'reason'     => 'unlinked',
+					),
+				)
+			);
+		}
+		return $count;
+	}
+
+	/**
 	 * Ends every login session of a user.
 	 *
 	 * @param int $user_id User id.
@@ -303,9 +393,51 @@ final class TempUsers {
 	 */
 	public static function any_exist() {
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Indexed lookup, one row.
-		$found = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = %s LIMIT 1", 'happyaccess_temp_user' ) );
-		return null !== $found;
+		if ( null === self::$any ) {
+			self::watch();
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Indexed lookup, one row, once per request.
+			$found     = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = %s LIMIT 1", 'happyaccess_temp_user' ) );
+			self::$any = null !== $found;
+		}
+		return self::$any;
+	}
+
+	/**
+	 * Forgets whether any temp user exists.
+	 *
+	 * @return void
+	 */
+	public static function flush_cache() {
+		self::$any = null;
+	}
+
+	/**
+	 * Forgets the any_exist() answer when the temp user marker is added,
+	 * changed or deleted on any user, deletes included.
+	 *
+	 * @param mixed  $meta_id   Meta id, or ids on delete.
+	 * @param int    $object_id User id.
+	 * @param string $meta_key  Meta key.
+	 * @return void
+	 */
+	public static function marker_changed( $meta_id, $object_id = 0, $meta_key = '' ) {
+		unset( $meta_id, $object_id );
+		if ( 'happyaccess_temp_user' === $meta_key ) {
+			self::flush_cache();
+		}
+	}
+
+	/**
+	 * Hooks the memo resets: marker changes and site switches. Adding the
+	 * same hooks again is harmless.
+	 *
+	 * @return void
+	 */
+	private static function watch() {
+		foreach ( array( 'added_user_meta', 'updated_user_meta', 'deleted_user_meta' ) as $hook ) {
+			add_action( $hook, array( __CLASS__, 'marker_changed' ), 10, 3 );
+		}
+		add_action( 'switch_blog', array( __CLASS__, 'flush_cache' ) );
 	}
 
 	/**

@@ -274,7 +274,15 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 
 		$this->assertTrue( Grants::revoke( $id ) );
 		$this->assertNotFalse( get_userdata( $user_id ) );
-		$this->assertSame( 1, AuditLog::query( array( 'event' => 'temp_user_delete_failed', 'token_id' => $id ) )['total'] );
+		$failed = AuditLog::query( array( 'event' => 'temp_user_delete_failed', 'token_id' => $id ) );
+		$this->assertSame( 1, $failed['total'] );
+		$this->assertSame(
+			array(
+				'user_id'       => $user_id,
+				'role_stripped' => true,
+			),
+			$failed['items'][0]['meta']
+		);
 
 		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
 		Grants::cleanup_expired();
@@ -290,6 +298,7 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertTrue( Grants::revoke( $id ) );
 		$this->assertNotFalse( get_userdata( $user_id ) );
 		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertSame( '', get_user_meta( $user_id, $GLOBALS['wpdb']->get_blog_prefix() . 'user_level', true ) );
 	}
 
 	public function test_failed_delete_clears_the_direct_caps_of_a_custom_pass() {
@@ -482,5 +491,78 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		);
 		Grants::flush_cache();
 		$this->assertSame( 'active', Grants::resolve_user( $user_id )['state'] );
+	}
+
+	/**
+	 * Marks a grant revoked in the table only, as a crash between the
+	 * revoke and the strip would leave it.
+	 *
+	 * @param int $id Grant id.
+	 * @return void
+	 */
+	private function revoke_row_only( $id ) {
+		global $wpdb;
+		$wpdb->update( Installer::table( 'tokens' ), array( 'revoked_at' => Clock::mysql(), 'user_id' => 0 ), array( 'id' => $id ) );
+		Grants::flush_cache();
+	}
+
+	public function test_retry_orphans_strips_an_unmarked_user_of_a_revoked_grant() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		$this->revoke_row_only( $id );
+		$this->assertTrue( user_can( $user_id, 'manage_options' ) );
+
+		Grants::retry_orphans();
+
+		clean_user_cache( $user_id );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertFalse( user_can( $user_id, 'read' ) );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all() );
+	}
+
+	public function test_retry_orphans_leaves_an_unmarked_user_of_a_current_grant_alone() {
+		list( , $user_id ) = $this->grant_with_user();
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+
+		Grants::retry_orphans();
+
+		clean_user_cache( $user_id );
+		$this->assertTrue( user_can( $user_id, 'manage_options' ) );
+	}
+
+	/**
+	 * A temp user that no grant row points at.
+	 *
+	 * @param int $age Seconds since it was registered.
+	 * @return int User id.
+	 */
+	private function unlinked_temp_user( $age ) {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		update_user_meta( $user_id, 'happyaccess_token_id', 999999 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', get_current_blog_id() );
+		$wpdb->update( $wpdb->users, array( 'user_registered' => Clock::mysql( Clock::now() - $age ) ), array( 'ID' => $user_id ) );
+		clean_user_cache( $user_id );
+		return $user_id;
+	}
+
+	public function test_cleanup_deletes_unlinked_temp_users_older_than_an_hour() {
+		$old   = $this->unlinked_temp_user( 2 * HOUR_IN_SECONDS );
+		$fresh = $this->unlinked_temp_user( 10 * MINUTE_IN_SECONDS );
+		list( , $linked ) = $this->grant_with_user();
+		global $wpdb;
+		$wpdb->update( $wpdb->users, array( 'user_registered' => Clock::mysql( Clock::now() - DAY_IN_SECONDS ) ), array( 'ID' => $linked ) );
+		$post = self::factory()->post->create( array( 'post_author' => $old ) );
+
+		Grants::cleanup_expired();
+
+		$this->assertFalse( get_userdata( $old ) );
+		$this->assertNotFalse( get_userdata( $fresh ) );
+		$this->assertNotFalse( get_userdata( $linked ) );
+		$this->assertSame( Grants::owner_id( array( 'created_by' => 0 ) ), (int) get_post( $post )->post_author );
+		$this->assertNotSame( $old, (int) get_post( $post )->post_author );
+		$this->assertSame( 1, AuditLog::query( array( 'event' => 'temp_user_deleted', 'token_id' => 0 ) )['total'] );
 	}
 }

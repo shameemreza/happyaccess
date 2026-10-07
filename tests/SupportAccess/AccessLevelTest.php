@@ -5,6 +5,7 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Secrets;
@@ -238,5 +239,114 @@ class AccessLevelTest extends WP_UnitTestCase {
 				'level' => 'bogus',
 			)
 		);
+	}
+
+	public function test_a_level_that_is_not_text_throws_the_level_message_without_a_warning() {
+		foreach ( array( array( 'full' ), 7, true ) as $level ) {
+			try {
+				Grants::create(
+					array(
+						'label' => 'Acme',
+						'level' => $level,
+					)
+				);
+				$this->fail( 'A non-text level was accepted.' );
+			} catch ( \InvalidArgumentException $e ) {
+				$this->assertSame( 'The access level is not valid.', $e->getMessage() );
+			}
+		}
+	}
+
+	public function test_a_mixed_case_level_throws() {
+		foreach ( array( 'Full', 'CUSTOM', 'Protected' ) as $level ) {
+			try {
+				Grants::create(
+					array(
+						'label'        => 'Acme',
+						'level'        => $level,
+						'caps'         => array( 'edit_posts' ),
+						'confirm_full' => true,
+					)
+				);
+				$this->fail( $level . ' was accepted.' );
+			} catch ( \InvalidArgumentException $e ) {
+				$this->assertSame( 'The access level is not valid.', $e->getMessage(), $level );
+			}
+		}
+	}
+
+	public function test_confirm_full_must_be_a_real_true() {
+		foreach ( array( '1', 1, 'true', 'yes' ) as $confirm ) {
+			try {
+				Grants::create(
+					array(
+						'label'        => 'Acme',
+						'level'        => 'full',
+						'confirm_full' => $confirm,
+					)
+				);
+				$this->fail( var_export( $confirm, true ) . ' confirmed a full pass.' );
+			} catch ( \InvalidArgumentException $e ) {
+				$this->assertSame( 'Confirm that you trust this person with full access.', $e->getMessage() );
+			}
+		}
+	}
+
+	public function test_grant_created_meta_names_the_level_and_counts_custom_caps() {
+		$custom = Grants::create(
+			array(
+				'label'    => 'Custom',
+				'level'    => 'custom',
+				'caps'     => array( 'edit_posts', 'upload_files' ),
+				'duration' => DAY_IN_SECONDS,
+				'one_time' => true,
+			)
+		);
+		$full   = Grants::create(
+			array(
+				'label'        => 'Full',
+				'level'        => 'full',
+				'confirm_full' => true,
+			)
+		);
+
+		$custom_meta = AuditLog::query( array( 'event' => 'grant_created', 'token_id' => $custom['id'] ) )['items'][0]['meta'];
+		$full_meta   = AuditLog::query( array( 'event' => 'grant_created', 'token_id' => $full['id'] ) )['items'][0]['meta'];
+
+		$this->assertSame(
+			array(
+				'role'       => 'administrator',
+				'duration'   => DAY_IN_SECONDS,
+				'one_time'   => true,
+				'level'      => 'custom',
+				'caps_count' => 3,
+			),
+			$custom_meta
+		);
+		$this->assertSame( 'full', $full_meta['level'] );
+		$this->assertArrayNotHasKey( 'caps_count', $full_meta );
+	}
+
+	public function test_no_caps_are_stored_for_protected_and_full() {
+		global $wpdb;
+		$protected = Grants::create(
+			array(
+				'label' => 'Protected',
+				'caps'  => array( 'edit_posts' ),
+			)
+		);
+		$full      = Grants::create(
+			array(
+				'label'        => 'Full',
+				'level'        => 'full',
+				'caps'         => array( 'edit_posts' ),
+				'confirm_full' => true,
+			)
+		);
+		foreach ( array( $protected['id'], $full['id'] ) as $id ) {
+			$raw = $wpdb->get_var( $wpdb->prepare( 'SELECT restrictions FROM ' . Installer::table( 'tokens' ) . ' WHERE id = %d', $id ) );
+			$this->assertArrayNotHasKey( 'caps', json_decode( $raw, true ), (string) $id );
+			$this->assertSame( array(), Grants::get( $id )['caps'] );
+		}
 	}
 }

@@ -47,6 +47,14 @@ final class Grants {
 	private static $resolved = array();
 
 	/**
+	 * Per-request answer of has_current(), keyed by blog id: when it was read
+	 * and when the soonest current grant ends, 0 when none is current.
+	 *
+	 * @var array
+	 */
+	private static $current = array();
+
+	/**
 	 * Login count written by the last successful record_login(), 0 when unknown.
 	 *
 	 * @var int
@@ -84,8 +92,8 @@ final class Grants {
 			}
 		}
 
-		$level = isset( $args['level'] ) && '' !== (string) $args['level'] ? (string) $args['level'] : 'protected';
-		if ( ! in_array( $level, self::LEVELS, true ) ) {
+		$level = isset( $args['level'] ) && '' !== $args['level'] ? $args['level'] : 'protected';
+		if ( ! is_string( $level ) || ! in_array( $level, self::LEVELS, true ) ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
 			throw new \InvalidArgumentException( __( 'The access level is not valid.', 'happyaccess' ) );
 		}
@@ -201,6 +209,7 @@ final class Grants {
 			throw new \RuntimeException( 'The grant could not be saved.' );
 		}
 		$id = (int) $wpdb->insert_id;
+		self::flush_cache();
 
 		$log_meta = array(
 			'role'     => $role,
@@ -304,19 +313,21 @@ final class Grants {
 
 		$admins = get_users(
 			array(
-				'role'    => 'administrator',
-				'orderby' => 'ID',
-				'order'   => 'ASC',
-				'number'  => 5,
-				'fields'  => 'ID',
+				'role'       => 'administrator',
+				'orderby'    => 'ID',
+				'order'      => 'ASC',
+				'number'     => 1,
+				'fields'     => 'ID',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- One row, only when the creator can't be used.
+				'meta_query' => array(
+					array(
+						'key'     => 'happyaccess_temp_user',
+						'compare' => 'NOT EXISTS',
+					),
+				),
 			)
 		);
-		foreach ( $admins as $admin_id ) {
-			if ( ! Capabilities::is_temp_user( (int) $admin_id ) ) {
-				return (int) $admin_id;
-			}
-		}
-		return 0;
+		return empty( $admins ) ? 0 : (int) $admins[0];
 	}
 
 	/**
@@ -387,18 +398,48 @@ final class Grants {
 	 */
 	public static function has_current() {
 		global $wpdb;
+		$blog_id = get_current_blog_id();
+		$now     = Clock::now();
+		if ( isset( self::$current[ $blog_id ] ) ) {
+			$memo = self::$current[ $blog_id ];
+			// A "none" answer holds until a grant write; a "some" answer until the soonest grant ends.
+			if ( $now >= $memo['at'] && ( 0 === $memo['until'] || $now < $memo['until'] ) ) {
+				return $memo['until'] > 0;
+			}
+		}
+
+		add_action( 'switch_blog', array( __CLASS__, 'flush_current' ) );
 		$table = Installer::table( 'tokens' );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		return (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE revoked_at IS NULL AND expires_at > %s LIMIT 1", Clock::mysql() ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, read once per request.
+		$next = $wpdb->get_var( $wpdb->prepare( "SELECT MIN( expires_at ) FROM {$table} WHERE revoked_at IS NULL AND expires_at > %s", Clock::mysql( $now ) ) );
+
+		self::$current[ $blog_id ] = array(
+			'at'    => $now,
+			'until' => is_string( $next ) ? Clock::from_mysql( $next ) : 0,
+		);
+		return self::$current[ $blog_id ]['until'] > 0;
 	}
 
 	/**
-	 * Clears the per-request resolver cache and Session's cached grant states.
+	 * Forgets the has_current() answers. Runs on every grant write and when
+	 * the request switches to another site.
+	 *
+	 * @return void
+	 */
+	public static function flush_current() {
+		self::$current = array();
+	}
+
+	/**
+	 * Clears the per-request resolver cache, the has_current() and
+	 * any_exist() answers and Session's cached grant states.
 	 *
 	 * @return void
 	 */
 	public static function flush_cache() {
 		self::$resolved = array();
+		self::flush_current();
+		TempUsers::flush_cache();
 		Session::flush_cache();
 		CapabilityGuard::flush_cache();
 		MenuGuard::flush_cache();
@@ -563,18 +604,17 @@ final class Grants {
 		}
 
 		// HappyAccess's own cleanup. The activity log must not pin it on a temp user whose request runs this.
-		$deleted = ActivityTracker::quietly(
+		list( $deleted, $stripped ) = ActivityTracker::quietly(
 			static function () use ( $grant ) {
+				$stripped = false;
 				if ( $grant['user_id'] > 0 && false !== get_userdata( $grant['user_id'] )
 					&& ( Capabilities::is_temp_user( $grant['user_id'] ) || TempUsers::owned_by_grant( $grant['user_id'], $grant ) ) ) {
 					// If the delete below fails, the account stays but can do nothing and has no API keys.
-					$stripped = new \WP_User( $grant['user_id'] );
-					$stripped->set_role( '' );
-					$stripped->remove_all_caps();
-					TempUsers::delete_wc_api_keys( $grant['user_id'] );
+					TempUsers::strip( $grant['user_id'] );
+					$stripped = true;
 				}
 				TempUsers::destroy_sessions( $grant['user_id'] );
-				return TempUsers::delete( $grant );
+				return array( TempUsers::delete( $grant ), $stripped );
 			}
 		);
 		self::flush_cache();
@@ -585,7 +625,10 @@ final class Grants {
 					'feature'  => 'support',
 					'token_id' => $grant['id'],
 					'user_id'  => 0,
-					'meta'     => array( 'user_id' => $grant['user_id'] ),
+					'meta'     => array(
+						'user_id'       => $grant['user_id'],
+						'role_stripped' => $stripped,
+					),
 				)
 			);
 		}
@@ -690,12 +733,18 @@ final class Grants {
 			}
 		}
 		self::retry_orphans();
+		ActivityTracker::quietly(
+			static function () {
+				return TempUsers::delete_unlinked( Clock::now() - HOUR_IN_SECONDS );
+			}
+		);
 		return $count;
 	}
 
 	/**
 	 * Deletes temp users that outlived their revoked grant, for example after
-	 * a failed delete in revoke().
+	 * a failed delete in revoke(), and strips leftover accounts whose marker
+	 * is gone but whose grant link points at a revoked grant.
 	 *
 	 * @return int How many users were deleted.
 	 */
@@ -720,8 +769,53 @@ final class Grants {
 				++$count;
 			}
 		}
+		self::strip_unmarked_leftovers();
 		self::flush_cache();
 		return $count;
+	}
+
+	/**
+	 * Strips the role and caps of accounts on this site that lost the temp
+	 * user marker but still carry a link to a revoked grant. Only HappyAccess
+	 * writes that link. An account with no role here is skipped, so a
+	 * stripped one is not found again.
+	 *
+	 * @return void
+	 */
+	private static function strip_unmarked_leftovers() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Cron cleanup, 50 rows at most.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT t.user_id, t.meta_value FROM {$wpdb->usermeta} t
+				INNER JOIN {$wpdb->usermeta} c ON c.user_id = t.user_id AND c.meta_key = %s
+				LEFT JOIN {$wpdb->usermeta} m ON m.user_id = t.user_id AND m.meta_key = %s
+				WHERE t.meta_key = %s AND m.umeta_id IS NULL ORDER BY t.user_id ASC LIMIT %d",
+				$wpdb->get_blog_prefix() . 'capabilities',
+				'happyaccess_temp_user',
+				'happyaccess_token_id',
+				50
+			),
+			ARRAY_A
+		);
+
+		foreach ( (array) $rows as $row ) {
+			$user_id = (int) $row['user_id'];
+			$blog_id = (int) get_user_meta( $user_id, 'happyaccess_blog_id', true );
+			// Grant ids repeat across a network, so the link must name this site there.
+			if ( $blog_id > 0 ? get_current_blog_id() !== $blog_id : is_multisite() ) {
+				continue;
+			}
+			$grant = self::get( (int) $row['meta_value'] );
+			if ( null === $grant || 0 === $grant['revoked_at'] ) {
+				continue;
+			}
+			ActivityTracker::quietly(
+				static function () use ( $user_id ) {
+					TempUsers::strip( $user_id );
+				}
+			);
+		}
 	}
 
 	/**

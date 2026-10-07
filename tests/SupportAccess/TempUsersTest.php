@@ -287,4 +287,25 @@ class TempUsersTest extends WP_UnitTestCase {
 		delete_user_meta( $user_id, 'happyaccess_temp_user' );
 		$this->assertFalse( TempUsers::any_exist() );
 	}
+
+	public function test_any_exist_is_read_once_until_a_marker_changes_or_the_blog_switches() {
+		global $wpdb;
+		TempUsers::flush_cache();
+		$this->assertFalse( TempUsers::any_exist() );
+		$queries = $wpdb->num_queries;
+		$this->assertFalse( TempUsers::any_exist() );
+		$this->assertSame( $queries, $wpdb->num_queries );
+
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		$this->assertTrue( TempUsers::any_exist() );
+
+		$queries = $wpdb->num_queries;
+		do_action( 'switch_blog', get_current_blog_id(), get_current_blog_id(), 'switch' );
+		$this->assertTrue( TempUsers::any_exist() );
+		$this->assertSame( $queries + 1, $wpdb->num_queries );
+
+		delete_user_meta( $user_id, 'happyaccess_temp_user' );
+		$this->assertFalse( TempUsers::any_exist() );
+	}
 }

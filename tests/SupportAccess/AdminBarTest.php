@@ -97,4 +97,17 @@ class AdminBarTest extends WP_UnitTestCase {
 		$node = $this->bar()->get_node( 'happyaccess-timer' );
 		$this->assertStringContainsString( 'Support access ends in 2 days 23 hours', $node->title );
 	}
+
+	public function test_emergency_lock_counts_only_current_passes() {
+		Clock::freeze( 1790000000 );
+		$current = Grants::create( array( 'label' => 'Current' ) );
+		$stale   = Grants::create( array( 'label' => 'Stale', 'duration' => HOUR_IN_SECONDS ) );
+		Clock::freeze( 1790000000 + 2 * HOUR_IN_SECONDS );
+
+		$this->assertSame( 1, AdminBar::emergency_lock() );
+		$this->assertNotSame( 0, Grants::get( $current['id'] )['revoked_at'] );
+		$this->assertNotSame( 0, Grants::get( $stale['id'] )['revoked_at'] );
+		$row = \HappyAccess\Core\AuditLog::query( array( 'event' => 'emergency_lock' ) )['items'][0];
+		$this->assertSame( 'Emergency lock ended 1 grant.', $row['summary'] );
+	}
 }
