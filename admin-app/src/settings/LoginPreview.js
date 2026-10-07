@@ -17,17 +17,6 @@ export default function LoginPreview( { supportAccess } ) {
 			<p className="ha-loginprev__lead">
 				{ __( 'Updates as you change features.', 'happyaccess' ) }
 			</p>
-			<p className="screen-reader-text">
-				{ supportAccess
-					? __(
-							'Visitors see a link to enter a support access code.',
-							'happyaccess'
-						)
-					: __(
-							'Visitors see the usual login form only.',
-							'happyaccess'
-						) }
-			</p>
 			<div className="ha-loginprev__screen" aria-hidden="true">
 				<svg
 					width="56"
@@ -62,15 +51,23 @@ export default function LoginPreview( { supportAccess } ) {
 								'happyaccess'
 							) }
 						</span>
-						<span className="ha-loginprev__tag">
-							{ __( 'Added by HappyAccess', 'happyaccess' ) }
-						</span>
 					</div>
 				) }
 				<div className="ha-loginprev__lost">
 					{ __( 'Lost your password?', 'happyaccess' ) }
 				</div>
 			</div>
+			<p className="ha-loginprev__note">
+				{ supportAccess
+					? __(
+							'HappyAccess adds the "Have a support access code?" link below the login form.',
+							'happyaccess'
+						)
+					: __(
+							'With Support access off, your login screen stays as it is.',
+							'happyaccess'
+						) }
+			</p>
 		</aside>
 	);
 }

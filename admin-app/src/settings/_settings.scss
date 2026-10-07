@@ -275,21 +275,14 @@
 		text-decoration: underline;
 	}
 
-	// Marks what HappyAccess adds, beside the link as the real screen shows it.
-	.ha-loginprev__tag {
-		--ha-tag: var(--wp-admin-theme-color, #2271b1);
-
-		margin-inline-start: 8px;
-		padding: 2px 8px;
-		border-radius: 10px;
-		background: #f0f6fc;
-		background: color-mix(in srgb, var(--ha-tag) 12%, #fff);
-		color: var(--ha-tag);
-		font-size: 11px;
-		line-height: 1.4;
+	.ha-loginprev__lost {
+		color: var(--ha-muted);
+		font-size: 12px;
 	}
 
-	.ha-loginprev__lost {
+	// Explains the change outside the mock, so the mock matches the real screen.
+	.ha-loginprev__note {
+		margin: 12px 0 0;
 		color: var(--ha-muted);
 		font-size: 12px;
 	}
