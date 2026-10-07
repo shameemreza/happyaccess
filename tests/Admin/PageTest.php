@@ -148,6 +148,6 @@ class PageTest extends WP_UnitTestCase {
 		Page::render();
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( 'id="happyaccess-root" class="happyaccess-app"', $html );
+		$this->assertStringContainsString( '<div class="wrap"><hr class="wp-header-end"><div id="happyaccess-root" class="happyaccess-app"></div>', $html );
 	}
 }

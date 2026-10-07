@@ -115,7 +115,7 @@ final class Page {
 	 * @return void
 	 */
 	public static function render() {
-		echo '<div class="wrap"><div id="happyaccess-root" class="happyaccess-app"></div>';
+		echo '<div class="wrap"><hr class="wp-header-end"><div id="happyaccess-root" class="happyaccess-app"></div>';
 		if ( ! is_readable( self::asset_file() ) ) {
 			echo '<div class="notice notice-error"><p>';
 			echo esc_html__( 'The HappyAccess admin app is not built yet. Run npm ci and npm run build in the plugin folder.', 'happyaccess' );
