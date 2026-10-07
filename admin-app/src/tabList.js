@@ -91,6 +91,25 @@ export function tabUrl( slug, args = {} ) {
 }
 
 /**
+ * Whether a click on one of our tab links should switch in place. A click
+ * with a modifier key or another button opens a new tab or window, so the
+ * browser keeps it.
+ *
+ * @param {MouseEvent} event Click event.
+ * @return {boolean} True for a plain left click.
+ */
+export function isPlainClick( event ) {
+	return (
+		! event.defaultPrevented &&
+		0 === event.button &&
+		! event.metaKey &&
+		! event.ctrlKey &&
+		! event.shiftKey &&
+		! event.altKey
+	);
+}
+
+/**
  * @return {number} The pass id in the current URL's `token` arg, or 0.
  */
 export function readQueryToken() {

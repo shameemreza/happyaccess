@@ -2,7 +2,6 @@ import {
 	createContext,
 	useCallback,
 	useContext,
-	useMemo,
 	useState,
 } from '@wordpress/element';
 
@@ -22,12 +21,12 @@ export function AnnounceProvider( { children } ) {
 		setState( ( previous ) => ( { text, count: previous.count + 1 } ) );
 	}, [] );
 
-	// A trailing non-breaking space on every other call lets the same text be read twice.
-	const text = state.count % 2 ? state.text + ' ' : state.text;
-	const value = useMemo( () => announce, [ announce ] );
+	// Screen readers skip a live region whose text did not change. Every other
+	// call adds a non-breaking space, so saying "Copied" twice is read twice.
+	const text = state.count % 2 ? state.text + '\u00A0' : state.text;
 
 	return (
-		<AnnounceContext.Provider value={ value }>
+		<AnnounceContext.Provider value={ announce }>
 			{ children }
 			<div
 				className="screen-reader-text"

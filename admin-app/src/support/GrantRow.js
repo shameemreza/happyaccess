@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from '@wordpress/element';
 import { Button, Notice } from '@wordpress/components';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useAnnounce } from '../hooks/useAnnounce';
-import { tabUrl } from '../tabList';
+import { isPlainClick, tabUrl } from '../tabList';
 import {
 	formatEnd,
 	levelName,
@@ -433,8 +433,10 @@ export default function GrantRow( {
 					className="ha-row__link"
 					href={ tabUrl( 'activity', { token: grant.id } ) }
 					onClick={ ( event ) => {
-						event.preventDefault();
-						onViewActivity( grant.id );
+						if ( isPlainClick( event ) ) {
+							event.preventDefault();
+							onViewActivity( grant.id );
+						}
 					} }
 				>
 					{ __( 'View activity', 'happyaccess' ) }

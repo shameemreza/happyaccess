@@ -137,8 +137,9 @@
 			background: var(--ha-accent);
 		}
 
+		// Half on: a white track with an accent knob, which keeps 3:1 against it.
 		&[data-state="mixed"] {
-			background: color-mix(in srgb, var(--ha-accent) 35%, #fff);
+			background: #fff;
 		}
 	}
 
@@ -157,7 +158,7 @@
 
 		&[data-state="mixed"] {
 			inset-inline-start: 11px;
-			background: #fff;
+			background: var(--ha-accent);
 		}
 
 		&[data-state="on"] {
@@ -170,11 +171,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		padding: 0 14px 12px 36px;
-
-		&:dir(rtl) {
-			padding: 0 36px 12px 14px;
-		}
+		padding-block: 0 12px;
+		padding-inline: 36px 14px;
 	}
 
 	.ha-cap {

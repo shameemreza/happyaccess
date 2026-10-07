@@ -32,7 +32,7 @@ function Harness( {
 }
 
 const group = ( name ) =>
-	screen.getByRole( 'switch', { name } ).closest( '.ha-group' );
+	screen.getByRole( 'checkbox', { name } ).closest( '.ha-group' );
 
 describe( 'PermissionEditor', () => {
 	it( 'offers the presets that exist and fills the counts from the one chosen', async () => {
@@ -91,9 +91,9 @@ describe( 'PermissionEditor', () => {
 		const onCaps = vi.fn();
 		render( <Harness start="shop_manager" onCaps={ onCaps } /> );
 
-		const content = screen.getByRole( 'switch', { name: 'Content' } );
-		const store = screen.getByRole( 'switch', { name: 'Store' } );
-		const plugins = screen.getByRole( 'switch', {
+		const content = screen.getByRole( 'checkbox', { name: 'Content' } );
+		const store = screen.getByRole( 'checkbox', { name: 'Store' } );
+		const plugins = screen.getByRole( 'checkbox', {
 			name: 'Plugins and updates',
 		} );
 		expect( content ).toHaveAttribute( 'aria-checked', 'mixed' );
@@ -121,6 +121,82 @@ describe( 'PermissionEditor', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'gives each group switch a checkbox role, mixed when some are on, described by its count', () => {
+		render( <Harness start="shop_manager" /> );
+
+		const content = screen.getByRole( 'checkbox', { name: 'Content' } );
+		expect( content ).toHaveAttribute( 'aria-checked', 'mixed' );
+		expect( content ).toHaveAccessibleDescription( '1 of 3' );
+	} );
+
+	it( 'scopes each cap input id by its group', async () => {
+		const user = userEvent.setup();
+		render( <Harness start="editor" /> );
+		await user.click(
+			within( group( 'Content' ) ).getByRole( 'button', {
+				name: /Content/,
+			} )
+		);
+
+		expect(
+			screen.getByRole( 'checkbox', { name: /Upload media/ } )
+		).toHaveAttribute( 'id', 'ha-cap-content-upload_files' );
+	} );
+
+	it( 'while searching, the chevron still closes and opens a group', async () => {
+		const user = userEvent.setup();
+		render( <Harness /> );
+		await user.type(
+			screen.getByRole( 'searchbox', { name: 'Find a permission' } ),
+			'plugins'
+		);
+		const toggle = screen.getByRole( 'button', {
+			name: /Plugins and updates/,
+		} );
+		expect( toggle ).toHaveAttribute( 'aria-expanded', 'true' );
+
+		await user.click( toggle );
+		expect( toggle ).toHaveAttribute( 'aria-expanded', 'false' );
+		expect(
+			screen.queryByRole( 'checkbox', { name: /Install plugins/ } )
+		).not.toBeInTheDocument();
+
+		await user.click( toggle );
+		expect( toggle ).toHaveAttribute( 'aria-expanded', 'true' );
+		expect(
+			screen.getByRole( 'checkbox', { name: /Install plugins/ } )
+		).toBeInTheDocument();
+	} );
+
+	it( 'while searching, the group switch turns on only the caps shown and says so', async () => {
+		const user = userEvent.setup();
+		const onCaps = vi.fn();
+		render( <Harness start="editor" onCaps={ onCaps } /> );
+		await user.type(
+			screen.getByRole( 'searchbox', { name: 'Find a permission' } ),
+			'install'
+		);
+
+		const shown = screen.getByRole( 'checkbox', {
+			name: 'Turn on the 1 shown in Plugins and updates',
+		} );
+		expect( shown ).toHaveAttribute( 'aria-checked', 'false' );
+		await user.click( shown );
+
+		expect( onCaps ).toHaveBeenLastCalledWith( [
+			'edit_posts',
+			'edit_others_posts',
+			'upload_files',
+			'install_plugins',
+		] );
+		expect( shown ).toHaveAttribute( 'aria-checked', 'true' );
+		expect(
+			within(
+				group( 'Turn on the 1 shown in Plugins and updates' )
+			).getByText( '1 of 2' )
+		).toBeInTheDocument();
+	} );
+
 	it( 'starts with every group collapsed', () => {
 		render( <Harness /> );
 
@@ -132,7 +208,9 @@ describe( 'PermissionEditor', () => {
 		expect(
 			screen.queryAllByRole( 'button', { expanded: true } )
 		).toHaveLength( 0 );
-		expect( screen.queryAllByRole( 'checkbox' ) ).toHaveLength( 0 );
+		expect( document.querySelectorAll( '.ha-caps input' ) ).toHaveLength(
+			0
+		);
 	} );
 
 	it( 'puts the knob at the end and white when all are on, in the middle when some, at the start and dark when none', async () => {
@@ -140,14 +218,14 @@ describe( 'PermissionEditor', () => {
 		render( <Harness start="shop_manager" /> );
 		const knob = ( name ) =>
 			screen
-				.getByRole( 'switch', { name } )
+				.getByRole( 'checkbox', { name } )
 				.querySelector( '.ha-switch__knob' );
 
 		expect( knob( 'Store' ).dataset.state ).toBe( 'on' );
 		expect( knob( 'Content' ).dataset.state ).toBe( 'mixed' );
 		expect( knob( 'Plugins and updates' ).dataset.state ).toBe( 'off' );
 
-		await user.click( screen.getByRole( 'switch', { name: 'Store' } ) );
+		await user.click( screen.getByRole( 'checkbox', { name: 'Store' } ) );
 		expect( knob( 'Store' ).dataset.state ).toBe( 'off' );
 	} );
 
@@ -217,10 +295,10 @@ describe( 'PermissionEditor', () => {
 		);
 
 		expect(
-			screen.getByRole( 'switch', { name: 'Plugins and updates' } )
+			screen.getByRole( 'checkbox', { name: 'Plugins and updates' } )
 		).toBeInTheDocument();
 		expect(
-			screen.queryByRole( 'switch', { name: 'Content' } )
+			screen.queryByRole( 'checkbox', { name: 'Content' } )
 		).not.toBeInTheDocument();
 		expect(
 			screen.getByRole( 'checkbox', { name: /Turn plugins on and off/ } )

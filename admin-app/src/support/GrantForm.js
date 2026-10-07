@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import {
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import {
 	Button,
 	CheckboxControl,
 	DateTimePicker,
-	FormTokenField,
 	Notice,
-	SelectControl,
 	TextControl,
-	ToggleControl,
 } from '@wordpress/components';
 import {
 	date as siteDate,
@@ -15,11 +18,11 @@ import {
 	getDate,
 	getSettings,
 } from '@wordpress/date';
-import { __, _n, isRTL, sprintf } from '@wordpress/i18n';
-import { Icon, chevronDown, chevronLeft, chevronRight } from '@wordpress/icons';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { createGrant } from '../api';
 import { useAnnounce } from '../hooks/useAnnounce';
 import { useNow } from '../hooks/useNow';
+import MoreOptions from './MoreOptions';
 import PassPreview from './PassPreview';
 import PermissionEditor from './PermissionEditor';
 import { useCatalog } from './useCatalog';
@@ -87,42 +90,6 @@ const initialForm = () => ( {
 	sendEmail: false,
 } );
 
-/**
- * Menu slugs and the labels the token field shows for them.
- *
- * @param {Array} menus boot.menus: top-level items with their children.
- * @return {{labels: string[], bySlug: Map, byLabel: Map}} Lookups.
- */
-function buildMenuLookups( menus ) {
-	const labels = [];
-	const bySlug = new Map();
-	const byLabel = new Map();
-	const add = ( slug, label ) => {
-		if ( ! slug || byLabel.has( label ) ) {
-			return;
-		}
-		labels.push( label );
-		bySlug.set( slug, label );
-		byLabel.set( label, slug );
-	};
-	( menus || [] ).forEach( ( menu ) => {
-		const parent = menu.title || menu.slug;
-		add( menu.slug, parent );
-		( menu.children || [] ).forEach( ( child ) => {
-			add(
-				child.slug,
-				sprintf(
-					/* translators: 1: parent menu name, 2: sub menu name. */
-					__( '%1$s › %2$s', 'happyaccess' ),
-					parent,
-					child.title || child.slug
-				)
-			);
-		} );
-	} );
-	return { labels, bySlug, byLabel };
-}
-
 const isTwelveHour = () =>
 	/a/i.test( String( getSettings().formats.time ).replace( /\\./g, '' ) );
 
@@ -159,6 +126,32 @@ function timezoneNote( timezone ) {
 }
 
 const naive = ( ms ) => siteDate( NAIVE_FORMAT, new Date( ms ) );
+
+// Close to what the server accepts: something@something.tld, no spaces.
+const looksLikeEmail = ( value ) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( value );
+
+/**
+ * Why Create is blocked, in the words shown under it.
+ *
+ * @param {string} blocker The first thing missing.
+ * @return {string} The hint, or an empty string.
+ */
+function blockerHint( blocker ) {
+	switch ( blocker ) {
+		case 'label':
+			return __( "Add who it's for", 'happyaccess' );
+		case 'email':
+			return __( 'Fix the email address', 'happyaccess' );
+		case 'catalog':
+			return __( 'The permissions have not loaded yet', 'happyaccess' );
+		case 'caps':
+			return __( 'Tick at least one permission', 'happyaccess' );
+		case 'trust':
+			return __( 'Tick the trust box to continue', 'happyaccess' );
+		default:
+			return '';
+	}
+}
 
 /**
  * The red box that asks the creator to vouch for the person.
@@ -213,10 +206,11 @@ export default function GrantForm( {
 	const [ form, setForm ] = useState( initialForm );
 	const [ submitting, setSubmitting ] = useState( false );
 	const [ error, setError ] = useState( null );
+	const [ emailTouched, setEmailTouched ] = useState( false );
 	const mounted = useRef( true );
+	const ids = useId();
 	const levels = useMemo( getLevels, [] );
 	const durations = useMemo( getDurations, [] );
-	const lookups = useMemo( () => buildMenuLookups( menus ), [ menus ] );
 
 	useEffect( () => {
 		mounted.current = true;
@@ -297,14 +291,22 @@ export default function GrantForm( {
 		levelName = picked ? picked.name : levelName;
 	}
 
+	const emailInvalid = '' !== email && ! looksLikeEmail( email );
 	let blocker = '';
 	if ( ! form.label.trim() ) {
 		blocker = 'label';
-	} else if ( isCustom && ( ! catalog || 0 === caps.length ) ) {
+	} else if ( emailInvalid ) {
+		blocker = 'email';
+	} else if ( isCustom && ! catalog ) {
+		blocker = 'catalog';
+	} else if ( isCustom && 0 === caps.length ) {
 		blocker = 'caps';
 	} else if ( needsTrust && ! form.confirmFull ) {
 		blocker = 'trust';
 	}
+	const hint = blockerHint( blocker );
+	const hintId = `${ ids }-hint`;
+	const showEmailError = emailInvalid && emailTouched;
 
 	const pickLevel = ( level ) => {
 		if ( level !== form.level ) {
@@ -397,17 +399,6 @@ export default function GrantForm( {
 		}
 	};
 
-	const closedIcon = isRTL() ? chevronLeft : chevronRight;
-	const roleOptions = [
-		{
-			value: 'administrator',
-			label: __( 'Administrator (uses the level above)', 'happyaccess' ),
-		},
-		...roles
-			.filter( ( item ) => 'administrator' !== item.slug )
-			.map( ( item ) => ( { value: item.slug, label: item.name } ) ),
-	];
-
 	return (
 		<section className="ha-grant" aria-labelledby="ha-grant-title">
 			<div className="ha-grant__head">
@@ -426,22 +417,35 @@ export default function GrantForm( {
 					ref={ labelRef }
 					className="ha-field"
 					label={ __( 'Who is it for', 'happyaccess' ) }
+					required
+					aria-required="true"
 					value={ form.label }
 					onChange={ ( label ) => set( { label } ) }
 					__nextHasNoMarginBottom
 					__next40pxDefaultSize
 				/>
 				<TextControl
-					className="ha-field"
+					className={
+						showEmailError ? 'ha-field has-error' : 'ha-field'
+					}
 					type="email"
 					label={ __( 'Their email (optional)', 'happyaccess' ) }
-					help={ __(
-						'Only used if you send the access by email.',
-						'happyaccess'
-					) }
+					help={
+						showEmailError
+							? __(
+									'Enter a full email address, like name@example.com.',
+									'happyaccess'
+								)
+							: __(
+									'Only used if you send the access by email.',
+									'happyaccess'
+								)
+					}
+					aria-invalid={ showEmailError || undefined }
 					placeholder="support@example.com"
 					value={ form.email }
 					onChange={ ( value ) => set( { email: value } ) }
+					onBlur={ () => setEmailTouched( true ) }
 					__nextHasNoMarginBottom
 					__next40pxDefaultSize
 				/>
@@ -452,9 +456,8 @@ export default function GrantForm( {
 					</legend>
 					{ levels.map( ( level ) => {
 						const on = level.id === form.level;
+						const nameId = `${ ids }-level-${ level.id }`;
 						return (
-							// The visible text sits in nested spans, which the rule can't see.
-							// eslint-disable-next-line jsx-a11y/label-has-associated-control
 							<label
 								htmlFor={ `ha-level-${ level.id }` }
 								key={ level.id }
@@ -472,13 +475,21 @@ export default function GrantForm( {
 									name="ha-level"
 									value={ level.id }
 									checked={ on }
+									aria-labelledby={ nameId }
+									aria-describedby={ `${ nameId }-desc` }
 									onChange={ () => pickLevel( level.id ) }
 								/>
 								<span className="ha-level__text">
-									<span className="ha-level__name">
+									<span
+										className="ha-level__name"
+										id={ nameId }
+									>
 										{ level.name }
 									</span>
-									<span className="ha-level__desc">
+									<span
+										className="ha-level__desc"
+										id={ `${ nameId }-desc` }
+									>
 										{ level.text }
 									</span>
 								</span>
@@ -597,149 +608,12 @@ export default function GrantForm( {
 					</span>
 				</fieldset>
 
-				<button
-					type="button"
-					className="ha-disclosure"
-					aria-expanded={ form.more }
-					onClick={ () => set( { more: ! form.more } ) }
-				>
-					<Icon
-						icon={ form.more ? chevronDown : closedIcon }
-						size={ 20 }
-					/>
-					{ __( 'More options', 'happyaccess' ) }
-				</button>
-				{ form.more && (
-					<div className="ha-more">
-						<CheckboxControl
-							label={ __( 'One-time use', 'happyaccess' ) }
-							help={ __(
-								'The link and code work for one login. That session can carry on until access ends.',
-								'happyaccess'
-							) }
-							checked={ form.oneTime }
-							onChange={ ( oneTime ) => set( { oneTime } ) }
-							__nextHasNoMarginBottom
-						/>
-						{ 'protected' === form.level && (
-							<SelectControl
-								label={ __(
-									'Or give a different role',
-									'happyaccess'
-								) }
-								value={ form.role }
-								options={ roleOptions }
-								onChange={ ( role ) => set( { role } ) }
-								__nextHasNoMarginBottom
-								__next40pxDefaultSize
-							/>
-						) }
-						<div className="ha-more__pair">
-							<SelectControl
-								label={ __( 'Login alerts', 'happyaccess' ) }
-								value={ form.notify }
-								options={ [
-									{
-										value: 'first',
-										label: __(
-											'First login',
-											'happyaccess'
-										),
-									},
-									{
-										value: 'every',
-										label: __(
-											'Every login',
-											'happyaccess'
-										),
-									},
-									{
-										value: 'off',
-										label: __( 'Off', 'happyaccess' ),
-									},
-								] }
-								onChange={ ( notify ) => set( { notify } ) }
-								__nextHasNoMarginBottom
-								__next40pxDefaultSize
-							/>
-							<FormTokenField
-								label={ __(
-									'Hide admin screens',
-									'happyaccess'
-								) }
-								value={ form.menus
-									.map( ( slug ) =>
-										lookups.bySlug.get( slug )
-									)
-									.filter( Boolean ) }
-								suggestions={ lookups.labels }
-								onChange={ ( tokens ) =>
-									set( {
-										menus: [
-											...new Set(
-												tokens
-													.map( ( token ) =>
-														lookups.byLabel.get(
-															'string' ===
-																typeof token
-																? token
-																: token.value
-														)
-													)
-													.filter( Boolean )
-											),
-										],
-									} )
-								}
-								__next40pxDefaultSize
-								__nextHasNoMarginBottom
-							/>
-						</div>
-						<TextControl
-							label={ __(
-								'Only allow these IP addresses',
-								'happyaccess'
-							) }
-							help={ __(
-								'Separate several with commas.',
-								'happyaccess'
-							) }
-							placeholder={ __(
-								'Any IP address',
-								'happyaccess'
-							) }
-							value={ form.ips }
-							onChange={ ( ips ) => set( { ips } ) }
-							__nextHasNoMarginBottom
-							__next40pxDefaultSize
-						/>
-						<TextControl
-							label={ __( 'After login, open', 'happyaccess' ) }
-							help={ __(
-								'A path like /wp-admin/edit.php. Leave it empty to open the dashboard.',
-								'happyaccess'
-							) }
-							placeholder={ __( 'Dashboard', 'happyaccess' ) }
-							value={ form.redirectTo }
-							onChange={ ( redirectTo ) => set( { redirectTo } ) }
-							__nextHasNoMarginBottom
-							__next40pxDefaultSize
-						/>
-						{ '' !== email && (
-							<ToggleControl
-								label={ __(
-									'Email it to them now',
-									'happyaccess'
-								) }
-								checked={ form.sendEmail }
-								onChange={ ( sendEmail ) =>
-									set( { sendEmail } )
-								}
-								__nextHasNoMarginBottom
-							/>
-						) }
-					</div>
-				) }
+				<MoreOptions
+					form={ form }
+					set={ set }
+					menus={ menus }
+					roles={ roles }
+				/>
 
 				<PassPreview
 					label={ form.label }
@@ -756,11 +630,18 @@ export default function GrantForm( {
 					className="ha-create"
 					variant="primary"
 					type="submit"
+					accessibleWhenDisabled
 					disabled={ '' !== blocker || submitting }
 					isBusy={ submitting }
+					aria-describedby={ hint ? hintId : undefined }
 				>
 					{ __( 'Create support pass', 'happyaccess' ) }
 				</Button>
+				{ hint && (
+					<p className="ha-help ha-create__hint" id={ hintId }>
+						{ hint }
+					</p>
+				) }
 			</form>
 		</section>
 	);

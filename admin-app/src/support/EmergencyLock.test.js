@@ -56,6 +56,38 @@ describe( 'EmergencyLock', () => {
 		await waitFor( () => expect( lockButton() ).toHaveFocus() );
 	} );
 
+	it( 'puts focus back on the lock button after Escape', async () => {
+		const { user } = setup();
+
+		await user.click( lockButton() );
+		const modal = screen.getByRole( 'dialog' );
+		await waitFor( () =>
+			expect( modal.contains( document.activeElement ) ).toBe( true )
+		);
+		await user.keyboard( '{Escape}' );
+
+		// The modal plays a short exit animation before it goes.
+		await waitFor( () =>
+			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
+		);
+		await waitFor( () => expect( lockButton() ).toHaveFocus() );
+	} );
+
+	it( 'puts focus back on the lock button after ending every pass', async () => {
+		apiFetch.mockResolvedValue( { revoked: 1 } );
+		const { user } = setup();
+
+		await user.click( lockButton() );
+		await user.click(
+			screen.getByRole( 'button', { name: 'End all passes' } )
+		);
+
+		await waitFor( () =>
+			expect( screen.queryByRole( 'dialog' ) ).not.toBeInTheDocument()
+		);
+		await waitFor( () => expect( lockButton() ).toHaveFocus() );
+	} );
+
 	it( 'ends every pass, announces the count and tells the parent', async () => {
 		apiFetch.mockResolvedValue( { revoked: 3 } );
 		const { user, onLocked, live } = setup();

@@ -3,7 +3,7 @@ import { Button, Notice } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { listActivity } from '../api';
 import { useAnnounce } from '../hooks/useAnnounce';
-import { tabUrl } from '../tabList';
+import { isPlainClick, tabUrl } from '../tabList';
 import GrantRow, { InlineConfirm } from './GrantRow';
 import { timeAgo } from './passFormat';
 
@@ -236,8 +236,10 @@ export default function ActiveList( {
 				<a
 					href={ tabUrl( 'activity' ) }
 					onClick={ ( event ) => {
-						event.preventDefault();
-						onViewActivity();
+						if ( isPlainClick( event ) ) {
+							event.preventDefault();
+							onViewActivity();
+						}
 					} }
 				>
 					{ __( 'See all activity', 'happyaccess' ) }

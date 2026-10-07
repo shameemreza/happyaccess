@@ -72,6 +72,14 @@ const grantCalls = () =>
 const lastBody = () => grantCalls().at( -1 )[ 0 ].data;
 const createButton = () =>
 	screen.getByRole( 'button', { name: 'Create support pass' } );
+// Create stays focusable while blocked, so it says so with aria-disabled.
+const expectBlocked = () =>
+	expect( createButton() ).toHaveAttribute( 'aria-disabled', 'true' );
+const expectReady = () =>
+	expect( createButton() ).not.toHaveAttribute( 'aria-disabled' );
+const labelBox = () => screen.getByRole( 'textbox', { name: 'Who is it for' } );
+const emailBox = () =>
+	screen.getByRole( 'textbox', { name: 'Their email (optional)' } );
 
 function setup( props = {} ) {
 	const user = userEvent.setup();
@@ -108,19 +116,79 @@ afterEach( () => {
 describe( 'GrantForm fields', () => {
 	it( 'keeps Create disabled until someone is named', async () => {
 		const { user } = setup();
-		expect( createButton() ).toBeDisabled();
+		expect( createButton() ).toHaveAttribute( 'aria-disabled', 'true' );
 
 		await fillLabel( user );
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 
-		await user.clear(
-			screen.getByRole( 'textbox', { name: 'Who is it for' } )
+		await user.clear( labelBox() );
+		await user.type( labelBox(), '   ' );
+		expectBlocked();
+	} );
+
+	it( 'marks the label field as required', () => {
+		setup();
+		expect( labelBox() ).toBeRequired();
+		expect( labelBox() ).toHaveAttribute( 'aria-required', 'true' );
+	} );
+
+	it( 'says under Create why it is blocked, starting with the first reason', async () => {
+		const { user } = setup();
+		expect( createButton() ).toHaveAccessibleDescription(
+			"Add who it's for"
 		);
-		await user.type(
-			screen.getByRole( 'textbox', { name: 'Who is it for' } ),
-			'   '
+		expect( screen.getByText( "Add who it's for" ) ).toBeInTheDocument();
+
+		await fillLabel( user );
+		await pickLevel( user, /Full admin/ );
+		expect( createButton() ).toHaveAccessibleDescription(
+			'Tick the trust box to continue'
 		);
-		expect( createButton() ).toBeDisabled();
+
+		await user.click(
+			screen.getByRole( 'checkbox', { name: /I trust this person/ } )
+		);
+		expectReady();
+		expect( screen.queryByText( 'Tick the trust box to continue' ) ).toBe(
+			null
+		);
+	} );
+
+	it( 'shows an error for an invalid email and blocks Create until it is fixed', async () => {
+		const { user } = setup();
+		await fillLabel( user );
+		await user.type( emailBox(), 'help@' );
+		await user.tab();
+
+		expect( emailBox() ).toHaveAttribute( 'aria-invalid', 'true' );
+		expect( emailBox() ).toHaveAccessibleDescription(
+			'Enter a full email address, like name@example.com.'
+		);
+		expectBlocked();
+		expect( createButton() ).toHaveAccessibleDescription(
+			'Fix the email address'
+		);
+
+		await user.type( emailBox(), 'example.com' );
+		expect( emailBox() ).not.toHaveAttribute( 'aria-invalid', 'true' );
+		expectReady();
+	} );
+
+	it( 'does not send a blocked form when Create is clicked', async () => {
+		const { user } = setup();
+		await user.click( createButton() );
+		expect( grantCalls() ).toHaveLength( 0 );
+	} );
+
+	it( 'names each level by its title and describes it with its text', () => {
+		setup();
+		const radio = screen.getByRole( 'radio', { name: 'Protected admin' } );
+		expect( radio ).toHaveAccessibleDescription(
+			'Can fix almost anything. The risky actions are blocked. Best for most support.'
+		);
+		expect(
+			screen.getByRole( 'radio', { name: 'Full admin, no limits' } )
+		).toBeInTheDocument();
 	} );
 
 	it( 'offers the three levels with the prototype text and protected by default', () => {
@@ -158,21 +226,21 @@ describe( 'GrantForm trust', () => {
 		await pickLevel( user, /Full admin/ );
 
 		expect( screen.getByText( /No limits\./ ) ).toBeInTheDocument();
-		expect( createButton() ).toBeDisabled();
+		expectBlocked();
 
 		const trust = screen.getByRole( 'checkbox', {
 			name: 'I trust this person with full access to my site',
 		} );
 		await user.click( trust );
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 
 		await pickLevel( user, /Protected admin/ );
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 		await pickLevel( user, /Full admin/ );
 		expect(
 			screen.getByRole( 'checkbox', { name: /I trust this person/ } )
 		).not.toBeChecked();
-		expect( createButton() ).toBeDisabled();
+		expectBlocked();
 	} );
 
 	it( 'asks for trust in Custom only once an admin-level cap is ticked', async () => {
@@ -180,31 +248,31 @@ describe( 'GrantForm trust', () => {
 		await fillLabel( user );
 		await openCustom( user, 'editor' );
 
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 		expect(
 			screen.queryByRole( 'checkbox', { name: /I trust this person/ } )
 		).not.toBeInTheDocument();
 
 		await user.click(
-			screen.getByRole( 'switch', { name: 'Plugins and updates' } )
+			screen.getByRole( 'checkbox', { name: 'Plugins and updates' } )
 		);
 
 		expect(
 			screen.getByText( /Admin-level permissions are on\./ )
 		).toBeInTheDocument();
-		expect( createButton() ).toBeDisabled();
+		expectBlocked();
 
 		await user.click(
 			screen.getByRole( 'checkbox', { name: /I trust this person/ } )
 		);
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 	} );
 
 	it( 'resets the trust tick when the last admin-level cap is unticked', async () => {
 		const { user } = setup();
 		await fillLabel( user );
 		await openCustom( user, 'editor' );
-		const plugins = screen.getByRole( 'switch', {
+		const plugins = screen.getByRole( 'checkbox', {
 			name: 'Plugins and updates',
 		} );
 		await user.click( plugins );
@@ -216,13 +284,13 @@ describe( 'GrantForm trust', () => {
 		expect(
 			screen.queryByRole( 'checkbox', { name: /I trust this person/ } )
 		).not.toBeInTheDocument();
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 
 		await user.click( plugins );
 		expect(
 			screen.getByRole( 'checkbox', { name: /I trust this person/ } )
 		).not.toBeChecked();
-		expect( createButton() ).toBeDisabled();
+		expectBlocked();
 	} );
 
 	it( 'starts Custom from the administrator preset, which needs trust', async () => {
@@ -234,17 +302,17 @@ describe( 'GrantForm trust', () => {
 		expect( screen.getByLabelText( 'Start from' ) ).toHaveValue(
 			'administrator'
 		);
-		expect( createButton() ).toBeDisabled();
+		expectBlocked();
 	} );
 
 	it( 'keeps Create disabled in Custom with no permissions ticked', async () => {
 		const { user } = setup();
 		await fillLabel( user );
 		await openCustom( user, 'editor' );
-		await user.click( screen.getByRole( 'switch', { name: 'Content' } ) );
+		await user.click( screen.getByRole( 'checkbox', { name: 'Content' } ) );
 
 		expect( screen.getByText( '0 of 7 permissions' ) ).toBeInTheDocument();
-		expect( createButton() ).toBeDisabled();
+		expectBlocked();
 	} );
 
 	it( 'loads the catalog once, however often the level changes', async () => {
@@ -630,7 +698,7 @@ describe( 'GrantForm request', () => {
 		expect(
 			screen.getByRole( 'textbox', { name: 'Who is it for' } )
 		).toHaveValue( 'Acme Plugin Support' );
-		expect( createButton() ).toBeEnabled();
+		expectReady();
 	} );
 
 	it( 'does not hold on to the code after create', async () => {
@@ -658,7 +726,7 @@ describe( 'GrantForm accessibility', () => {
 		await user.click(
 			within(
 				screen
-					.getByRole( 'switch', { name: 'Store' } )
+					.getByRole( 'checkbox', { name: 'Store' } )
 					.closest( '.ha-group' )
 			).getByRole( 'button', { name: /Store/ } )
 		);

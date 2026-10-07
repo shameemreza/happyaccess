@@ -1,5 +1,5 @@
 import { __ } from '@wordpress/i18n';
-import { tabUrl } from './tabList';
+import { isPlainClick, tabUrl } from './tabList';
 
 /**
  * @param {Object}                 props          Props.
@@ -21,8 +21,10 @@ export default function TabNav( { tabs, current, onSelect } ) {
 					href={ tabUrl( tab.slug ) }
 					aria-current={ tab.slug === current ? 'page' : undefined }
 					onClick={ ( event ) => {
-						event.preventDefault();
-						onSelect( tab.slug );
+						if ( isPlainClick( event ) ) {
+							event.preventDefault();
+							onSelect( tab.slug );
+						}
 					} }
 				>
 					{ tab.label }

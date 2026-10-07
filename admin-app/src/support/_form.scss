@@ -267,6 +267,22 @@
 		font-weight: 600;
 	}
 
+	p.ha-create__hint {
+		margin-block: -10px 0;
+		text-align: center;
+	}
+
+	.ha-field.has-error {
+
+		input {
+			border-color: var(--ha-danger);
+		}
+
+		.components-base-control__help {
+			color: var(--ha-danger-text);
+		}
+	}
+
 	.ha-trust,
 	.ha-editor {
 

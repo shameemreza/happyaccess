@@ -5,7 +5,7 @@ import {
 	SelectControl,
 	TextControl,
 } from '@wordpress/components';
-import { __, isRTL, sprintf } from '@wordpress/i18n';
+import { __, _n, isRTL, sprintf } from '@wordpress/i18n';
 import { Icon, chevronDown, chevronLeft, chevronRight } from '@wordpress/icons';
 
 const PRESET_NAMES = () => ( {
@@ -41,6 +41,13 @@ export default function PermissionEditor( {
 } ) {
 	const [ openId, setOpenId ] = useState( '' );
 	const [ query, setQuery ] = useState( '' );
+	// While searching every match starts open. These are the ones closed since.
+	const [ closedInSearch, setClosedInSearch ] = useState( () => new Set() );
+
+	const changeQuery = ( value ) => {
+		setQuery( value );
+		setClosedInSearch( new Set() );
+	};
 
 	const groups = catalog ? catalog.groups : null;
 	const presets = catalog ? catalog.presets : null;
@@ -134,7 +141,7 @@ export default function PermissionEditor( {
 						'happyaccess'
 					) }
 					value={ query }
-					onChange={ setQuery }
+					onChange={ changeQuery }
 					__nextHasNoMarginBottom
 					__next40pxDefaultSize
 				/>
@@ -144,18 +151,53 @@ export default function PermissionEditor( {
 					const on = group.caps.filter( ( item ) =>
 						selected.has( item.cap )
 					).length;
-					const all = on === group.caps.length;
+					// While a search hides some caps, the switch covers only the ones shown.
+					const partial = shown.length < group.caps.length;
+					const covered = partial ? shown : group.caps;
+					const coveredOn = covered.filter( ( item ) =>
+						selected.has( item.cap )
+					).length;
+					const all = coveredOn === covered.length;
 					let state = 'off';
 					if ( all ) {
 						state = 'on';
-					} else if ( on > 0 ) {
+					} else if ( coveredOn > 0 ) {
 						state = 'mixed';
 					}
-					const open = !! search || openId === group.id;
+					const switchLabel = partial
+						? sprintf(
+								/* translators: 1: number of permissions the search shows, 2: group name. */
+								_n(
+									'Turn on the %1$d shown in %2$s',
+									'Turn on the %1$d shown in %2$s',
+									shown.length,
+									'happyaccess'
+								),
+								shown.length,
+								group.label
+							)
+						: group.label;
+					const open = search
+						? ! closedInSearch.has( group.id )
+						: openId === group.id;
 					const listId = `ha-group-${ group.id }`;
+					const countId = `ha-group-${ group.id }-count`;
+					const toggleOpen = () => {
+						if ( ! search ) {
+							setOpenId( open ? '' : group.id );
+							return;
+						}
+						const next = new Set( closedInSearch );
+						if ( open ) {
+							next.add( group.id );
+						} else {
+							next.delete( group.id );
+						}
+						setClosedInSearch( next );
+					};
 					const toggleGroup = () => {
 						const next = new Set( selected );
-						group.caps.forEach( ( item ) =>
+						covered.forEach( ( item ) =>
 							all ? next.delete( item.cap ) : next.add( item.cap )
 						);
 						commit( next );
@@ -177,10 +219,8 @@ export default function PermissionEditor( {
 									type="button"
 									className="ha-group__toggle"
 									aria-expanded={ open }
-									aria-controls={ listId }
-									onClick={ () =>
-										setOpenId( open ? '' : group.id )
-									}
+									aria-controls={ open ? listId : undefined }
+									onClick={ toggleOpen }
 								>
 									<Icon
 										icon={ open ? chevronDown : closedIcon }
@@ -195,7 +235,10 @@ export default function PermissionEditor( {
 										</span>
 									</span>
 								</button>
-								<span className="ha-group__count">
+								<span
+									className="ha-group__count"
+									id={ countId }
+								>
 									<bdi>
 										{ sprintf(
 											/* translators: 1: permissions ticked in the group, 2: permissions in the group. */
@@ -205,15 +248,18 @@ export default function PermissionEditor( {
 										) }
 									</bdi>
 								</span>
+								{ /* Drawn as a switch, but a checkbox, since only a checkbox can be half on. */ }
 								<button
 									type="button"
-									role="switch"
+									role="checkbox"
 									className="ha-switch"
 									data-state={ state }
 									aria-checked={
 										'mixed' === state ? 'mixed' : all
 									}
-									aria-label={ group.label }
+									aria-label={ switchLabel }
+									aria-describedby={ countId }
+									title={ partial ? switchLabel : undefined }
 									onClick={ toggleGroup }
 								>
 									<span
@@ -224,43 +270,48 @@ export default function PermissionEditor( {
 							</div>
 							{ open && (
 								<ul className="ha-caps" id={ listId }>
-									{ shown.map( ( item ) => (
-										<li key={ item.cap }>
-											{ /* The visible text sits in nested spans, which the rule can't see. */ }
-											{ /* eslint-disable-next-line jsx-a11y/label-has-associated-control */ }
-											<label
-												className="ha-cap"
-												htmlFor={ `ha-cap-${ item.cap }` }
-											>
-												<input
-													id={ `ha-cap-${ item.cap }` }
-													type="checkbox"
-													checked={ selected.has(
-														item.cap
-													) }
-													onChange={ () =>
-														toggleCap( item.cap )
-													}
-												/>
-												<span className="ha-cap__text">
-													<span className="ha-cap__label">
-														{ item.label }
-														{ item.trust && (
-															<span className="ha-badge">
-																{ __(
-																	'Admin-level',
-																	'happyaccess'
-																) }
-															</span>
+									{ shown.map( ( item ) => {
+										const inputId = `ha-cap-${ group.id }-${ item.cap }`;
+										return (
+											<li key={ item.cap }>
+												{ /* The visible text sits in nested spans, which the rule can't see. */ }
+												{ /* eslint-disable-next-line jsx-a11y/label-has-associated-control */ }
+												<label
+													className="ha-cap"
+													htmlFor={ inputId }
+												>
+													<input
+														id={ inputId }
+														type="checkbox"
+														checked={ selected.has(
+															item.cap
 														) }
+														onChange={ () =>
+															toggleCap(
+																item.cap
+															)
+														}
+													/>
+													<span className="ha-cap__text">
+														<span className="ha-cap__label">
+															{ item.label }
+															{ item.trust && (
+																<span className="ha-badge">
+																	{ __(
+																		'Admin-level',
+																		'happyaccess'
+																	) }
+																</span>
+															) }
+														</span>
+														<code className="ha-cap__code">
+															{ item.cap }
+														</code>
 													</span>
-													<code className="ha-cap__code">
-														{ item.cap }
-													</code>
-												</span>
-											</label>
-										</li>
-									) ) }
+												</label>
+											</li>
+										);
+									} ) }
 								</ul>
 							) }
 						</li>

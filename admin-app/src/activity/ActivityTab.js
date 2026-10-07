@@ -16,7 +16,12 @@ import {
 import { useActivity } from '../hooks/useActivity';
 import { useAnnounce } from '../hooks/useAnnounce';
 import { useNow } from '../hooks/useNow';
-import { clearQueryToken, readQueryToken, tabUrl } from '../tabList';
+import {
+	clearQueryToken,
+	isPlainClick,
+	readQueryToken,
+	tabUrl,
+} from '../tabList';
 import ActivityRow from './ActivityRow';
 import {
 	countCsvRows,
@@ -244,8 +249,10 @@ export default function ActivityTab( {
 							<a
 								href={ tabUrl( 'settings' ) }
 								onClick={ ( event ) => {
-									event.preventDefault();
-									onOpenSettings();
+									if ( isPlainClick( event ) ) {
+										event.preventDefault();
+										onOpenSettings();
+									}
 								} }
 							/>
 						),
