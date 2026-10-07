@@ -27,6 +27,7 @@ class UninstallerTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		remove_role( 'happyaccess_merchant' );
 		wp_clear_scheduled_hook( Cron::HOOK );
 		wp_clear_scheduled_hook( Installer::NETWORK_HOOK );
 		parent::tear_down();
@@ -102,7 +103,7 @@ class UninstallerTest extends WP_UnitTestCase {
 		Uninstaller::run();
 
 		$this->assertFalse( get_userdata( $user_id ) );
-		$this->assertNotFalse( get_post( $post_id ) );
+		$this->assertNotNull( get_post( $post_id ) );
 		$this->assertNotFalse( get_userdata( $admin ) );
 		$this->assertNotFalse( get_userdata( $normal ) );
 		$this->assertSame( '', $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s", 'happyaccess_temp_user' ) ) ?? '' );
@@ -244,13 +245,103 @@ class UninstallerTest extends WP_UnitTestCase {
 		$this->assertFalse( get_userdata( $user_id ) );
 	}
 
-	public function test_a_user_with_a_token_id_that_matches_no_grant_row_is_kept() {
+	public function test_a_user_with_only_a_token_id_is_deleted_even_when_its_grant_row_was_purged() {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		update_user_meta( $user_id, 'happyaccess_token_id', 987654 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', get_current_blog_id() );
+		$post_id = self::factory()->post->create( array( 'post_author' => $user_id ) );
 
 		Uninstaller::run();
 
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertNotNull( get_post( $post_id ) );
+		$this->assertNotSame( $user_id, (int) get_post( $post_id )->post_author );
+	}
+
+	/**
+	 * Leaves no administrator and no one who can manage options.
+	 *
+	 * @return void
+	 */
+	private function demote_everyone() {
+		foreach ( get_users() as $user ) {
+			$user->set_role( 'subscriber' );
+		}
+	}
+
+	private function add_merchant_role() {
+		remove_role( 'happyaccess_merchant' );
+		add_role(
+			'happyaccess_merchant',
+			'Merchant',
+			array(
+				'read'           => true,
+				'manage_options' => true,
+			)
+		);
+	}
+
+	public function test_posts_go_to_the_merchant_when_no_user_has_the_administrator_role() {
+		$this->demote_everyone();
+		$this->add_merchant_role();
+		$first    = self::factory()->user->create( array( 'role' => 'happyaccess_merchant' ) );
+		$merchant = self::factory()->user->create( array( 'role' => 'happyaccess_merchant' ) );
+		$temp     = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		update_user_meta( $temp, 'happyaccess_temp_user', 1 );
+		$post_id = self::factory()->post->create( array( 'post_author' => $temp ) );
+
+		wp_set_current_user( $merchant );
+		Uninstaller::run();
+		$this->assertFalse( get_userdata( $temp ) );
+		$this->assertNotNull( get_post( $post_id ) );
+		$this->assertSame( $merchant, (int) get_post( $post_id )->post_author );
+		$this->assertNotSame( $first, $merchant );
+	}
+
+	public function test_posts_go_to_the_lowest_id_user_who_can_manage_options_when_no_one_is_logged_in() {
+		$this->demote_everyone();
+		$this->add_merchant_role();
+		$first = self::factory()->user->create( array( 'role' => 'happyaccess_merchant' ) );
+		self::factory()->user->create( array( 'role' => 'happyaccess_merchant' ) );
+		$temp = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		update_user_meta( $temp, 'happyaccess_temp_user', 1 );
+		$post_id = self::factory()->post->create( array( 'post_author' => $temp ) );
+
+		wp_set_current_user( 0 );
+		Uninstaller::run();
+
+		$this->assertFalse( get_userdata( $temp ) );
+		$this->assertSame( $first, (int) get_post( $post_id )->post_author );
+	}
+
+	public function test_with_no_one_to_inherit_the_temp_user_and_its_posts_stay() {
+		$this->demote_everyone();
+		$temp = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		update_user_meta( $temp, 'happyaccess_temp_user', 1 );
+		$post_id = self::factory()->post->create( array( 'post_author' => $temp ) );
+
+		wp_set_current_user( 0 );
+		Uninstaller::run();
+
+		$this->assertNotFalse( get_userdata( $temp ) );
+		$this->assertSame( '1', get_user_meta( $temp, 'happyaccess_temp_user', true ) );
+		$this->assertNotNull( get_post( $post_id ) );
+		$this->assertSame( $temp, (int) get_post( $post_id )->post_author );
+	}
+
+	public function test_a_token_only_account_with_no_one_to_inherit_loses_its_role_but_keeps_its_posts() {
+		$this->demote_everyone();
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user_id, 'happyaccess_token_id', 987654 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', get_current_blog_id() );
+		$post_id = self::factory()->post->create( array( 'post_author' => $user_id ) );
+
+		wp_set_current_user( 0 );
+		Uninstaller::run();
+
 		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), ( new WP_User( $user_id ) )->roles );
+		$this->assertSame( $user_id, (int) get_post( $post_id )->post_author );
 	}
 
 	public function test_a_leftover_temp_users_posts_go_to_the_pass_owner() {
@@ -262,7 +353,7 @@ class UninstallerTest extends WP_UnitTestCase {
 		Uninstaller::run();
 
 		$this->assertFalse( get_userdata( $user_id ) );
-		$this->assertNotFalse( get_post( $post_id ) );
+		$this->assertNotNull( get_post( $post_id ) );
 		$this->assertSame( $owner, (int) get_post( $post_id )->post_author );
 	}
 
@@ -276,7 +367,7 @@ class UninstallerTest extends WP_UnitTestCase {
 
 		Uninstaller::run();
 
-		$this->assertNotFalse( get_post( $post_id ) );
+		$this->assertNotNull( get_post( $post_id ) );
 		$author = (int) get_post( $post_id )->post_author;
 		$this->assertNotSame( $user_id, $author );
 		$this->assertNotSame( $decoy, $author );
@@ -371,5 +462,44 @@ class UninstallerTest extends WP_UnitTestCase {
 		$this->assertGreaterThan( 0, Grants::get( $made['id'] )['revoked_at'] );
 		restore_current_blog();
 		$this->assertFalse( Installer::table_exists( 'tokens' ) );
+	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_a_failed_removal_from_a_site_stops_before_the_network_delete() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$site_a = self::factory()->blog->create();
+		$site_b = self::factory()->blog->create();
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		add_user_to_blog( $site_a, $user_id, 'administrator' );
+		add_user_to_blog( $site_b, $user_id, 'administrator' );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		// Names no live site, so only the network sweep handles it.
+		update_user_meta( $user_id, 'happyaccess_blog_id', 987654 );
+
+		$calls   = 0;
+		$network = 0;
+		$vanish  = static function ( $removed ) use ( &$calls ) {
+			global $wpdb;
+			++$calls;
+			// The account disappears mid way, so remove_user_from_blog returns an error.
+			$wpdb->delete( $wpdb->users, array( 'ID' => $removed ) );
+			clean_user_cache( $removed );
+		};
+		add_action( 'remove_user_from_blog', $vanish );
+		add_action(
+			'wpmu_delete_user',
+			static function () use ( &$network ) {
+				++$network;
+			}
+		);
+
+		Uninstaller::run();
+
+		$this->assertSame( 1, $calls, 'the sweep went on after the first failure' );
+		$this->assertSame( 0, $network );
 	}
 }
