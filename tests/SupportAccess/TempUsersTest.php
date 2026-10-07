@@ -181,7 +181,7 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertSame( $backup, (int) get_post( $post_id )->post_author );
 	}
 
-	public function test_delete_does_not_reassign_to_the_user_being_deleted() {
+	public function test_delete_keeps_the_user_and_its_posts_when_only_the_user_being_deleted_could_inherit() {
 		$grant               = $this->grant();
 		$grant['created_by'] = 0;
 		$grant['role']       = 'administrator';
@@ -194,9 +194,11 @@ class TempUsersTest extends WP_UnitTestCase {
 			}
 		}
 
-		$this->assertTrue( TempUsers::delete( $grant ) );
-		$this->assertFalse( get_userdata( $user_id ) );
-		$this->assertSame( 'trash', get_post_status( $post_id ) );
+		$this->assertFalse( TempUsers::delete( $grant ) );
+		$this->assertSame( 'no_inheritor', TempUsers::last_delete_failure() );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertSame( $user_id, (int) get_post( $post_id )->post_author );
 	}
 
 	public function test_delete_refuses_a_normal_user() {

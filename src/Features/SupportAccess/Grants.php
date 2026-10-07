@@ -623,16 +623,20 @@ final class Grants {
 		);
 		self::flush_cache();
 		if ( $grant['user_id'] > 0 && ! $deleted ) {
+			$failed_meta = array(
+				'user_id'       => $grant['user_id'],
+				'role_stripped' => $stripped,
+			);
+			if ( '' !== TempUsers::last_delete_failure() ) {
+				$failed_meta['reason'] = TempUsers::last_delete_failure();
+			}
 			AuditLog::add(
 				'temp_user_delete_failed',
 				array(
 					'feature'  => 'support',
 					'token_id' => $grant['id'],
 					'user_id'  => 0,
-					'meta'     => array(
-						'user_id'       => $grant['user_id'],
-						'role_stripped' => $stripped,
-					),
+					'meta'     => $failed_meta,
 				)
 			);
 		}

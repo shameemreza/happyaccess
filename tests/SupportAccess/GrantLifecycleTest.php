@@ -671,4 +671,40 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertNotFalse( get_userdata( $theirs ) );
 		$this->assertTrue( is_user_member_of_blog( $theirs, $other ) );
 	}
+
+	public function test_revoke_with_no_one_to_inherit_keeps_the_posts_and_leaves_the_account_powerless() {
+		list( $id, $user_id ) = $this->grant_with_user();
+		$post                 = self::factory()->post->create( array( 'post_author' => $user_id ) );
+		wp_set_current_user( 0 );
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		wp_delete_user( $this->owner );
+		foreach ( get_users( array( 'role' => 'administrator', 'fields' => 'ID' ) ) as $admin ) {
+			if ( (int) $admin !== $user_id ) {
+				( new WP_User( (int) $admin ) )->set_role( 'editor' );
+			}
+		}
+		$deleted = array();
+		$spy     = static function ( $deleted_id, $reassign ) use ( &$deleted ) {
+			$deleted[] = array( (int) $deleted_id, $reassign );
+		};
+		add_action( 'delete_user', $spy, 10, 2 );
+
+		$this->assertTrue( Grants::revoke( $id ) );
+		remove_action( 'delete_user', $spy, 10 );
+
+		$this->assertSame( array(), $deleted );
+		$this->assertSame( 'revoked', Grants::get( $id )['status'] );
+		clean_user_cache( $user_id );
+		$this->assertNotFalse( get_userdata( $user_id ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertFalse( user_can( $user_id, 'read' ) );
+		$this->assertSame( '1', (string) get_user_meta( $user_id, 'happyaccess_temp_user', true ) );
+		$this->assertSame( 'publish', get_post_status( $post ) );
+		$this->assertSame( $user_id, (int) get_post( $post )->post_author );
+
+		$failed = AuditLog::query( array( 'event' => 'temp_user_delete_failed', 'token_id' => $id ) )['items'];
+		$this->assertCount( 1, $failed );
+		$this->assertSame( 'no_inheritor', $failed[0]['meta']['reason'] );
+		$this->assertTrue( $failed[0]['meta']['role_stripped'] );
+	}
 }

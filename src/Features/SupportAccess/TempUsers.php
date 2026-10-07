@@ -27,6 +27,13 @@ final class TempUsers {
 	private static $any = null;
 
 	/**
+	 * Why the last delete() kept the user, or an empty string.
+	 *
+	 * @var string
+	 */
+	private static $last_failure = '';
+
+	/**
 	 * Creates the temp user for a grant and links it on the grant row.
 	 *
 	 * A custom pass gets no role, only its chosen capabilities.
@@ -186,13 +193,17 @@ final class TempUsers {
 	}
 
 	/**
-	 * Deletes the grant's temp user. Never touches a normal user.
+	 * Deletes the grant's temp user. Never touches a normal user. Posts and
+	 * links go to reassign_target(). With nobody to inherit them, the user
+	 * is stripped and kept with its marker and its posts, and
+	 * last_delete_failure() says no_inheritor.
 	 *
 	 * @param array $grant Grant with id, created_by and user_id.
 	 * @return bool True when a temp user was removed.
 	 */
 	public static function delete( array $grant ) {
-		$user_id = isset( $grant['user_id'] ) ? (int) $grant['user_id'] : 0;
+		self::$last_failure = '';
+		$user_id            = isset( $grant['user_id'] ) ? (int) $grant['user_id'] : 0;
 		if ( $user_id < 1 ) {
 			return false;
 		}
@@ -209,8 +220,12 @@ final class TempUsers {
 		self::destroy_sessions( $user_id );
 		self::delete_wc_api_keys( $user_id );
 
-		$owner_id = Grants::owner_id( $grant );
-		$reassign = $owner_id > 0 ? $owner_id : null;
+		$reassign = self::reassign_target( $user_id );
+		if ( null === $reassign ) {
+			self::strip( $user_id );
+			self::$last_failure = 'no_inheritor';
+			return false;
+		}
 
 		$login   = $user->user_login;
 		$deleted = self::remove_user( $user_id, $reassign );
@@ -231,6 +246,15 @@ final class TempUsers {
 		);
 
 		return true;
+	}
+
+	/**
+	 * Why the last delete() kept the user: no_inheritor, or an empty string.
+	 *
+	 * @return string
+	 */
+	public static function last_delete_failure() {
+		return self::$last_failure;
 	}
 
 	/**
