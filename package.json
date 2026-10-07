@@ -1,0 +1,33 @@
+{
+	"name": "happyaccess",
+	"version": "1.1.0",
+	"private": true,
+	"description": "HappyAccess admin app",
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"build": "wp-scripts build admin-app/src/index.js --output-path=build",
+		"start": "wp-scripts start admin-app/src/index.js --output-path=build",
+		"test:js": "wp-scripts test-unit-js admin-app",
+		"lint:js": "wp-scripts lint-js admin-app/src",
+		"lint:css": "wp-scripts lint-style 'admin-app/src/**/*.scss'"
+	},
+	"devDependencies": {
+		"@testing-library/dom": "10.4.1",
+		"@testing-library/jest-dom": "7.0.1",
+		"@testing-library/react": "16.3.3",
+		"@testing-library/user-event": "14.6.7",
+		"@wordpress/scripts": "36.0.0",
+		"jest-axe": "11.0.0",
+		"jsdom": "26.1.0",
+		"vite": "8.3.3",
+		"vitest": "5.0.3"
+	},
+	"dependencies": {
+		"@wordpress/api-fetch": "7.56.0",
+		"@wordpress/components": "41.0.0",
+		"@wordpress/date": "5.56.0",
+		"@wordpress/element": "8.8.0",
+		"@wordpress/i18n": "6.29.0",
+		"@wordpress/icons": "17.0.0"
+	}
+}

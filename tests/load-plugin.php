@@ -13,6 +13,7 @@ $happyaccess_root = dirname( __DIR__ );
 defined( 'HAPPYACCESS_VERSION' ) || define( 'HAPPYACCESS_VERSION', '1.1.0' );
 defined( 'HAPPYACCESS_PLUGIN_FILE' ) || define( 'HAPPYACCESS_PLUGIN_FILE', $happyaccess_root . '/happyaccess.php' );
 defined( 'HAPPYACCESS_PLUGIN_DIR' ) || define( 'HAPPYACCESS_PLUGIN_DIR', $happyaccess_root . '/' );
+defined( 'HAPPYACCESS_PLUGIN_URL' ) || define( 'HAPPYACCESS_PLUGIN_URL', 'http://example.org/wp-content/plugins/happyaccess/' );
 defined( 'HAPPYACCESS_PLUGIN_BASENAME' ) || define( 'HAPPYACCESS_PLUGIN_BASENAME', 'happyaccess/happyaccess.php' );
 
 if ( file_exists( $happyaccess_root . '/src/Autoloader.php' ) ) {

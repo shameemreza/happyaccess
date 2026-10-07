@@ -1,0 +1,163 @@
+<?php
+/**
+ * The HappyAccess admin page under Users.
+ *
+ * @package HappyAccess
+ */
+
+namespace HappyAccess\Admin;
+
+use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Settings;
+use HappyAccess\Features\SupportAccess\MenuGuard;
+use HappyAccess\Login\Router;
+use HappyAccess\Rest\SettingsController;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Registers the menu, loads the React app on our screen only and prints
+ * the boot data the app reads on load.
+ */
+final class Page {
+
+	const SLUG = 'happyaccess';
+
+	const HANDLE = 'happyaccess-admin';
+
+	const MAX_DAYS = 30;
+
+	/**
+	 * Hook suffix returned by add_users_page().
+	 *
+	 * @var string
+	 */
+	private static $hook_suffix = '';
+
+	/**
+	 * Hooks the menu and the asset loading.
+	 *
+	 * @return void
+	 */
+	public static function register() {
+		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
+	}
+
+	/**
+	 * Adds the page under Users, for people who can manage HappyAccess.
+	 *
+	 * @return void
+	 */
+	public static function add_menu() {
+		$hook = add_users_page(
+			__( 'HappyAccess', 'happyaccess' ),
+			__( 'HappyAccess', 'happyaccess' ),
+			Capabilities::MANAGE,
+			self::SLUG,
+			array( __CLASS__, 'render' )
+		);
+
+		self::$hook_suffix = is_string( $hook ) ? $hook : '';
+	}
+
+	/**
+	 * The screen hook suffix, or an empty string when the menu was not added.
+	 *
+	 * @return string
+	 */
+	public static function hook_suffix() {
+		return self::$hook_suffix;
+	}
+
+	/**
+	 * Loads the bundle and stylesheet on our screen and nowhere else.
+	 *
+	 * @param string $hook Hook suffix of the current admin screen.
+	 * @return void
+	 */
+	public static function enqueue( $hook ) {
+		if ( '' === self::$hook_suffix || self::$hook_suffix !== $hook ) {
+			return;
+		}
+
+		$asset_file = self::asset_file();
+		if ( ! is_readable( $asset_file ) ) {
+			return;
+		}
+
+		$asset = include $asset_file;
+		if ( ! is_array( $asset ) ) {
+			return;
+		}
+
+		$dependencies = isset( $asset['dependencies'] ) ? (array) $asset['dependencies'] : array();
+		$dependencies = array_values( array_unique( array_merge( $dependencies, array( 'wp-date' ) ) ) );
+		$version      = isset( $asset['version'] ) ? $asset['version'] : HAPPYACCESS_VERSION;
+
+		wp_register_script( self::HANDLE, HAPPYACCESS_PLUGIN_URL . 'build/index.js', $dependencies, $version, true );
+		wp_register_style( self::HANDLE, HAPPYACCESS_PLUGIN_URL . 'build/style-index.css', array( 'wp-components' ), $version );
+
+		wp_set_script_translations( self::HANDLE, 'happyaccess', HAPPYACCESS_PLUGIN_DIR . 'languages' );
+		wp_add_inline_script(
+			self::HANDLE,
+			'window.happyaccessBoot = ' . wp_json_encode( self::boot_data() ) . ';',
+			'before'
+		);
+
+		wp_enqueue_script( self::HANDLE );
+		wp_enqueue_style( self::HANDLE );
+	}
+
+	/**
+	 * Prints the mount point. A missing build gets a notice for developers.
+	 *
+	 * @return void
+	 */
+	public static function render() {
+		echo '<div class="wrap"><div id="happyaccess-root" class="happyaccess-app"></div>';
+		if ( ! is_readable( self::asset_file() ) ) {
+			echo '<div class="notice notice-error"><p>';
+			echo esc_html__( 'The HappyAccess admin app is not built yet. Run npm ci and npm run build in the plugin folder.', 'happyaccess' );
+			echo '</p></div>';
+		}
+		echo '</div>';
+	}
+
+	/**
+	 * Data the app needs on load. It carries no codes, keys, hashes, other
+	 * people's email addresses or the reCAPTCHA secret.
+	 *
+	 * @return array
+	 */
+	public static function boot_data() {
+		$user = wp_get_current_user();
+
+		return array(
+			'siteName'    => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			'homeUrl'     => home_url( '/' ),
+			'loginUrl'    => wp_login_url(),
+			'codeUrl'     => Router::url( 'code' ),
+			'adminUrl'    => admin_url( 'users.php?page=' . self::SLUG ),
+			'currentUser' => array(
+				'id'   => (int) $user->ID,
+				'name' => $user->display_name,
+			),
+			'timezone'    => wp_timezone_string(),
+			'features'    => (array) Settings::get( 'features' ),
+			'needsSetup'  => SettingsController::needs_setup(),
+			'menus'       => MenuGuard::menu_snapshot(),
+			'maxDays'     => self::MAX_DAYS,
+			'isMultisite' => is_multisite(),
+		);
+	}
+
+	/**
+	 * Path of the asset file the build writes.
+	 *
+	 * @return string
+	 */
+	private static function asset_file() {
+		return HAPPYACCESS_PLUGIN_DIR . 'build/index.asset.php';
+	}
+}

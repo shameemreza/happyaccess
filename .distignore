@@ -19,3 +19,8 @@
 /CHANGELOG.md
 .DS_Store
 .phpunit.result.cache
+/.nvmrc
+/.superpowers
+/.claude
+/vitest.config.mjs
+/vitest.setup.js

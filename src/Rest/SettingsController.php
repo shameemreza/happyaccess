@@ -307,7 +307,17 @@ final class SettingsController {
 	private static function present() {
 		$settings                         = Settings::all();
 		$settings['recaptcha_secret_set'] = '' !== (string) get_option( self::SECRET_OPTION, '' );
-		$settings['needs_setup']          = '' === (string) $settings['support']['consent_given_at'];
+		$settings['needs_setup']          = self::needs_setup();
 		return $settings;
+	}
+
+	/**
+	 * Whether first-run setup is still to do: no one has recorded consent yet.
+	 * The admin page reads this too, so both agree.
+	 *
+	 * @return bool
+	 */
+	public static function needs_setup() {
+		return '' === (string) Settings::get( 'support.consent_given_at' );
 	}
 }
