@@ -13,7 +13,7 @@ const noop = () => {};
 
 function countLine( count ) {
 	if ( 0 === count ) {
-		return __( 'Nobody has access right now.', 'happyaccess' );
+		return __( 'Nobody has access.', 'happyaccess' );
 	}
 	return sprintf(
 		/* translators: %d: number of people with a working pass. */

@@ -1,6 +1,6 @@
 @use "motion";
 
-@keyframes ha-in {
+@keyframes happyaccess-in {
 
 	from {
 		opacity: 0;
@@ -271,7 +271,7 @@
 	.ha-editor {
 
 		@include motion.motion {
-			animation: ha-in 0.25s ease-out;
+			animation: happyaccess-in 0.25s ease-out;
 		}
 	}
 }

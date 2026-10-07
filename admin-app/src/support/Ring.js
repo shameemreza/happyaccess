@@ -144,7 +144,7 @@ export default function Ring( { secondsLeft, total, state = 'active' } ) {
 				/>
 			</svg>
 			<span className="ha-ring__label" aria-hidden="true">
-				{ shortLeft( secondsLeft ) }
+				<bdi>{ shortLeft( secondsLeft ) }</bdi>
 			</span>
 		</div>
 	);

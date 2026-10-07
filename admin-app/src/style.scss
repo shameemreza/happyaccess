@@ -32,9 +32,8 @@
 	font-size: 13px;
 	line-height: 1.5;
 
-	*,
-	*::before,
-	*::after {
+	// Only our own elements, so components and other plugins keep their sizing.
+	:where([class^="ha-"], [class*=" ha-"]) {
 		box-sizing: border-box;
 	}
 
@@ -76,8 +75,44 @@
 		font-size: 14px;
 	}
 
-	.ha-help {
+	.ha-header__help {
 		font-size: 13px;
+	}
+
+	// Links and buttons stay at least 24px tall, and 44px for touch.
+	.ha-header__help,
+	.ha-disclosure,
+	.ha-row__link,
+	.ha-active__foot a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+	}
+
+	// The switches are drawn 20px tall, so a larger box takes the clicks.
+	.ha-switch::after {
+		content: "";
+		position: absolute;
+		inset: -3px -2px;
+	}
+
+	@media (pointer: coarse) {
+
+		.ha-header__help,
+		.ha-disclosure,
+		.ha-row__link,
+		.ha-active__foot a,
+		.ha-tab,
+		.ha-chip,
+		.ha-segment,
+		.ha-group__toggle,
+		.components-button {
+			min-height: 44px;
+		}
+
+		.ha-switch::after {
+			inset: -12px -4px;
+		}
 	}
 
 	.ha-lock {
@@ -89,7 +124,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px;
-		border-bottom: 1px solid var(--ha-line);
+		border-block-end: 1px solid var(--ha-line);
 	}
 
 	.ha-tab {

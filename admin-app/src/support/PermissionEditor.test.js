@@ -58,6 +58,16 @@ describe( 'PermissionEditor', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'isolates the counts, so RTL pages keep their numbers in order', () => {
+		render( <Harness start="editor" /> );
+		expect( screen.getByText( '3 of 7 permissions' ).tagName ).toBe(
+			'BDI'
+		);
+		expect(
+			within( group( 'Content' ) ).getByText( '3 of 3' ).tagName
+		).toBe( 'BDI' );
+	} );
+
 	it( 'leaves a preset out when the site has no such role', () => {
 		render(
 			<Harness

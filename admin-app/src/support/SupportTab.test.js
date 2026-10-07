@@ -367,8 +367,8 @@ describe( 'pass actions', () => {
 		expect( await screen.findByText( 'Suspended' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Active' ) ).not.toBeInTheDocument();
 		expect(
-			screen.getByText( 'Nobody has access right now.' )
-		).toBeInTheDocument();
+			document.querySelector( '.ha-support__status' )
+		).toHaveTextContent( 'Nobody has access.' );
 		await waitFor( () =>
 			expect( live() ).toContain(
 				'Access suspended for Acme Plugin Support'
@@ -447,9 +447,10 @@ describe( 'pass actions', () => {
 			screen.getByRole( 'button', { name: 'Revoke all now' } )
 		);
 
+		// The status line and the empty list both say it.
 		expect(
-			await screen.findByText( 'Nobody has access.' )
-		).toBeInTheDocument();
+			await screen.findAllByText( 'Nobody has access.' )
+		).toHaveLength( 2 );
 		expect( calls.some( ( c ) => '/grants/revoke-all' === c.route ) ).toBe(
 			true
 		);
@@ -508,9 +509,9 @@ describe( 'refresh key', () => {
 		).toBeInTheDocument();
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
 		await waitFor( () =>
-			expect(
-				screen.getByText( 'Nobody has access.' )
-			).toBeInTheDocument()
+			expect( screen.getAllByText( 'Nobody has access.' ) ).toHaveLength(
+				2
+			)
 		);
 	} );
 } );

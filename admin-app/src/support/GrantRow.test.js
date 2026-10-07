@@ -48,6 +48,11 @@ describe( 'GrantRow', () => {
 		expect( screen.getByText( '2d' ) ).toBeInTheDocument();
 	} );
 
+	it( 'isolates the pass length, so a number first stays in place on RTL pages', () => {
+		setup();
+		expect( screen.getByText( '3 day pass' ).tagName ).toBe( 'BDI' );
+	} );
+
 	it( 'puts the exact end in the tooltip', () => {
 		setup();
 

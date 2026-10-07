@@ -38,6 +38,11 @@ describe( 'Ring', () => {
 		expect( screen.getByText( '2d' ) ).toBeInTheDocument();
 	} );
 
+	it( 'keeps the short label in its own direction, so RTL pages do not reorder it', () => {
+		render( <Ring secondsLeft={ 2 * DAY } total={ 3 * DAY } /> );
+		expect( screen.getByText( '2d' ).tagName ).toBe( 'BDI' );
+	} );
+
 	it( 'fills the arc by the share of time left', () => {
 		const { container } = render(
 			<Ring secondsLeft={ 50 } total={ 100 } />

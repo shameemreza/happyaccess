@@ -141,15 +141,21 @@ function timezoneNote( timezone ) {
 		return '';
 	}
 	const offset = /^([+-])(\d{1,2}):?(\d{2})?$/.exec( timezone );
-	if ( offset ) {
-		const minutes =
-			( '-' === offset[ 1 ] ? -1 : 1 ) *
-			( Number( offset[ 2 ] ) * 60 + Number( offset[ 3 ] || 0 ) );
-		if ( minutes === -new Date().getTimezoneOffset() ) {
-			return '';
-		}
+	if ( ! offset ) {
+		return ` (${ timezone })`;
 	}
-	return ` (${ timezone })`;
+	const hours = Number( offset[ 2 ] );
+	const mins = Number( offset[ 3 ] || 0 );
+	const minutes = ( '-' === offset[ 1 ] ? -1 : 1 ) * ( hours * 60 + mins );
+	if ( minutes === -new Date().getTimezoneOffset() ) {
+		return '';
+	}
+	// "+06:00" reads better as "UTC+6", and "+00:00" as plain "UTC".
+	if ( 0 === minutes ) {
+		return ' (UTC)';
+	}
+	const minutePart = mins ? `:${ String( mins ).padStart( 2, '0' ) }` : '';
+	return ` (UTC${ offset[ 1 ] }${ hours }${ minutePart })`;
 }
 
 const naive = ( ms ) => siteDate( NAIVE_FORMAT, new Date( ms ) );

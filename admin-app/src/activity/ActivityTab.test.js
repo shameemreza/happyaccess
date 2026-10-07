@@ -333,9 +333,12 @@ describe( 'ActivityTab', () => {
 		const { user } = setup();
 		await screen.findByText( 'Saved WooCommerce shipping settings' );
 
-		expect(
-			await screen.findByText( /Showing 2 of 60 events\./ )
-		).toHaveTextContent( 'Kept for 90 days, change it in Settings.' );
+		const showing = await screen.findByText( /Showing 2 of 60 events\./ );
+		// The count sits in <bdi>, so RTL pages keep its numbers in order.
+		expect( showing.tagName ).toBe( 'BDI' );
+		expect( showing.closest( '.ha-log__count' ) ).toHaveTextContent(
+			'Kept for 90 days, change it in Settings.'
+		);
 		expect(
 			screen.getByRole( 'button', { name: 'Previous page, page 1 of 3' } )
 		).toHaveAttribute( 'aria-disabled', 'true' );

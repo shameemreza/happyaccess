@@ -269,8 +269,8 @@ describe( 'App shell', () => {
 		);
 
 		expect(
-			await screen.findByText( 'Nobody has access.' )
-		).toBeInTheDocument();
+			await screen.findAllByText( 'Nobody has access.' )
+		).toHaveLength( 2 );
 		expect(
 			screen.queryByText( 'Acme Plugin Support' )
 		).not.toBeInTheDocument();

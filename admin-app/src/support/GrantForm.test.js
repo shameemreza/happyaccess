@@ -366,11 +366,24 @@ describe( 'GrantForm timezone note', () => {
 		expect( until() ).not.toContain( '(' );
 	} );
 
-	it( 'names an offset timezone that differs from the browser', () => {
+	it( 'names an offset timezone that differs from the browser as UTC plus hours', () => {
 		browserZone( 'UTC' );
 		vi.spyOn( Date.prototype, 'getTimezoneOffset' ).mockReturnValue( 0 );
 		setup( { boot: { ...boot, timezone: '+06:00' } } );
-		expect( ends() ).toMatch( /\(\+06:00\)$/ );
+		expect( ends() ).toMatch( / \(UTC\+6\)$/ );
+		expect( until() ).toMatch( / \(UTC\+6\)$/ );
+	} );
+
+	it.each( [
+		[ '+00:00', 'UTC' ],
+		[ '+05:30', 'UTC+5:30' ],
+		[ '-03:00', 'UTC-3' ],
+		[ '-09:30', 'UTC-9:30' ],
+	] )( 'shows the offset %s as %s', ( timezone, label ) => {
+		browserZone( 'Asia/Tokyo' );
+		vi.spyOn( Date.prototype, 'getTimezoneOffset' ).mockReturnValue( -540 );
+		setup( { boot: { ...boot, timezone } } );
+		expect( ends() ).toContain( ` (${ label })` );
 	} );
 } );
 

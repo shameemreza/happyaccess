@@ -470,17 +470,19 @@ export default function ActivityTab( {
 
 				<div className="ha-log__foot">
 					<span className="ha-log__count">
-						{ sprintf(
-							/* translators: 1: events on this page. 2: events in all. */
-							_n(
-								'Showing %1$d of %2$d event.',
-								'Showing %1$d of %2$d events.',
-								total,
-								'happyaccess'
-							),
-							items.length,
-							total
-						) }
+						<bdi>
+							{ sprintf(
+								/* translators: 1: events on this page. 2: events in all. */
+								_n(
+									'Showing %1$d of %2$d event.',
+									'Showing %1$d of %2$d events.',
+									total,
+									'happyaccess'
+								),
+								items.length,
+								total
+							) }
+						</bdi>
 						{ keptLine && ' ' }
 						{ keptLine }
 					</span>

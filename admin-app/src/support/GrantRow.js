@@ -250,7 +250,9 @@ export default function GrantRow( {
 					>
 						{ longLeft( secondsLeft ) }
 					</div>
-					<div>{ passLength( grant.duration ) }</div>
+					<div>
+						<bdi>{ passLength( grant.duration ) }</bdi>
+					</div>
 				</div>
 			</div>
 

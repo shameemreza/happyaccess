@@ -113,12 +113,15 @@ export default function PermissionEditor( {
 					/>
 				) }
 				<span className="ha-editor__total">
-					{ sprintf(
-						/* translators: 1: permissions ticked, 2: permissions available. */
-						__( '%1$d of %2$d permissions', 'happyaccess' ),
-						allCaps.filter( ( cap ) => selected.has( cap ) ).length,
-						allCaps.length
-					) }
+					<bdi>
+						{ sprintf(
+							/* translators: 1: permissions ticked, 2: permissions available. */
+							__( '%1$d of %2$d permissions', 'happyaccess' ),
+							allCaps.filter( ( cap ) => selected.has( cap ) )
+								.length,
+							allCaps.length
+						) }
+					</bdi>
 				</span>
 			</div>
 			<div className="ha-editor__search">
@@ -193,12 +196,14 @@ export default function PermissionEditor( {
 									</span>
 								</button>
 								<span className="ha-group__count">
-									{ sprintf(
-										/* translators: 1: permissions ticked in the group, 2: permissions in the group. */
-										__( '%1$d of %2$d', 'happyaccess' ),
-										on,
-										group.caps.length
-									) }
+									<bdi>
+										{ sprintf(
+											/* translators: 1: permissions ticked in the group, 2: permissions in the group. */
+											__( '%1$d of %2$d', 'happyaccess' ),
+											on,
+											group.caps.length
+										) }
+									</bdi>
 								</span>
 								<button
 									type="button"

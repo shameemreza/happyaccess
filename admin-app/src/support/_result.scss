@@ -1,6 +1,6 @@
 @use "motion";
 
-@keyframes ha-pop {
+@keyframes happyaccess-pop {
 
 	from {
 		transform: scale(0.96);
@@ -70,7 +70,7 @@
 		position: relative;
 
 		@include motion.motion {
-			animation: ha-in 0.32s ease-out;
+			animation: happyaccess-in 0.32s ease-out;
 		}
 
 		.ha-preview__top {
@@ -175,7 +175,7 @@
 			color: #007017;
 
 			@include motion.motion {
-				animation: ha-pop 0.3s ease-out;
+				animation: happyaccess-pop 0.3s ease-out;
 			}
 		}
 	}
