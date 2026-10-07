@@ -59,7 +59,7 @@ class FeatureTest extends WP_UnitTestCase {
 		$this->assertNull( Router::resolve( 'code' ) );
 	}
 
-	public function test_disabled_with_a_live_grant_keeps_the_ended_step_and_the_cli_hook() {
+	public function test_disabled_with_a_live_grant_keeps_the_ended_step_and_the_router_hook() {
 		Grants::create( array( 'label' => 'Acme' ) );
 		Features::set( 'support_access', false );
 		Feature::register();
@@ -107,6 +107,21 @@ class FeatureTest extends WP_UnitTestCase {
 		$this->assertFalse( Grants::has_current() );
 	}
 
+	/**
+	 * Records, for each user, the sessions that still existed when the user was about to be deleted.
+	 * Deleting a user wipes its session meta anyway, so only this moment proves the sessions were destroyed.
+	 *
+	 * @param array $seen Receives user id => session list.
+	 * @return callable The hook, so the caller can remove it.
+	 */
+	private function spy_sessions_before_delete( array &$seen ) {
+		$spy = function ( $user_id ) use ( &$seen ) {
+			$seen[ (int) $user_id ] = WP_Session_Tokens::get_instance( $user_id )->get_all();
+		};
+		add_action( 'delete_user', $spy, 0 );
+		return $spy;
+	}
+
 	public function test_on_disable_ends_every_pass_and_destroys_their_sessions() {
 		$one = Grants::create( array( 'label' => 'a' ) );
 		$two = Grants::create( array( 'label' => 'b' ) );
@@ -114,21 +129,30 @@ class FeatureTest extends WP_UnitTestCase {
 		foreach ( array( $one, $two ) as $made ) {
 			$user_id = TempUsers::get_or_create( Grants::get( $made['id'] ) );
 			WP_Session_Tokens::get_instance( $user_id )->create( time() + 3600 );
+			$this->assertCount( 1, WP_Session_Tokens::get_instance( $user_id )->get_all() );
 			$ids[] = $user_id;
 		}
+		$seen = array();
+		$spy  = $this->spy_sessions_before_delete( $seen );
 		Feature::on_disable();
+		remove_action( 'delete_user', $spy, 0 );
 		$this->assertSame( 'revoked', Grants::get( $one['id'] )['status'] );
 		$this->assertSame( 'revoked', Grants::get( $two['id'] )['status'] );
-		foreach ( $ids as $user_id ) {
-			$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		$this->assertSame( $ids, array_keys( $seen ) );
+		foreach ( $seen as $sessions ) {
+			$this->assertSame( array(), $sessions );
 		}
 	}
 
-	public function test_emergency_lock_destroys_sessions() {
+	public function test_emergency_lock_destroys_sessions_before_the_user_is_deleted() {
 		$made    = Grants::create( array( 'label' => 'a' ) );
 		$user_id = TempUsers::get_or_create( Grants::get( $made['id'] ) );
 		WP_Session_Tokens::get_instance( $user_id )->create( time() + 3600 );
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		$seen = array();
+		$spy  = $this->spy_sessions_before_delete( $seen );
 		AdminBar::emergency_lock();
-		$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all() );
+		remove_action( 'delete_user', $spy, 0 );
+		$this->assertSame( array( $user_id => array() ), $seen );
 	}
 }

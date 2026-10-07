@@ -350,7 +350,8 @@ final class LoginSteps {
 			return false;
 		}
 		foreach ( $allowed as $ip ) {
-			$packed = is_string( $ip ) && ClientIp::valid( $ip ) ? inet_pton( $ip ) : false;
+			$entry  = is_string( $ip ) ? ClientIp::canonical( $ip ) : '';
+			$packed = '' !== $entry ? inet_pton( $entry ) : false;
 			if ( false !== $packed && hash_equals( $packed, $client ) ) {
 				return true;
 			}

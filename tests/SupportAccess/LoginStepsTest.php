@@ -8,6 +8,7 @@
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\LoginSteps;
@@ -231,7 +232,7 @@ class LoginStepsTest extends WP_UnitTestCase {
 	}
 
 	public function test_success_clears_only_the_ip_scope() {
-		Settings::update( array( 'security' => array( 'site_code_cap' => 5 ) ) );
+		Settings::update( array( 'security' => array( 'site_code_cap' => 20 ) ) );
 		$made = Grants::create( array( 'label' => 'Acme' ) );
 		for ( $i = 0; $i < 3; $i++ ) {
 			$this->post_code( $this->wrong_code( $made ) );
@@ -239,10 +240,27 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 'redirect', $this->post_code( $made['code'] )['type'] );
 		wp_set_current_user( 0 );
 
-		// The IP counter was cleared: five more wrong tries from this IP are all answered with the generic error.
-		// The site counter was not: it already holds 4 attempts, so the 2nd one here reaches the cap of 5.
-		$this->assertSame( array( 'invalid_code' ), $this->post_code( $this->wrong_code( $made ) )['errors']->get_error_codes() );
+		$this->assertSame( 0, RateLimiter::count( 'support_code', 'ip', RateLimiter::ip_subject(), 3600 ) );
+		$this->assertSame( 4, RateLimiter::count( 'support_code', 'site', 'site', 3600 ) );
+
+		// The IP counter was cleared, so five wrong tries are all answered with the generic error and the sixth is locked.
+		// Had it not been cleared (4 tries on record), the second try here would already be locked.
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->assertSame( array( 'invalid_code' ), $this->post_code( $this->wrong_code( $made ) )['errors']->get_error_codes(), 'try ' . ( $i + 1 ) );
+		}
 		$this->assertSame( array( 'locked' ), $this->post_code( $this->wrong_code( $made ) )['errors']->get_error_codes() );
+	}
+
+	public function test_allowlist_entry_in_ipv4_mapped_form_matches_the_plain_client_ip() {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		$made                   = Grants::create(
+			array(
+				'label' => 'Acme',
+				'ips'   => array( '::ffff:203.0.113.9' ),
+			)
+		);
+		wp_set_current_user( 0 );
+		$this->assertSame( 'redirect', $this->post_code( $made['code'] )['type'] );
 	}
 
 	public function test_allowlist_matches_other_notations_of_the_same_address() {
