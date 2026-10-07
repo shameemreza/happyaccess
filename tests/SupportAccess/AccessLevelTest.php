@@ -161,6 +161,49 @@ class AccessLevelTest extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_custom_with_a_trust_cap_needs_the_trust_tick() {
+		foreach ( array( null, false, '1', 1 ) as $confirm ) {
+			$args = array(
+				'label' => 'Acme',
+				'level' => 'custom',
+				'caps'  => array( 'edit_posts', 'manage_options' ),
+			);
+			if ( null !== $confirm ) {
+				$args['confirm_full'] = $confirm;
+			}
+			try {
+				Grants::create( $args );
+				$this->fail( 'Expected an exception for ' . wp_json_encode( $confirm ) );
+			} catch ( \InvalidArgumentException $e ) {
+				$this->assertSame( 'Confirm that you trust this person with full access.', $e->getMessage() );
+			}
+		}
+		$this->assertFalse( Grants::has_current() );
+	}
+
+	public function test_custom_with_a_trust_cap_and_the_tick_is_created() {
+		$made = Grants::create(
+			array(
+				'label'        => 'Acme',
+				'level'        => 'custom',
+				'caps'         => array( 'edit_posts', 'manage_options' ),
+				'confirm_full' => true,
+			)
+		);
+		$this->assertSame( array( 'edit_posts', 'manage_options', 'read' ), Grants::get( $made['id'] )['caps'] );
+	}
+
+	public function test_custom_without_trust_caps_needs_no_tick() {
+		$made = Grants::create(
+			array(
+				'label' => 'Acme',
+				'level' => 'custom',
+				'caps'  => array( 'edit_posts', 'list_users' ),
+			)
+		);
+		$this->assertSame( 'custom', Grants::get( $made['id'] )['level'] );
+	}
+
 	public function test_unknown_stored_protection_fails_closed() {
 		global $wpdb;
 		$made = Grants::create( array( 'label' => 'Acme' ) );

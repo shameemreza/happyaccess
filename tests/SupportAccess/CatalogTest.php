@@ -30,6 +30,41 @@ class CatalogTest extends WP_UnitTestCase {
 		return null === $group ? array() : wp_list_pluck( $group['caps'], 'cap' );
 	}
 
+	public function test_trust_list_matches_the_spec() {
+		$expected = array( 'manage_options', 'activate_plugins', 'install_plugins', 'upload_plugins', 'update_plugins', 'install_themes', 'upload_themes', 'update_themes', 'update_core', 'create_users', 'edit_users', 'promote_users', 'delete_users', 'unfiltered_html', 'import' );
+		sort( $expected );
+		$trust = Catalog::TRUST;
+		sort( $trust );
+		$this->assertSame( $expected, $trust );
+	}
+
+	public function test_every_trust_cap_is_in_a_fixed_group() {
+		$fixed = array();
+		foreach ( Catalog::GROUPS as $caps ) {
+			$fixed = array_merge( $fixed, $caps );
+		}
+		$this->assertSame( array(), array_values( array_diff( Catalog::TRUST, $fixed ) ) );
+	}
+
+	public function test_every_cap_item_says_whether_it_runs_on_trust() {
+		add_role( 'seo', 'SEO', array( 'read' => true, 'manage_seo' => true ) );
+		$seen = array();
+		foreach ( Catalog::groups() as $group ) {
+			foreach ( $group['caps'] as $item ) {
+				$this->assertArrayHasKey( 'trust', $item, $item['cap'] );
+				$this->assertSame( in_array( $item['cap'], Catalog::TRUST, true ), $item['trust'], $item['cap'] );
+				$seen[] = $item['cap'];
+			}
+		}
+		$this->assertContains( 'manage_seo', $seen );
+		$this->assertSame( array(), array_values( array_diff( Catalog::TRUST, $seen ) ) );
+	}
+
+	public function test_needs_trust_for_any_trust_cap() {
+		$this->assertFalse( Catalog::needs_trust( array( 'read', 'edit_posts' ) ) );
+		$this->assertTrue( Catalog::needs_trust( array( 'edit_posts', 'promote_users' ) ) );
+	}
+
 	public function test_plain_site_has_no_store_group() {
 		// Other tests leave store roles behind, so clear any role that holds a store cap.
 		foreach ( array_keys( wp_roles()->roles ) as $role_name ) {

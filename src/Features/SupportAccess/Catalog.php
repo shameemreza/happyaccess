@@ -95,6 +95,28 @@ final class Catalog {
 	);
 
 	/**
+	 * Capabilities that amount to admin-level access. A custom pass holding
+	 * any of them runs on trust, like a full pass, and needs the same tick.
+	 */
+	const TRUST = array(
+		'manage_options',
+		'activate_plugins',
+		'install_plugins',
+		'upload_plugins',
+		'update_plugins',
+		'install_themes',
+		'upload_themes',
+		'update_themes',
+		'update_core',
+		'create_users',
+		'edit_users',
+		'promote_users',
+		'delete_users',
+		'unfiltered_html',
+		'import',
+	);
+
+	/**
 	 * Capabilities every pass has, so they are never offered.
 	 */
 	const ALWAYS = array( 'read' );
@@ -295,7 +317,7 @@ final class Catalog {
 	/**
 	 * Groups of capabilities a custom pass may receive, ready for the editor.
 	 *
-	 * @return array<int, array{id:string, label:string, hint:string, caps:array<int, array{cap:string, label:string}>}>
+	 * @return array<int, array{id:string, label:string, hint:string, caps:array<int, array{cap:string, label:string, trust:bool}>}>
 	 */
 	public static function groups() {
 		$held   = self::role_cap_names();
@@ -319,6 +341,7 @@ final class Catalog {
 				$items[] = array(
 					'cap'   => $cap,
 					'label' => $labels[ $cap ],
+					'trust' => in_array( $cap, self::TRUST, true ),
 				);
 			}
 			if ( empty( $items ) ) {
@@ -337,6 +360,7 @@ final class Catalog {
 			$item = array(
 				'cap'   => $cap,
 				'label' => $cap,
+				'trust' => in_array( $cap, self::TRUST, true ),
 			);
 			if ( preg_match( self::STORE_PATTERN, $cap ) ) {
 				$routed['store'][] = $item;
@@ -383,6 +407,16 @@ final class Catalog {
 		}
 
 		return $groups;
+	}
+
+	/**
+	 * Whether a list of capabilities holds any that run on trust.
+	 *
+	 * @param array $caps Capability names.
+	 * @return bool
+	 */
+	public static function needs_trust( array $caps ) {
+		return array() !== array_intersect( array_map( 'strval', $caps ), self::TRUST );
 	}
 
 	/**

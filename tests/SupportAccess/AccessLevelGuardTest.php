@@ -58,8 +58,9 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 	private function custom( array $caps ) {
 		return $this->become(
 			array(
-				'level' => 'custom',
-				'caps'  => $caps,
+				'level'        => 'custom',
+				'caps'         => $caps,
+				'confirm_full' => Catalog::needs_trust( $caps ),
 			)
 		);
 	}

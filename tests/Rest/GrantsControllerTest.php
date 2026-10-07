@@ -184,6 +184,23 @@ class GrantsControllerTest extends RestTestCase {
 		$this->assertSame( 'full', $response->get_data()['level'] );
 	}
 
+	public function test_custom_create_with_a_trust_cap_needs_confirm() {
+		$args = array(
+			'label' => 'Acme',
+			'level' => 'custom',
+			'caps'  => array( 'edit_posts', 'promote_users' ),
+		);
+
+		$refused = $this->request( 'POST', '/grants', $args );
+		$this->assertSame( 400, $refused->get_status() );
+		$this->assertSame( 'Confirm that you trust this person with full access.', $refused->get_data()['message'] );
+		$this->assertFalse( Grants::has_current() );
+
+		$made = $this->request( 'POST', '/grants', array_merge( $args, array( 'confirm_full' => true ) ) );
+		$this->assertSame( 201, $made->get_status() );
+		$this->assertSame( 'custom', $made->get_data()['level'] );
+	}
+
 	public function test_create_rejects_a_duration_out_of_range() {
 		$response = $this->request(
 			'POST',

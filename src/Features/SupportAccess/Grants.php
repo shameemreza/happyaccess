@@ -100,13 +100,15 @@ final class Grants {
 			$role = 'administrator';
 		}
 
-		$caps = array();
-		if ( 'full' === $level && true !== ( isset( $args['confirm_full'] ) ? $args['confirm_full'] : null ) ) {
-			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
-			throw new \InvalidArgumentException( __( 'Confirm that you trust this person with full access.', 'happyaccess' ) );
-		}
+		$caps      = array();
+		$confirmed = true === ( isset( $args['confirm_full'] ) ? $args['confirm_full'] : null );
 		if ( 'custom' === $level ) {
 			$caps = self::clean_caps( isset( $args['caps'] ) ? $args['caps'] : array() );
+		}
+		// A custom pass with an admin-level permission runs on trust, like a full pass.
+		if ( ! $confirmed && ( 'full' === $level || Catalog::needs_trust( $caps ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain text message, escaped where it is shown.
+			throw new \InvalidArgumentException( __( 'Confirm that you trust this person with full access.', 'happyaccess' ) );
 		}
 
 		$protection = $level;
