@@ -126,6 +126,10 @@ final class RolePolicy {
 		if ( self::EMAIL_ONLY !== self::for_user( $account ) ) {
 			return $user;
 		}
+		// A user who can't get a login code, for example one with another plugin's two-step login, keeps the password.
+		if ( ! Requests::allowed( $account ) ) {
+			return $user;
+		}
 
 		// While no login code can reach the account, refusing the password would lock it out.
 		if ( ! LoginSteps::db_ready() || ! Secrets::is_persisted() ) {

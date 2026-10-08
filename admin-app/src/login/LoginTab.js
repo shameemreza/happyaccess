@@ -80,7 +80,7 @@ function places( woocommerce ) {
  * changed, inside the `passwordless` group.
  *
  * @param {Object} props      Props.
- * @param {Object} props.boot Boot data: features, woocommerce and loginRoles.
+ * @param {Object} props.boot Boot data: features, woocommerce, loginRoles and otherTwoFactor.
  * @return {Element} The tab.
  */
 export default function LoginTab( { boot } ) {
@@ -317,6 +317,17 @@ export default function LoginTab( { boot } ) {
 										'happyaccess'
 									) }
 								</h3>
+								{ boot?.otherTwoFactor && (
+									<Notice
+										status="info"
+										isDismissible={ false }
+									>
+										{ __(
+											"Accounts that use two-step login from another plugin can't use email codes. They log in with their password and that plugin's check.",
+											'happyaccess'
+										) }
+									</Notice>
+								) }
 								<RolePolicyTable
 									roles={ boot?.loginRoles || [] }
 									policy={ policy }

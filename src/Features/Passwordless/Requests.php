@@ -12,6 +12,7 @@ use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\OtherTwoFactor;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 
@@ -225,12 +226,13 @@ final class Requests {
 	/**
 	 * Whether a found user may use passwordless login. Checked when a request
 	 * is made and again when a code or link is used, because a user can become
-	 * a support user or be filtered out in between.
+	 * a support user or be filtered out in between. RolePolicy reads it too,
+	 * so a user left out here keeps their password.
 	 *
 	 * @param \WP_User $user The user.
 	 * @return bool
 	 */
-	private static function allowed( $user ) {
+	public static function allowed( $user ) {
 		if ( Capabilities::is_temp_user( $user->ID ) ) {
 			return false;
 		}
@@ -242,12 +244,16 @@ final class Requests {
 			return false;
 		}
 		/**
-		 * Filters whether a user may log in without a password.
+		 * Filters whether a user may log in without a password. This runs
+		 * last, so it can also let in a user that another plugin's two-step
+		 * login would leave out.
 		 *
-		 * @param bool     $allowed Whether the user may. Default true.
+		 * @param bool     $allowed Whether the user may. Default true, false
+		 *                          when the user has two-step login from
+		 *                          another plugin, which this path would skip.
 		 * @param \WP_User $user    The user.
 		 */
-		return (bool) apply_filters( 'happyaccess_passwordless_allowed', true, $user );
+		return (bool) apply_filters( 'happyaccess_passwordless_allowed', ! OtherTwoFactor::user_has_2fa( $user ), $user );
 	}
 
 	/**

@@ -428,6 +428,72 @@ class RequestsTest extends WP_UnitTestCase {
 		$this->assertSame( array( array( true, $this->user->ID ) ), $seen );
 	}
 
+	public function test_a_user_with_another_plugins_2fa_is_treated_as_missing() {
+		add_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+		$eligible = Requests::eligible( $this->user->user_email );
+		$created  = Requests::create( $this->user, self::KEY );
+		remove_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+
+		$this->assertNull( $eligible );
+		$this->assertWPError( $created );
+		$this->assertSame( array(), $this->rows() );
+	}
+
+	public function test_a_user_who_turned_on_another_plugins_2fa_after_create_cannot_use_the_code_or_link() {
+		$made  = $this->make();
+		$other = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$two   = $this->make( $other, 'key-two' );
+
+		add_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+		$code = Requests::verify_code( self::KEY, $made['code'] );
+		$link = Requests::consume_link( $two['link_key'] );
+		remove_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+
+		$this->assertWPError( $code );
+		$this->assertWPError( $link );
+	}
+
+	public function test_the_allowed_filter_has_the_last_word_over_another_plugins_2fa() {
+		$seen = array();
+		add_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+		add_filter(
+			'happyaccess_passwordless_allowed',
+			function ( $allowed ) use ( &$seen ) {
+				$seen[] = $allowed;
+				return true;
+			}
+		);
+
+		$this->assertSame( $this->user->ID, Requests::eligible( $this->user->user_email )->ID );
+		$this->assertSame( array( false ), $seen );
+		remove_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_two_factor_plugin_user_is_treated_as_missing() {
+		require dirname( __DIR__ ) . '/Support/Stubs/two-factor-core.php';
+		Two_Factor_Core::$users = array( $this->user->ID );
+		$plain                  = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+
+		$this->assertNull( Requests::eligible( $this->user->user_email ) );
+		$this->assertSame( $plain->ID, Requests::eligible( $plain->user_email )->ID );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_wordfence_login_security_user_is_treated_as_missing() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wordfence-ls-users.php';
+		\WordfenceLS\Controller_Users::$users = array( $this->user->ID );
+
+		$this->assertNull( Requests::eligible( $this->user->user_email ) );
+		$this->assertWPError( Requests::create( $this->user, self::KEY ) );
+	}
+
 	/**
 	 * @group ms-required
 	 */

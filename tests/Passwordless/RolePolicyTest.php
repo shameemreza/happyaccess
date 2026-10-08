@@ -103,6 +103,16 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 		return base64_encode( str_repeat( 'x', 32 ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- A stored key value.
 	}
 
+	public function test_an_email_only_account_with_another_plugins_2fa_logs_in_with_its_password() {
+		$user = $this->make_user( 'subscriber', 'plother2fa' );
+		add_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+		$result = wp_authenticate( 'plother2fa', 'correct-horse-battery' );
+		remove_filter( 'happyaccess_user_has_other_2fa', '__return_true' );
+
+		$this->assertInstanceOf( WP_User::class, $result );
+		$this->assertSame( $user->ID, $result->ID );
+	}
+
 	public function test_a_role_left_at_either_still_logs_in() {
 		$editor = $this->make_user( 'editor', 'pleditor' );
 		$result = wp_authenticate( 'pleditor', 'correct-horse-battery' );

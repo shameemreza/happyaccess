@@ -198,7 +198,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );
@@ -210,6 +210,21 @@ class PageTest extends WP_UnitTestCase {
 		foreach ( array( 'link_key', '_hash', 'recaptcha', 'otp_code', '"code"' ) as $needle ) {
 			$this->assertStringNotContainsString( $needle, $json );
 		}
+	}
+
+	public function test_boot_data_says_when_another_two_step_plugin_is_active() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertFalse( Page::boot_data()['otherTwoFactor'] );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_boot_data_flags_the_two_factor_plugin() {
+		require dirname( __DIR__ ) . '/Support/Stubs/two-factor-core.php';
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertTrue( Page::boot_data()['otherTwoFactor'] );
 	}
 
 	public function test_boot_data_lists_roles_as_slug_and_name() {

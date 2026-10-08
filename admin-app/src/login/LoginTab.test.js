@@ -172,6 +172,23 @@ describe( 'Login tab', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( "tells the owner about accounts with another plugin's two-step login", async () => {
+		const OTHER =
+			"Accounts that use two-step login from another plugin can't use email codes. They log in with their password and that plugin's check.";
+
+		// The notice also speaks its text into a live region outside the tab.
+		const shown = await renderTab( boot( { otherTwoFactor: true } ) );
+		expect(
+			within( shown.container ).getByText( OTHER )
+		).toBeInTheDocument();
+		shown.unmount();
+
+		const hidden = await renderTab();
+		expect(
+			within( hidden.container ).queryByText( OTHER )
+		).not.toBeInTheDocument();
+	} );
+
 	it( 'shows the admin warning only for a manage_options role set to email code only', async () => {
 		const user = userEvent.setup();
 		await renderTab();
