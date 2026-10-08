@@ -29,5 +29,7 @@ final class Feature {
 		if ( ! Features::is_enabled( 'passwordless' ) ) {
 			return;
 		}
+
+		LoginSteps::register();
 	}
 }

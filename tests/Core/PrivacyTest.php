@@ -372,4 +372,58 @@ class PrivacyTest extends WP_UnitTestCase {
 		wp_set_current_user( $this->user );
 		$this->assertNotEmpty( Privacy::export( 'me@example.org', 1 )['data'] );
 	}
+
+	public function test_passwordless_events_are_exported_and_erased_by_user() {
+		global $wpdb;
+		$other = self::factory()->user->create( array( 'user_email' => 'other@example.org' ) );
+		foreach ( Privacy::USER_EVENTS as $event ) {
+			AuditLog::add(
+				$event,
+				array(
+					'feature' => 'passwordless',
+					'user_id' => $this->user,
+					'summary' => 'Mine ' . $event,
+				)
+			);
+			AuditLog::add(
+				$event,
+				array(
+					'feature' => 'passwordless',
+					'user_id' => $other,
+					'summary' => 'Theirs ' . $event,
+				)
+			);
+		}
+
+		$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
+		$result    = call_user_func( $exporters['happyaccess']['callback'], 'me@example.org', 1 );
+		$summaries = array();
+		foreach ( $result['data'] as $item ) {
+			foreach ( $item['data'] as $field ) {
+				if ( 'Summary' === $field['name'] ) {
+					$summaries[] = $field['value'];
+				}
+			}
+		}
+		foreach ( Privacy::USER_EVENTS as $event ) {
+			$this->assertContains( 'Mine ' . $event, $summaries );
+			$this->assertNotContains( 'Theirs ' . $event, $summaries );
+		}
+
+		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
+		call_user_func( $erasers['happyaccess']['callback'], 'me@example.org', 1 );
+
+		$logs = Installer::table( 'logs' );
+		$mine = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE user_id = %d AND feature = %s", $this->user, 'passwordless' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$this->assertSame( 0, $mine );
+		$kept = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE user_id = %d AND feature = %s", $other, 'passwordless' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$this->assertSame( count( Privacy::USER_EVENTS ), $kept );
+		$erased = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE summary LIKE %s AND ip_address = %s AND user_agent = %s", 'Mine %', '0.0.0.0', '' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$this->assertSame( count( Privacy::USER_EVENTS ), $erased );
+	}
+
+	public function test_user_events_are_not_in_the_grant_lists() {
+		$grant_lists = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS );
+		$this->assertSame( array(), array_values( array_intersect( Privacy::USER_EVENTS, $grant_lists ) ) );
+	}
 }

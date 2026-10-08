@@ -83,6 +83,20 @@ final class Privacy {
 	);
 
 	/**
+	 * Log events of passwordless login. They carry no grant token. The user
+	 * they belong to is in user_id, and the exporter and eraser match them by
+	 * that id: a failed try that could not be tied to an account has user_id 0
+	 * and holds no personal data beyond the IP address, which the retention
+	 * period removes.
+	 */
+	const USER_EVENTS = array(
+		'passwordless_requested',
+		'passwordless_login',
+		'passwordless_failed',
+		'passwordless_locked',
+	);
+
+	/**
 	 * Adds the policy text, the exporter and the eraser.
 	 *
 	 * @return void

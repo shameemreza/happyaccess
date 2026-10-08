@@ -16,6 +16,13 @@ defined( 'ABSPATH' ) || exit;
 final class Mailer {
 
 	/**
+	 * Plain-text part of the message being sent.
+	 *
+	 * @var string
+	 */
+	private static $alt_body = '';
+
+	/**
 	 * Sends one email.
 	 *
 	 * @param string $to       Recipient address.
@@ -51,7 +58,31 @@ final class Mailer {
 			return false;
 		}
 
-		return (bool) wp_mail( $to, $subject, $body, array( 'Content-Type: text/html; charset=UTF-8' ) );
+		// An optional "<template>-text" file adds a plain-text part for mail clients that don't show HTML.
+		$text = self::render( sanitize_key( $template ) . '-text', $vars );
+		if ( null !== $text ) {
+			self::$alt_body = trim( $text );
+			add_action( 'phpmailer_init', array( __CLASS__, 'add_alt_body' ) );
+		}
+
+		$sent = (bool) wp_mail( $to, $subject, $body, array( 'Content-Type: text/html; charset=UTF-8' ) );
+
+		remove_action( 'phpmailer_init', array( __CLASS__, 'add_alt_body' ) );
+		self::$alt_body = '';
+
+		return $sent;
+	}
+
+	/**
+	 * Adds the plain-text part to the message being sent.
+	 *
+	 * @param \PHPMailer\PHPMailer\PHPMailer $phpmailer Mailer.
+	 * @return void
+	 */
+	public static function add_alt_body( $phpmailer ) {
+		if ( '' !== self::$alt_body ) {
+			$phpmailer->AltBody = self::$alt_body; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHPMailer property.
+		}
 	}
 
 	/**

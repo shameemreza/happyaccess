@@ -199,18 +199,18 @@ class EventClassificationTest extends WP_UnitTestCase {
 
 	public function test_every_logged_event_is_classified() {
 		list( $keys, ) = $this->scan();
-		$known   = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS );
+		$known   = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS, Privacy::USER_EVENTS );
 		$missing = array();
 		foreach ( $keys as $key => $places ) {
 			if ( ! in_array( $key, $known, true ) ) {
 				$missing[] = $key . ' (' . implode( ', ', $places ) . ')';
 			}
 		}
-		$this->assertSame( array(), $missing, "Classify these events in Privacy::ADMIN_EVENTS, AGENT_EVENTS or CORE_EVENTS:\n" . implode( "\n", $missing ) );
+		$this->assertSame( array(), $missing, "Classify these events in Privacy::ADMIN_EVENTS, AGENT_EVENTS, CORE_EVENTS or USER_EVENTS:\n" . implode( "\n", $missing ) );
 	}
 
 	public function test_no_event_is_in_two_lists() {
-		$all = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS );
+		$all = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS, Privacy::USER_EVENTS );
 		$this->assertSame( array(), array_values( array_diff_key( $all, array_unique( $all ) ) ), 'An event key appears in more than one list.' );
 	}
 
@@ -236,7 +236,7 @@ class EventClassificationTest extends WP_UnitTestCase {
 
 	public function test_every_agent_and_core_event_is_still_written_somewhere() {
 		list( $keys, ) = $this->scan();
-		$unused        = array_values( array_diff( array_merge( Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS ), array_keys( $keys ) ) );
+		$unused        = array_values( array_diff( array_merge( Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS, Privacy::USER_EVENTS ), array_keys( $keys ) ) );
 		$this->assertSame( array(), $unused, "These events are listed but nothing in src/ writes them:\n" . implode( "\n", $unused ) );
 	}
 }
