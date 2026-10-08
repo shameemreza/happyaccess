@@ -11,11 +11,13 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
+use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Internal;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
+use HappyAccess\Features\TwoStep\Challenge;
 use HappyAccess\Login\Router;
 use HappyAccess\Login\Screens;
 
@@ -376,7 +378,8 @@ final class LoginSteps {
 	/**
 	 * Signs a user in after a code or link was used up. The log row is
 	 * written before the wp_login action, so a listener that exits can't
-	 * skip it.
+	 * skip it. A user with two-step login goes to its second step instead,
+	 * with no auth cookie yet.
 	 *
 	 * @param \WP_User $user     The user.
 	 * @param string   $method   code or link.
@@ -385,20 +388,39 @@ final class LoginSteps {
 	 * @return string Where to send the user.
 	 */
 	private static function log_in( \WP_User $user, $method, $remember, $redirect ) {
+		// Checked first, so no two-step class loads while that feature is off.
+		if ( Features::is_enabled( 'two_step' ) ) {
+			$second_step = Challenge::after_passwordless( $user, (bool) $remember, self::destination( $user, $redirect ) );
+			if ( null !== $second_step ) {
+				self::forget_request( $method );
+				return $second_step;
+			}
+		}
+
 		wp_set_auth_cookie( $user->ID, $remember );
 		wp_set_current_user( $user->ID );
 
-		RateLimiter::clear( 'link' === $method ? self::LINK_ACTION : self::CODE_ACTION, 'ip', RateLimiter::ip_subject() );
-		self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
-		if ( 'link' === $method ) {
-			self::send_cookie( self::CONFIRM_COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
-		}
+		self::forget_request( $method );
 
 		AuditLog::add( 'passwordless_login', self::log_args( $user->ID, __( 'Logged in with a login code or link', 'happyaccess' ), array( 'method' => $method ) ) );
 
 		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
 
 		return self::destination( $user, $redirect );
+	}
+
+	/**
+	 * Clears the IP count and the request cookies once a code or link is used up.
+	 *
+	 * @param string $method code or link.
+	 * @return void
+	 */
+	private static function forget_request( $method ) {
+		RateLimiter::clear( 'link' === $method ? self::LINK_ACTION : self::CODE_ACTION, 'ip', RateLimiter::ip_subject() );
+		self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
+		if ( 'link' === $method ) {
+			self::send_cookie( self::CONFIRM_COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
+		}
 	}
 
 	/**

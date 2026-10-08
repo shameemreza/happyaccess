@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 final class Feature {
 
 	/**
-	 * Registers the feature's hooks while it is on. Every hook added here
+	 * Registers the second step at login while the feature is on. Every hook added here
 	 * must be safe to add twice (same callback and priority), so register()
 	 * needs no run-once flag.
 	 *
@@ -29,5 +29,7 @@ final class Feature {
 		if ( ! Features::is_enabled( 'two_step' ) ) {
 			return;
 		}
+
+		Challenge::register();
 	}
 }
