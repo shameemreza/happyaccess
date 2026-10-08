@@ -1,6 +1,9 @@
 .happyaccess-app {
 
 	.ha-login {
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
 		min-width: 0;
 		max-inline-size: 760px;
 	}
@@ -47,6 +50,17 @@
 
 	.ha-login__place {
 		justify-content: space-between;
+	}
+
+	// The XML-RPC switch sits on its own, not in a list of places.
+	.ha-login__switch {
+		padding-block: 0;
+	}
+
+	.ha-login__recovery code {
+		padding: 1px 4px;
+		font-size: 12px;
+		overflow-wrap: anywhere;
 	}
 
 	// A warning under the select makes the row taller, so the name stays

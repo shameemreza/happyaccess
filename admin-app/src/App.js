@@ -182,7 +182,10 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 							<LoginTab boot={ appBoot } />
 						) }
 						{ 'settings' === active.slug && (
-							<SettingsTab onFeaturesChange={ updateFeatures } />
+							<SettingsTab
+								onFeaturesChange={ updateFeatures }
+								otherTwoStep={ appBoot.otherTwoStep }
+							/>
 						) }
 						{ ! [
 							'support',

@@ -198,7 +198,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor', 'otherTwoStep' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );
@@ -215,6 +215,7 @@ class PageTest extends WP_UnitTestCase {
 	public function test_boot_data_says_when_another_two_step_plugin_is_active() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$this->assertFalse( Page::boot_data()['otherTwoFactor'] );
+		$this->assertSame( array(), Page::boot_data()['otherTwoStep'] );
 	}
 
 	/**
@@ -225,6 +226,21 @@ class PageTest extends WP_UnitTestCase {
 		require dirname( __DIR__ ) . '/Support/Stubs/two-factor-core.php';
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$this->assertTrue( Page::boot_data()['otherTwoFactor'] );
+		$this->assertSame( array( 'Two Factor' ), Page::boot_data()['otherTwoStep'] );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_boot_data_names_wp_2fa_and_kadence_security() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wp-2fa.php';
+		require dirname( __DIR__ ) . '/Support/Stubs/kadence-two-factor.php';
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$data = Page::boot_data();
+		$this->assertTrue( $data['otherTwoFactor'] );
+		$this->assertSame( array( 'WP 2FA', 'Kadence Security' ), $data['otherTwoStep'] );
 	}
 
 	public function test_boot_data_lists_roles_as_slug_and_name() {

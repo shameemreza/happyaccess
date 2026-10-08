@@ -358,4 +358,38 @@ describe( 'Login tab', () => {
 
 		expect( await axe( container ) ).toHaveNoViolations();
 	} );
+
+	it( 'hides the two-step section while two-step login is off', async () => {
+		await renderTab();
+
+		expect(
+			screen.queryByRole( 'heading', { name: 'Two-step login' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByLabelText( 'Grace period for required roles' )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'shows the two-step section below passwordless login when it is on', async () => {
+		const { container } = await renderTab(
+			boot( {
+				features: {
+					support_access: true,
+					passwordless: true,
+					two_step: true,
+				},
+			} )
+		);
+
+		const headings = [ ...container.querySelectorAll( 'h2' ) ].map(
+			( heading ) => heading.textContent
+		);
+		expect( headings ).toEqual( [
+			'Passwordless login',
+			'Two-step login',
+		] );
+		expect(
+			screen.getByLabelText( 'Grace period for required roles' )
+		).toBeInTheDocument();
+	} );
 } );

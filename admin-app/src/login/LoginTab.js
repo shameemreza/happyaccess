@@ -6,6 +6,7 @@ import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
 import Switch from '../settings/Switch';
 import RolePolicyTable, { EITHER } from './RolePolicyTable';
+import TwoStepSection from './TwoStepSection';
 
 // The server defaults, for settings saved before the passwordless group existed.
 const DEFAULTS = {
@@ -73,14 +74,15 @@ function places( woocommerce ) {
 }
 
 /**
- * The Login tab: the passwordless login settings. Two-step login joins it
- * in a later version.
+ * The Login tab: the passwordless login settings, and below them the
+ * two-step login settings while that feature is on.
  *
  * Nothing saves until "Save changes", which sends only the keys that
- * changed, inside the `passwordless` group.
+ * changed, inside the `passwordless` group. The two-step section has its
+ * own form and saves the `two_step` group.
  *
  * @param {Object} props      Props.
- * @param {Object} props.boot Boot data: features, woocommerce, loginRoles and otherTwoFactor.
+ * @param {Object} props.boot Boot data: features, woocommerce, loginRoles, otherTwoFactor and otherTwoStep.
  * @return {Element} The tab.
  */
 export default function LoginTab( { boot } ) {
@@ -369,6 +371,7 @@ export default function LoginTab( { boot } ) {
 					) }
 				</form>
 			</section>
+			{ !! boot?.features?.two_step && <TwoStepSection boot={ boot } /> }
 		</div>
 	);
 }

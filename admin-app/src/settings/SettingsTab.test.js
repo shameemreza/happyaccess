@@ -494,7 +494,7 @@ describe( 'Settings tab', () => {
 	} );
 
 	describe( 'Passwordless login', () => {
-		it( 'shows an off switch with its help text, and no two-step switch', async () => {
+		it( 'shows an off switch with its help text', async () => {
 			await renderTab();
 
 			const toggle = screen.getByRole( 'switch', {
@@ -504,9 +504,6 @@ describe( 'Settings tab', () => {
 			expect( toggle ).toHaveAccessibleDescription(
 				'Let people log in with a code or link sent to their email.'
 			);
-			expect(
-				screen.queryByRole( 'switch', { name: /two-step/i } )
-			).not.toBeInTheDocument();
 		} );
 
 		it( 'turns on right away and saves only that key', async () => {
@@ -611,6 +608,126 @@ describe( 'Settings tab', () => {
 			expect(
 				screen.getByRole( 'switch', { name: 'Passwordless login' } )
 			).not.toBeChecked();
+		} );
+	} );
+
+	describe( 'Two-step login', () => {
+		const CONFIRM =
+			'WP 2FA already adds two-step login. HappyAccess skips accounts that use it, so nobody is asked twice. Turn on HappyAccess two-step login anyway?';
+		const twoStepSwitch = () =>
+			screen.getByRole( 'switch', { name: 'Two-step login' } );
+
+		it( 'shows an off switch below Passwordless, with its help text', async () => {
+			await renderTab();
+
+			expect( twoStepSwitch() ).not.toBeChecked();
+			expect( twoStepSwitch() ).toHaveAccessibleDescription(
+				'Ask for a second step after the password: an app code, an email code or a backup code.'
+			);
+			const names = screen
+				.getAllByRole( 'switch' )
+				.map( ( toggle ) => toggle.getAttribute( 'aria-labelledby' ) )
+				.map( ( id ) => document.getElementById( id ).textContent );
+			expect( names.slice( 0, 3 ) ).toEqual( [
+				'Support access',
+				'Passwordless login',
+				'Two-step login',
+			] );
+		} );
+
+		it( 'turns on right away when no other two-step plugin is active', async () => {
+			const onFeaturesChange = vi.fn();
+			const user = userEvent.setup();
+			await renderTab( { onFeaturesChange, otherTwoStep: [] } );
+
+			await user.click( twoStepSwitch() );
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( { features: { two_step: true } } );
+			expect( onFeaturesChange ).toHaveBeenCalledWith(
+				expect.objectContaining( { two_step: true } )
+			);
+			expect( twoStepSwitch() ).toBeChecked();
+			expect( twoStepSwitch() ).toHaveFocus();
+			expect( liveText() ).toBe( 'Two-step login turned on' );
+			expect( screen.queryByText( CONFIRM ) ).toBeNull();
+		} );
+
+		it( 'asks first when another two-step plugin is active, and Cancel changes nothing', async () => {
+			const user = userEvent.setup();
+			await renderTab( { otherTwoStep: [ 'WP 2FA' ] } );
+
+			await user.click( twoStepSwitch() );
+
+			const question = screen.getByRole( 'group', { name: CONFIRM } );
+			expect( posts ).toHaveLength( 0 );
+			expect( twoStepSwitch() ).not.toBeChecked();
+
+			await user.click(
+				within( question ).getByRole( 'button', { name: 'Cancel' } )
+			);
+			expect( posts ).toHaveLength( 0 );
+			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
+			expect( twoStepSwitch() ).toHaveFocus();
+		} );
+
+		it( 'turns on after the question is answered', async () => {
+			const user = userEvent.setup();
+			await renderTab( { otherTwoStep: [ 'WP 2FA' ] } );
+
+			await user.click( twoStepSwitch() );
+			await user.click(
+				within(
+					screen.getByRole( 'group', { name: CONFIRM } )
+				).getByRole( 'button', { name: 'Turn on' } )
+			);
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( { features: { two_step: true } } );
+			expect( twoStepSwitch() ).toBeChecked();
+			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
+			expect( liveText() ).toBe( 'Two-step login turned on' );
+		} );
+
+		it( 'names every active plugin in the question', async () => {
+			const user = userEvent.setup();
+			await renderTab( {
+				otherTwoStep: [ 'WP 2FA', 'Kadence Security' ],
+			} );
+
+			await user.click( twoStepSwitch() );
+
+			expect(
+				screen.getByRole( 'group', {
+					name: 'WP 2FA and Kadence Security already add two-step login. HappyAccess skips accounts that use them, so nobody is asked twice. Turn on HappyAccess two-step login anyway?',
+				} )
+			).toBeInTheDocument();
+		} );
+
+		it( 'turns off right away, without a question', async () => {
+			mockServer( settingsFixture( { features: { two_step: true } } ) );
+			const user = userEvent.setup();
+			await renderTab( { otherTwoStep: [ 'WP 2FA' ] } );
+
+			await user.click( twoStepSwitch() );
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( { features: { two_step: false } } );
+			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
+			expect( liveText() ).toBe( 'Two-step login turned off' );
+		} );
+
+		it( 'has no accessibility violations with the question open', async () => {
+			const user = userEvent.setup();
+			const { container } = await renderTab( {
+				otherTwoStep: [ 'WP 2FA' ],
+			} );
+			await user.click( twoStepSwitch() );
+			expect(
+				screen.getByRole( 'group', { name: CONFIRM } )
+			).toBeInTheDocument();
+
+			expect( await axe( container ) ).toHaveNoViolations();
 		} );
 	} );
 

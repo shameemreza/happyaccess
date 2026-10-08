@@ -10,6 +10,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useSettings } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
+import { otherPluginsQuestion } from '../login/twoStepModel';
 import { InlineConfirm } from '../support/GrantRow';
 import LoginPreview from './LoginPreview';
 import {
@@ -24,10 +25,12 @@ import {
 import Switch from './Switch';
 
 const noop = () => {};
+const NONE = [];
 
 const FALLBACKS = {
 	'features.support_access': true,
 	'features.passwordless': false,
+	'features.two_step': false,
 	'security.max_attempts': 5,
 	'security.lockout_duration': 1800,
 	'security.proxy_header': '',
@@ -57,15 +60,20 @@ function endedText( count ) {
  * The Settings tab: the feature switch, safety and privacy, and a live
  * login screen preview.
  *
- * Support access saves the moment it is switched, since turning it off ends
- * every pass. Everything else waits for "Save changes", which sends only
- * the keys that changed.
+ * The feature switches save the moment they are switched. Turning support
+ * access off asks first, since it ends every pass, and so does turning
+ * two-step login on while another two-step plugin is active. Everything
+ * else waits for "Save changes", which sends only the keys that changed.
  *
  * @param {Object}                     props                  Props.
  * @param {(features: Object) => void} props.onFeaturesChange Called with the saved feature switches.
+ * @param {string[]}                   props.otherTwoStep     Names of the active two-step plugins of other vendors.
  * @return {Element} The tab.
  */
-export default function SettingsTab( { onFeaturesChange = noop } ) {
+export default function SettingsTab( {
+	onFeaturesChange = noop,
+	otherTwoStep = NONE,
+} ) {
 	const announce = useAnnounce();
 	const { settings, loading, saving, error, refresh, save } = useSettings();
 	const ids = useId();
@@ -74,11 +82,13 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 	const [ edits, setEdits ] = useState( {} );
 	const [ secretInput, setSecretInput ] = useState( '' );
 	const [ confirmOff, setConfirmOff ] = useState( false );
+	const [ confirmTwoStep, setConfirmTwoStep ] = useState( false );
 	const [ featureError, setFeatureError ] = useState( null );
 	const [ saveError, setSaveError ] = useState( null );
 	const [ justSaved, setJustSaved ] = useState( false );
 	const switchRef = useRef( null );
 	const passwordlessRef = useRef( null );
+	const twoStepRef = useRef( null );
 	const secretRef = useRef( null );
 
 	if ( loading && ! settings ) {
@@ -128,6 +138,8 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 
 	const supportOn = !! saved( 'features.support_access' );
 	const passwordlessOn = !! saved( 'features.passwordless' );
+	const twoStepOn = !! saved( 'features.two_step' );
+	const otherNames = Array.isArray( otherTwoStep ) ? otherTwoStep : NONE;
 	const patch = buildPatch( edits );
 	const recaptchaOn = !! val( 'security.recaptcha_enabled' );
 	// A typed secret only counts while reCAPTCHA is on.
@@ -147,6 +159,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 	const switchSupport = async ( next ) => {
 		setFeatureError( null );
 		setConfirmOff( false );
+		setConfirmTwoStep( false );
 		try {
 			const result = await save( {
 				features: { support_access: next },
@@ -176,6 +189,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 			switchSupport( true );
 		} else {
 			setFeatureError( null );
+			setConfirmTwoStep( false );
 			setConfirmOff( true );
 		}
 	};
@@ -187,6 +201,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 			return;
 		}
 		setConfirmOff( false );
+		setConfirmTwoStep( false );
 		setFeatureError( null );
 		try {
 			const result = await save( {
@@ -202,6 +217,44 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 			setFeatureError( e );
 		}
 		passwordlessRef.current?.focus();
+	};
+
+	// Two-step login saves as soon as it is switched. Turning it on next to
+	// another two-step plugin asks first; turning it off never does.
+	const switchTwoStep = async ( next ) => {
+		if ( saving ) {
+			return;
+		}
+		setConfirmOff( false );
+		setConfirmTwoStep( false );
+		setFeatureError( null );
+		try {
+			const result = await save( {
+				features: { two_step: next },
+			} );
+			finish( result );
+			announce(
+				next
+					? __( 'Two-step login turned on', 'happyaccess' )
+					: __( 'Two-step login turned off', 'happyaccess' )
+			);
+		} catch ( e ) {
+			setFeatureError( e );
+		}
+		twoStepRef.current?.focus();
+	};
+
+	const onTwoStepSwitch = ( next ) => {
+		if ( saving ) {
+			return;
+		}
+		if ( next && otherNames.length > 0 ) {
+			setConfirmOff( false );
+			setFeatureError( null );
+			setConfirmTwoStep( true );
+			return;
+		}
+		switchTwoStep( next );
 	};
 
 	const removeSecret = async () => {
@@ -356,6 +409,54 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 								aria-describedby={ `${ ids }-passwordless-desc` }
 							/>
 						</li>
+						<li className="ha-feature">
+							<span
+								className="ha-feature__icon"
+								aria-hidden="true"
+							>
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="2"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									focusable="false"
+								>
+									<rect
+										x="6"
+										y="2"
+										width="12"
+										height="20"
+										rx="2"
+									/>
+									<path d="m9 12 2 2 4-4" />
+								</svg>
+							</span>
+							<div className="ha-feature__text">
+								<div
+									className="ha-feature__name"
+									id={ `${ ids }-twostep-name` }
+								>
+									{ __( 'Two-step login', 'happyaccess' ) }
+								</div>
+								<div id={ `${ ids }-twostep-desc` }>
+									{ __(
+										'Ask for a second step after the password: an app code, an email code or a backup code.',
+										'happyaccess'
+									) }
+								</div>
+							</div>
+							<Switch
+								ref={ twoStepRef }
+								checked={ twoStepOn }
+								onChange={ onTwoStepSwitch }
+								aria-labelledby={ `${ ids }-twostep-name` }
+								aria-describedby={ `${ ids }-twostep-desc` }
+							/>
+						</li>
 					</ul>
 					{ confirmOff && (
 						<div className="ha-card__confirm">
@@ -373,6 +474,23 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 									'Turn off support access? Every current pass ends now.',
 									'happyaccess'
 								) }
+							</InlineConfirm>
+						</div>
+					) }
+					{ confirmTwoStep && (
+						<div className="ha-card__confirm ha-card__confirm--question">
+							<InlineConfirm
+								keepLabel={ __( 'Cancel', 'happyaccess' ) }
+								doLabel={ __( 'Turn on', 'happyaccess' ) }
+								danger={ false }
+								busy={ saving }
+								onKeep={ () => {
+									setConfirmTwoStep( false );
+									twoStepRef.current?.focus();
+								} }
+								onConfirm={ () => switchTwoStep( true ) }
+							>
+								{ otherPluginsQuestion( otherNames ) }
 							</InlineConfirm>
 						</div>
 					) }

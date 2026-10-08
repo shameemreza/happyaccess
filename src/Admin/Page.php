@@ -276,6 +276,7 @@ final class Page {
 			'loginReady'     => true,
 			'woocommerce'    => class_exists( 'WooCommerce' ),
 			'otherTwoFactor' => OtherTwoFactor::plugin_active(),
+			'otherTwoStep'   => OtherTwoFactor::active_plugins(),
 		);
 	}
 
