@@ -79,7 +79,7 @@ final class Forms {
 		} else {
 			// The checkout block's Log in link sends shoppers to My Account with a redirect_to back to checkout.
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only; the value is validated before it is used.
-			$redirect = LoginSteps::valid_redirect( isset( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ? wp_unslash( $_GET['redirect_to'] ) : '' );
+			$redirect = LoginSteps::valid_redirect( isset( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ? esc_url_raw( wp_unslash( $_GET['redirect_to'] ) ) : '' );
 			if ( '' === $redirect && function_exists( 'wc_get_page_permalink' ) ) {
 				$redirect = (string) wc_get_page_permalink( 'myaccount' );
 			}
@@ -110,7 +110,7 @@ final class Forms {
 	 * @return string
 	 */
 	private static function current_url() {
-		$uri  = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
 		$home = wp_parse_url( home_url() );
 		if ( '' === $uri || ! is_array( $home ) || empty( $home['host'] ) ) {
 			return '';
