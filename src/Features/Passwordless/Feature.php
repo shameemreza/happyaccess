@@ -32,5 +32,8 @@ final class Feature {
 
 		LoginSteps::register();
 		RolePolicy::register();
+		Forms::register();
+		Shortcode::register();
+		RestController::register();
 	}
 }

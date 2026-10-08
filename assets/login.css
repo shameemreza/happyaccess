@@ -1,0 +1,56 @@
+/* HappyAccess inline login with an emailed code. Fonts and buttons come from the theme. */
+.happyaccess-pl {
+	margin-block: 1em 0;
+}
+
+.happyaccess-pl [hidden] {
+	display: none;
+}
+
+.happyaccess-pl__panel {
+	margin-block-start: 1em;
+	padding: 1em;
+	border: 1px solid rgba(127, 127, 127, 0.4);
+	border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+	border-radius: 4px;
+}
+
+.happyaccess-pl__field label {
+	display: block;
+	margin-block-end: 0.25em;
+}
+
+.happyaccess-pl__field input {
+	box-sizing: border-box;
+	inline-size: 100%;
+	max-inline-size: 100%;
+}
+
+.happyaccess-pl__panel p {
+	margin-block: 0 1em;
+}
+
+.happyaccess-pl__panel p:last-child {
+	margin-block-end: 0;
+}
+
+.happyaccess-pl__message:empty {
+	display: none;
+}
+
+.happyaccess-pl__message {
+	margin-block-start: 1em;
+}
+
+.happyaccess-pl__message.is-error {
+	font-weight: 600;
+}
+
+.happyaccess-pl__message:focus {
+	outline: 2px solid currentColor;
+	outline-offset: 2px;
+}
+
+.happyaccess-pl[aria-busy="true"] button {
+	cursor: progress;
+}
