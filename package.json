@@ -5,8 +5,8 @@
 	"description": "HappyAccess admin app",
 	"license": "GPL-2.0-or-later",
 	"scripts": {
-		"build": "wp-scripts build admin-app/src/index.js --output-path=build",
-		"start": "wp-scripts start admin-app/src/index.js --output-path=build",
+		"build": "wp-scripts build admin-app/src/index.js blocks=./admin-app/src/blocks/login/index.js --output-path=build",
+		"start": "wp-scripts start admin-app/src/index.js blocks=./admin-app/src/blocks/login/index.js --output-path=build",
 		"test:js": "wp-scripts test-unit-js admin-app",
 		"lint:js": "wp-scripts lint-js admin-app/src",
 		"lint:css": "wp-scripts lint-style 'admin-app/src/**/*.scss'"

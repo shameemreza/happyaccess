@@ -1,0 +1,32 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "happyaccess/login",
+	"title": "HappyAccess Login",
+	"category": "widgets",
+	"icon": "unlock",
+	"description": "Let visitors log in with a code emailed to them. Logged-in visitors see nothing.",
+	"keywords": [ "login", "passwordless", "code" ],
+	"textdomain": "happyaccess",
+	"attributes": {
+		"redirectTo": {
+			"type": "string",
+			"default": ""
+		},
+		"toggleStyle": {
+			"type": "string",
+			"enum": [ "", "link", "button" ],
+			"default": ""
+		}
+	},
+	"supports": {
+		"spacing": {
+			"margin": true,
+			"padding": true
+		},
+		"align": [ "wide", "full" ]
+	},
+	"render": "file:./render.php",
+	"editorScript": "file:../../build/blocks.js",
+	"editorStyle": "file:../../assets/login.css"
+}
