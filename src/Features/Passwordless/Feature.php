@@ -31,5 +31,6 @@ final class Feature {
 		}
 
 		LoginSteps::register();
+		RolePolicy::register();
 	}
 }

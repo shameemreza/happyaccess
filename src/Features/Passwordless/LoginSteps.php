@@ -495,7 +495,7 @@ final class LoginSteps {
 	 * @param string $url Target from the request.
 	 * @return string
 	 */
-	private static function valid_redirect( $url ) {
+	public static function valid_redirect( $url ) {
 		if ( ! is_string( $url ) || '' === trim( $url ) ) {
 			return '';
 		}
