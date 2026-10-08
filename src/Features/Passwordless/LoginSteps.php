@@ -127,7 +127,7 @@ final class LoginSteps {
 		$redirect = self::valid_redirect( '' !== self::text( $post, 'redirect_to' ) ? self::text( $post, 'redirect_to' ) : self::text( $get, 'redirect_to' ) );
 
 		if ( ! self::db_ready() ) {
-			return self::request_screen( $redirect, new \WP_Error( 'updating', self::updating_text() ) );
+			return self::request_screen( $redirect, self::screen_error( self::updating_error() ) );
 		}
 
 		if ( 'POST' !== strtoupper( (string) $method ) ) {
@@ -138,14 +138,38 @@ final class LoginSteps {
 			return self::request_screen( $redirect, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
-		$typed = self::text( $post, 'log' );
+		$result = self::request_flow( self::text( $post, 'log' ) );
+		if ( is_wp_error( $result ) ) {
+			return self::request_screen( $redirect, self::screen_error( $result ) );
+		}
+
+		return array(
+			'type' => 'redirect',
+			'url'  => Router::url( 'verify', '' !== $redirect ? array( 'redirect_to' => $redirect ) : array() ),
+		);
+	}
+
+	/**
+	 * The request rules both the request screen and the REST route follow,
+	 * after their own nonce or header check. Every account, missing or not,
+	 * gets the same result and the same cookie.
+	 *
+	 * @param string $typed Email or username as typed.
+	 * @return array|\WP_Error message and expires_in, or an error coded updating, empty or locked. Error messages are plain text.
+	 */
+	public static function request_flow( $typed ) {
+		if ( ! self::db_ready() ) {
+			return self::updating_error();
+		}
+
+		$typed = is_string( $typed ) ? trim( $typed ) : '';
 		if ( '' === $typed ) {
-			return self::request_screen( $redirect, new \WP_Error( 'empty', esc_html__( 'Enter your email or username.', 'happyaccess' ) ) );
+			return new \WP_Error( 'empty', __( 'Enter your email or username.', 'happyaccess' ) );
 		}
 
 		$wait = RateLimiter::attempt( self::REQUEST_ACTION, 'ip', RateLimiter::ip_subject(), self::IP_REQUEST_LIMIT, HOUR_IN_SECONDS, HOUR_IN_SECONDS );
 		if ( $wait > 0 ) {
-			return self::request_screen( $redirect, self::locked_error( $wait ) );
+			return self::locked_error( $wait );
 		}
 
 		// A real account is keyed on its id, so its username and email share one limit. A missing one is keyed on what was typed, so it is limited the same way.
@@ -170,8 +194,8 @@ final class LoginSteps {
 		}
 
 		return array(
-			'type' => 'redirect',
-			'url'  => Router::url( 'verify', '' !== $redirect ? array( 'redirect_to' => $redirect ) : array() ),
+			'message'    => self::neutral_text(),
+			'expires_in' => self::lifetime(),
 		);
 	}
 
@@ -201,7 +225,7 @@ final class LoginSteps {
 		$redirect = self::valid_redirect( '' !== self::text( $post, 'redirect_to' ) ? self::text( $post, 'redirect_to' ) : self::text( $get, 'redirect_to' ) );
 
 		if ( ! self::db_ready() ) {
-			return self::verify_screen( $redirect, new \WP_Error( 'updating', self::updating_text() ) );
+			return self::verify_screen( $redirect, self::screen_error( self::updating_error() ) );
 		}
 
 		if ( ! $post_method ) {
@@ -212,13 +236,38 @@ final class LoginSteps {
 			return self::verify_screen( $redirect, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
-		$wait = self::ip_wait( self::CODE_ACTION );
-		if ( $wait > 0 ) {
-			return self::verify_screen( $redirect, self::locked_error( $wait ) );
+		$result = self::verify_flow( self::request_key( $cookies ), self::text( $post, 'pwd' ), ! empty( $post['rememberme'] ), $redirect );
+		if ( is_wp_error( $result ) ) {
+			return self::verify_screen( $redirect, self::screen_error( $result ) );
 		}
 
-		$request_key = isset( $cookies[ self::COOKIE ] ) && is_string( $cookies[ self::COOKIE ] ) ? substr( trim( $cookies[ self::COOKIE ] ), 0, 128 ) : '';
-		$result      = Requests::verify_code( $request_key, self::text( $post, 'pwd' ) );
+		return array(
+			'type' => 'redirect',
+			'url'  => $result['redirect'],
+		);
+	}
+
+	/**
+	 * The code rules both the code screen and the REST route follow, after
+	 * their own nonce or header check. On success the user is logged in.
+	 *
+	 * @param string $request_key Request key from the browser cookie, or empty.
+	 * @param string $code        Typed code.
+	 * @param bool   $remember    Whether to keep the session.
+	 * @param string $redirect    Redirect target from the request, validated here.
+	 * @return array|\WP_Error redirect, or an error coded updating, locked or happyaccess_invalid_code. Error messages are plain text.
+	 */
+	public static function verify_flow( $request_key, $code, $remember, $redirect ) {
+		if ( ! self::db_ready() ) {
+			return self::updating_error();
+		}
+
+		$wait = self::ip_wait( self::CODE_ACTION );
+		if ( $wait > 0 ) {
+			return self::locked_error( $wait );
+		}
+
+		$result = Requests::verify_code( (string) $request_key, is_string( $code ) ? $code : '' );
 		if ( is_wp_error( $result ) ) {
 			if ( 'happyaccess_code_locked' === $result->get_error_code() ) {
 				AuditLog::add( 'passwordless_locked', self::log_args( 0, __( 'Login code cancelled after too many wrong tries', 'happyaccess' ), array( 'reason' => 'attempts' ) ) );
@@ -226,10 +275,20 @@ final class LoginSteps {
 				AuditLog::add( 'passwordless_failed', self::log_args( 0, __( 'Login code did not work', 'happyaccess' ), array( 'reason' => 'invalid_code' ) ) );
 			}
 			// One message and one code for every failure, so the fifth wrong code doesn't show that the account exists.
-			return self::verify_screen( $redirect, new \WP_Error( 'happyaccess_invalid_code', esc_html__( 'That code is not right or has expired. Ask for a new code.', 'happyaccess' ) ) );
+			return new \WP_Error( 'happyaccess_invalid_code', __( 'That code is not right or has expired. Ask for a new code.', 'happyaccess' ) );
 		}
 
-		return self::log_in( $result, 'code', ! empty( $post['rememberme'] ), $redirect );
+		return array( 'redirect' => self::log_in( $result, 'code', (bool) $remember, self::valid_redirect( $redirect ) ) );
+	}
+
+	/**
+	 * The request key from the browser's cookies, or an empty string.
+	 *
+	 * @param array $cookies Unslashed $_COOKIE.
+	 * @return string
+	 */
+	public static function request_key( array $cookies ) {
+		return isset( $cookies[ self::COOKIE ] ) && is_string( $cookies[ self::COOKIE ] ) ? substr( trim( $cookies[ self::COOKIE ] ), 0, 128 ) : '';
 	}
 
 	/**
@@ -243,7 +302,7 @@ final class LoginSteps {
 	 */
 	private static function handle_link( $post_method, $key, array $post, array $cookies ) {
 		if ( ! self::db_ready() ) {
-			return self::link_error( new \WP_Error( 'updating', self::updating_text() ) );
+			return self::link_error( self::screen_error( self::updating_error() ) );
 		}
 
 		if ( ! $post_method ) {
@@ -271,7 +330,7 @@ final class LoginSteps {
 
 		$wait = self::ip_wait( self::LINK_ACTION );
 		if ( $wait > 0 ) {
-			return self::link_error( self::locked_error( $wait ) );
+			return self::link_error( self::screen_error( self::locked_error( $wait ) ) );
 		}
 
 		$result = Requests::consume_link( $key );
@@ -280,7 +339,10 @@ final class LoginSteps {
 			return self::link_error();
 		}
 
-		return self::log_in( $result, 'link', false, '' );
+		return array(
+			'type' => 'redirect',
+			'url'  => self::log_in( $result, 'link', false, '' ),
+		);
 	}
 
 	/**
@@ -292,7 +354,7 @@ final class LoginSteps {
 	 * @param string   $method   code or link.
 	 * @param bool     $remember Whether to keep the session.
 	 * @param string   $redirect Valid redirect target from the request screen, or empty.
-	 * @return array Redirect response.
+	 * @return string Where to send the user.
 	 */
 	private static function log_in( \WP_User $user, $method, $remember, $redirect ) {
 		wp_set_auth_cookie( $user->ID, $remember );
@@ -308,10 +370,7 @@ final class LoginSteps {
 
 		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
 
-		return array(
-			'type' => 'redirect',
-			'url'  => self::destination( $user, $redirect ),
-		);
+		return self::destination( $user, $redirect );
 	}
 
 	/**
@@ -516,7 +575,7 @@ final class LoginSteps {
 	 *
 	 * @return bool
 	 */
-	private static function db_ready() {
+	public static function db_ready() {
 		return get_option( 'happyaccess_db_version' ) === Installer::DB_VERSION;
 	}
 
@@ -577,33 +636,42 @@ final class LoginSteps {
 		$minutes = max( 1, (int) ceil( $wait / MINUTE_IN_SECONDS ) );
 		return new \WP_Error(
 			'locked',
-			esc_html(
-				sprintf(
-					/* translators: %d: minutes. */
-					_n( 'Too many attempts. Try again in %d minute.', 'Too many attempts. Try again in %d minutes.', $minutes, 'happyaccess' ),
-					$minutes
-				)
+			sprintf(
+				/* translators: %d: minutes. */
+				_n( 'Too many attempts. Try again in %d minute.', 'Too many attempts. Try again in %d minutes.', $minutes, 'happyaccess' ),
+				$minutes
 			)
 		);
 	}
 
 	/**
-	 * Text for the migration gate.
+	 * The migration gate error, in plain text.
 	 *
-	 * @return string
+	 * @return \WP_Error
 	 */
-	private static function updating_text() {
-		return esc_html__( 'Login is updating. Try again in a minute.', 'happyaccess' );
+	private static function updating_error() {
+		return new \WP_Error( 'updating', __( 'Login is updating. Try again in a minute.', 'happyaccess' ) );
 	}
 
 	/**
-	 * The one message every request gets, shown on the verify screen.
+	 * A flow error made safe for the login screen, which prints error
+	 * messages as HTML.
 	 *
-	 * @return string Markup for the login screen message area.
+	 * @param \WP_Error $error Error with a plain text message.
+	 * @return \WP_Error
 	 */
-	private static function neutral_message() {
+	private static function screen_error( \WP_Error $error ) {
+		return new \WP_Error( $error->get_error_code(), esc_html( $error->get_error_message() ) );
+	}
+
+	/**
+	 * The one message every request gets, in plain text.
+	 *
+	 * @return string
+	 */
+	private static function neutral_text() {
 		$minutes = max( 1, (int) ceil( self::lifetime() / MINUTE_IN_SECONDS ) );
-		$text    = sprintf(
+		return sprintf(
 			/* translators: %d: minutes until the login code expires. */
 			_n(
 				'If that account exists, we sent a login code to its email address. It expires in %d minute.',
@@ -613,7 +681,15 @@ final class LoginSteps {
 			),
 			$minutes
 		);
-		return '<p class="message">' . esc_html( $text ) . '</p>';
+	}
+
+	/**
+	 * The neutral message, shown on the verify screen.
+	 *
+	 * @return string Markup for the login screen message area.
+	 */
+	private static function neutral_message() {
+		return '<p class="message">' . esc_html( self::neutral_text() ) . '</p>';
 	}
 
 	/**
