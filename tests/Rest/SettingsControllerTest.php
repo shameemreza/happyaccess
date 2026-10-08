@@ -510,6 +510,14 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( 'link', $read->get_data()['passwordless']['toggle_style'] );
 
 		$response = $this->request( 'POST', '/settings', array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );
+		$this->assertSame( 'button', $response->get_data()['passwordless']['toggle_style'] );
+
+		$response = $this->request( 'POST', '/settings', array( 'passwordless' => array( 'toggle_style' => 'huge' ) ) );
+		$this->assertSame( 'link', $response->get_data()['passwordless']['toggle_style'] );
+	}
+
 	public function test_save_takes_the_two_step_group_with_its_role_map() {
 		$response = $this->request(
 			'POST',
@@ -541,14 +549,6 @@ class SettingsControllerTest extends RestTestCase {
 		$response = $this->request( 'POST', '/settings', array( 'two_step' => array( 'grace_days' => array( 5 ) ) ) );
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame( 7, Settings::get( 'two_step.grace_days' ) );
-	}
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );
-		$this->assertSame( 'button', $response->get_data()['passwordless']['toggle_style'] );
-
-		$response = $this->request( 'POST', '/settings', array( 'passwordless' => array( 'toggle_style' => 'huge' ) ) );
-		$this->assertSame( 'link', $response->get_data()['passwordless']['toggle_style'] );
 	}
 
 	public function provide_bad_passwordless_groups() {

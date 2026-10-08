@@ -40,6 +40,44 @@ class UserStateTest extends WP_UnitTestCase {
 		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE event_type = %s AND user_id = %d", $event, $this->user ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
+	/**
+	 * A stored key that is not the one in use, as when saving the key failed.
+	 *
+	 * @return string
+	 */
+	public function other_site_key() {
+		return base64_encode( str_repeat( 'x', 32 ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- A stored key value.
+	}
+
+	/**
+	 * Makes a parallel request write the state meta just before this
+	 * request's first write of it lands, the way two logins at once would.
+	 *
+	 * @param array $parallel State the parallel request saves.
+	 * @param int   $times    How many writes to get in front of.
+	 * @return callable The filter, to remove later.
+	 */
+	private function race_state_writes( array $parallel, $times = 1 ) {
+		global $wpdb;
+		$user  = $this->user;
+		$left  = $times;
+		$race  = static function ( $query ) use ( $user, $parallel, &$left, &$race, $wpdb ) {
+			if ( $left < 1 || 0 !== stripos( ltrim( $query ), 'UPDATE' ) || false === strpos( $query, $wpdb->usermeta ) || false === strpos( $query, 'grace_' ) ) {
+				return $query;
+			}
+			--$left;
+			remove_filter( 'query', $race );
+			$parallel['tick'] = $left;
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->usermeta} SET meta_value = %s WHERE user_id = %d AND meta_key = %s", maybe_serialize( $parallel ), $user, UserState::META_STATE ) );
+			if ( $left > 0 ) {
+				add_filter( 'query', $race );
+			}
+			return $query;
+		};
+		add_filter( 'query', $race );
+		return $race;
+	}
+
 	public function test_a_new_user_has_nothing_enabled() {
 		$this->assertFalse( UserState::is_enabled( $this->user ) );
 		$this->assertSame( array(), UserState::methods( $this->user ) );
@@ -54,7 +92,7 @@ class UserStateTest extends WP_UnitTestCase {
 		$stored = get_user_meta( $this->user, '_happyaccess_totp', true );
 		$this->assertStringNotContainsString( $secret, wp_json_encode( $stored ) );
 		$this->assertStringNotContainsString( $secret, maybe_serialize( $stored ) );
-		$this->assertSame( $secret, Secrets::decrypt( $stored['secret'] ) );
+		$this->assertSame( $secret, Secrets::decrypt_network( $stored['secret'] ) );
 		$this->assertSame( 0, $stored['last_step'] );
 
 		$this->assertSame( $secret, UserState::totp_secret( $this->user ) );
@@ -211,5 +249,110 @@ class UserStateTest extends WP_UnitTestCase {
 			$this->assertSame( 'two_step', $rows[0]['feature'] );
 			$this->assertSame( array( 'method' => $method ), json_decode( $rows[0]['metadata'], true ) );
 		}
+	}
+
+	public function test_enable_app_refuses_when_the_site_key_is_not_saved() {
+		Secrets::key();
+		add_filter( 'pre_option_' . Secrets::OPTION, array( $this, 'other_site_key' ) );
+		$result = UserState::enable_app( $this->user, Totp::new_secret() );
+		remove_filter( 'pre_option_' . Secrets::OPTION, array( $this, 'other_site_key' ) );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_no_site_key', $result->get_error_code() );
+		$this->assertFalse( metadata_exists( 'user', $this->user, '_happyaccess_totp' ) );
+		$this->assertFalse( UserState::app_enabled( $this->user ) );
+		$this->assertCount( 0, $this->logged( 'twostep_enabled' ) );
+	}
+
+	public function test_enable_app_refuses_a_bad_user_or_secret() {
+		$this->assertWPError( UserState::enable_app( 0, Totp::new_secret() ) );
+		$this->assertWPError( UserState::enable_app( $this->user, '' ) );
+		$this->assertTrue( UserState::enable_app( $this->user, Totp::new_secret() ) );
+	}
+
+	public function test_a_grace_login_counted_by_a_parallel_request_is_not_lost() {
+		UserState::start_grace( $this->user, 1790000000 );
+		$race = $this->race_state_writes(
+			array(
+				'grace_started_at'  => 1790000000,
+				'grace_logins_used' => 1,
+			)
+		);
+
+		$count = UserState::count_grace_login( $this->user );
+		remove_filter( 'query', $race );
+
+		$this->assertSame( 2, $count );
+		$this->assertSame( 2, UserState::grace_logins_used( $this->user ) );
+	}
+
+	public function test_a_state_change_keeps_what_a_parallel_request_saved() {
+		UserState::start_grace( $this->user, 1790000000 );
+		$race = $this->race_state_writes(
+			array(
+				'grace_started_at'  => 1790000000,
+				'grace_logins_used' => 1,
+			)
+		);
+
+		UserState::enable_email( $this->user );
+		remove_filter( 'query', $race );
+
+		$this->assertTrue( UserState::email_enabled( $this->user ) );
+		$this->assertSame( 1, UserState::grace_logins_used( $this->user ) );
+		$this->assertSame( 1790000000, UserState::grace_started_at( $this->user ) );
+	}
+
+	public function test_the_state_write_gives_up_after_three_tries() {
+		global $wpdb;
+		UserState::start_grace( $this->user, 1790000000 );
+		$race = $this->race_state_writes(
+			array(
+				'grace_started_at'  => 1790000000,
+				'grace_logins_used' => 5,
+			),
+			10
+		);
+
+		$tries = 0;
+		$count = static function ( $query ) use ( &$tries, $wpdb ) {
+			if ( 0 === stripos( ltrim( $query ), 'UPDATE' ) && false !== strpos( $query, $wpdb->usermeta ) && false !== strpos( $query, 'BINARY' ) ) {
+				++$tries;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count, 20 );
+		UserState::count_grace_login( $this->user );
+		remove_filter( 'query', $count, 20 );
+		remove_filter( 'query', $race );
+
+		$this->assertSame( 3, $tries );
+	}
+
+	public function test_a_step_used_by_a_parallel_request_is_refused() {
+		global $wpdb;
+		$secret = Totp::new_secret();
+		UserState::enable_app( $this->user, $secret );
+		$user = $this->user;
+
+		// While this request checks the code, a parallel request uses the same step and saves it first.
+		$race = static function ( $query ) use ( $user, $wpdb, &$race ) {
+			if ( 0 !== stripos( ltrim( $query ), 'UPDATE' ) || false === strpos( $query, $wpdb->usermeta ) || false === strpos( $query, 'last_step' ) ) {
+				return $query;
+			}
+			remove_filter( 'query', $race );
+			$stored              = get_user_meta( $user, UserState::META_TOTP, true );
+			$stored['last_step'] = 500;
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->usermeta} SET meta_value = %s WHERE user_id = %d AND meta_key = %s", maybe_serialize( $stored ), $user, UserState::META_TOTP ) );
+			return $query;
+		};
+		add_filter( 'query', $race );
+
+		$this->assertFalse( UserState::consume_step( $this->user, 500 ) );
+		remove_filter( 'query', $race );
+
+		$this->assertSame( 500, UserState::last_step( $this->user ) );
+		$this->assertFalse( UserState::consume_step( $this->user, 500 ) );
+		$this->assertSame( $secret, UserState::totp_secret( $this->user ) );
 	}
 }

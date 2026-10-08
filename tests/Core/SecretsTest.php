@@ -134,4 +134,28 @@ class SecretsTest extends WP_UnitTestCase {
 		$this->assertFalse( Secrets::is_persisted() );
 		Secrets::reset_cache();
 	}
+
+	public function test_network_encrypt_round_trip() {
+		$payload = Secrets::encrypt_network( 'JBSWY3DPEHPK3PXP' );
+		$this->assertSame( 'JBSWY3DPEHPK3PXP', Secrets::decrypt_network( $payload ) );
+		$this->assertNull( Secrets::decrypt_network( 'zz:abc' ) );
+		$this->assertNull( Secrets::decrypt_network( '' ) );
+	}
+
+	public function test_on_a_single_site_the_network_key_is_the_site_key() {
+		if ( is_multisite() ) {
+			$this->markTestSkipped( 'Single site only.' );
+		}
+		$this->assertSame( 'x', Secrets::decrypt( Secrets::encrypt_network( 'x' ) ) );
+		$this->assertSame( 'x', Secrets::decrypt_network( Secrets::encrypt( 'x' ) ) );
+	}
+
+	public function test_is_network_persisted() {
+		Secrets::reset_cache();
+		Secrets::key();
+		$this->assertTrue( Secrets::is_network_persisted() );
+		update_option( Secrets::OPTION, 'garbage' );
+		$this->assertFalse( Secrets::is_network_persisted() );
+		Secrets::reset_cache();
+	}
 }

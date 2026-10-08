@@ -112,6 +112,44 @@ final class Secrets {
 	}
 
 	/**
+	 * Raw 32-byte network key: the main site's key on multisite, created there
+	 * on first use, and the site key on a single site. Used for secrets that
+	 * belong to a person rather than a site, such as the two-step app secret
+	 * kept in network-wide user meta.
+	 *
+	 * @return string
+	 */
+	public static function network_key() {
+		if ( ! is_multisite() || get_current_blog_id() === get_main_site_id() ) {
+			return self::key();
+		}
+		switch_to_blog( get_main_site_id() );
+		try {
+			return self::key();
+		} finally {
+			restore_current_blog();
+		}
+	}
+
+	/**
+	 * Whether the stored main site option holds the key that network_key()
+	 * returns. On a single site this is is_persisted().
+	 *
+	 * @return bool
+	 */
+	public static function is_network_persisted() {
+		if ( ! is_multisite() || get_current_blog_id() === get_main_site_id() ) {
+			return self::is_persisted();
+		}
+		switch_to_blog( get_main_site_id() );
+		try {
+			return self::is_persisted();
+		} finally {
+			restore_current_blog();
+		}
+	}
+
+	/**
 	 * Keyed SHA-256 hash as hex.
 	 *
 	 * @param string $value Value to hash.
@@ -141,10 +179,44 @@ final class Secrets {
 	 * @throws \RuntimeException When openssl cannot encrypt.
 	 */
 	public static function encrypt_with( $engine, $plain ) {
+		return self::seal( $engine, $plain, self::encryption_key( self::key() ) );
+	}
+
+	/**
+	 * Encrypts with the network key, so every site of a network can open it.
+	 *
+	 * @param string $plain Plain text.
+	 * @return string
+	 */
+	public static function encrypt_network( $plain ) {
+		return self::seal( function_exists( 'sodium_crypto_secretbox' ) ? 's1' : 'o1', $plain, self::encryption_key( self::network_key() ) );
+	}
+
+	/**
+	 * Decrypts a payload from encrypt_network(). Returns null when it can't
+	 * be opened.
+	 *
+	 * @param string $payload Payload.
+	 * @return string|null
+	 */
+	public static function decrypt_network( $payload ) {
+		return self::open( $payload, self::encryption_key( self::network_key() ) );
+	}
+
+	/**
+	 * Encrypts with a named engine and a cipher key.
+	 *
+	 * @param string $engine Engine id.
+	 * @param string $plain  Plain text.
+	 * @param string $key    32-byte cipher key.
+	 * @return string Engine-prefixed base64 payload.
+	 * @throws \InvalidArgumentException For an engine other than "s1" or "o1".
+	 * @throws \RuntimeException When openssl cannot encrypt.
+	 */
+	private static function seal( $engine, $plain, $key ) {
 		if ( 's1' !== $engine && 'o1' !== $engine ) {
 			throw new \InvalidArgumentException( 'HappyAccess does not know that encryption engine.' );
 		}
-		$key = self::encryption_key();
 		if ( 's1' === $engine ) {
 			$nonce = random_bytes( SODIUM_CRYPTO_SECRETBOX_NONCEBYTES );
 			return 's1:' . base64_encode( $nonce . sodium_crypto_secretbox( (string) $plain, $nonce, $key ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Cipher text transport.
@@ -165,6 +237,17 @@ final class Secrets {
 	 * @return string|null
 	 */
 	public static function decrypt( $payload ) {
+		return self::open( $payload, self::encryption_key( self::key() ) );
+	}
+
+	/**
+	 * Opens a payload with a cipher key. Null when it can't be opened.
+	 *
+	 * @param string $payload Payload.
+	 * @param string $key     32-byte cipher key.
+	 * @return string|null
+	 */
+	private static function open( $payload, $key ) {
 		if ( ! is_string( $payload ) || strlen( $payload ) < 4 || ':' !== $payload[2] ) {
 			return null;
 		}
@@ -173,7 +256,6 @@ final class Secrets {
 		if ( false === $raw ) {
 			return null;
 		}
-		$key = self::encryption_key();
 
 		if ( 's1' === $engine && function_exists( 'sodium_crypto_secretbox_open' ) ) {
 			$nonce_bytes = SODIUM_CRYPTO_SECRETBOX_NONCEBYTES;
@@ -196,11 +278,12 @@ final class Secrets {
 	}
 
 	/**
-	 * 32-byte cipher key derived from the site key and a wp-config salt.
+	 * 32-byte cipher key derived from a raw key and a wp-config salt.
 	 *
+	 * @param string $raw Raw site or network key.
 	 * @return string
 	 */
-	private static function encryption_key() {
-		return hash_hmac( 'sha256', 'happyaccess-encryption', wp_salt( 'secure_auth' ) . self::key(), true );
+	private static function encryption_key( $raw ) {
+		return hash_hmac( 'sha256', 'happyaccess-encryption', wp_salt( 'secure_auth' ) . $raw, true );
 	}
 }

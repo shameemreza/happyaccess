@@ -18,6 +18,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * - _happyaccess_twostep: the email method switch and the grace counters.
  * - _happyaccess_totp: the encrypted app secret and the last step used.
+ *   User meta is shared by every site of a network and two-step login
+ *   belongs to the person, so the secret uses the network key.
  * - _happyaccess_backup_codes: the hashes of the unused backup codes.
  *
  * The app is on when a secret is stored. Backup codes alone never turn
@@ -28,6 +30,11 @@ final class UserState {
 	const META_STATE  = '_happyaccess_twostep';
 	const META_TOTP   = '_happyaccess_totp';
 	const META_BACKUP = '_happyaccess_backup_codes';
+
+	/**
+	 * Tries of a compare-and-swap write to the state meta.
+	 */
+	const STATE_TRIES = 3;
 
 	/**
 	 * The enabled methods, from app, email and backup, in that order. Backup
@@ -96,14 +103,20 @@ final class UserState {
 	 * Turns the app method on with a secret, which is stored encrypted. The
 	 * last used step starts at 0.
 	 *
+	 * Refused when the network key is not saved: a secret sealed with a key
+	 * held in memory only could not be opened on the next request.
+	 *
 	 * @param int    $user_id User id.
 	 * @param string $secret  Base32 secret from Totp::new_secret().
-	 * @return bool
+	 * @return true|\WP_Error
 	 */
 	public static function enable_app( $user_id, $secret ) {
 		$user_id = (int) $user_id;
 		if ( $user_id < 1 || ! is_string( $secret ) || '' === $secret ) {
-			return false;
+			return new \WP_Error( 'happyaccess_bad_request', __( 'The authenticator app could not be set up. Try again later.', 'happyaccess' ) );
+		}
+		if ( ! Secrets::is_network_persisted() ) {
+			return new \WP_Error( 'happyaccess_no_site_key', __( 'The authenticator app could not be set up. Try again later.', 'happyaccess' ) );
 		}
 
 		$was_on = self::app_enabled( $user_id );
@@ -112,7 +125,7 @@ final class UserState {
 			self::META_TOTP,
 			wp_slash(
 				array(
-					'secret'    => Secrets::encrypt( $secret ),
+					'secret'    => Secrets::encrypt_network( $secret ),
 					'last_step' => 0,
 				)
 			)
@@ -201,7 +214,7 @@ final class UserState {
 		if ( ! is_array( $totp ) || empty( $totp['secret'] ) ) {
 			return null;
 		}
-		$secret = Secrets::decrypt( (string) $totp['secret'] );
+		$secret = Secrets::decrypt_network( (string) $totp['secret'] );
 		return ( null === $secret || '' === $secret ) ? null : $secret;
 	}
 
@@ -271,19 +284,37 @@ final class UserState {
 		if ( self::grace_started_at( $user_id ) > 0 ) {
 			return;
 		}
-		self::save_state( (int) $user_id, array( 'grace_started_at' => null === $now ? Clock::now() : (int) $now ) );
+		$started = null === $now ? Clock::now() : (int) $now;
+		self::change_state(
+			(int) $user_id,
+			static function ( array $state ) use ( $started ) {
+				if ( empty( $state['grace_started_at'] ) ) {
+					$state['grace_started_at'] = $started;
+				}
+				return $state;
+			}
+		);
 	}
 
 	/**
 	 * Counts one login made during the grace period.
 	 *
+	 * When the write keeps losing to other requests, the stored count plus
+	 * this login is returned, so the caller never sees fewer logins than
+	 * were made.
+	 *
 	 * @param int $user_id User id.
 	 * @return int The count after this login.
 	 */
 	public static function count_grace_login( $user_id ) {
-		$used = self::grace_logins_used( $user_id ) + 1;
-		self::save_state( (int) $user_id, array( 'grace_logins_used' => $used ) );
-		return $used;
+		$state = self::change_state(
+			(int) $user_id,
+			static function ( array $state ) {
+				$state['grace_logins_used'] = ( isset( $state['grace_logins_used'] ) ? (int) $state['grace_logins_used'] : 0 ) + 1;
+				return $state;
+			}
+		);
+		return null === $state ? self::grace_logins_used( $user_id ) + 1 : (int) $state['grace_logins_used'];
 	}
 
 	/**
@@ -344,7 +375,42 @@ final class UserState {
 	 * @return void
 	 */
 	private static function save_state( $user_id, array $changes ) {
-		update_user_meta( $user_id, self::META_STATE, wp_slash( array_merge( self::state( $user_id ), $changes ) ) );
+		self::change_state(
+			$user_id,
+			static function ( array $state ) use ( $changes ) {
+				return array_merge( $state, $changes );
+			}
+		);
+	}
+
+	/**
+	 * Applies a change to the state meta with a compare-and-swap write, so a
+	 * parallel request's change is never lost. A write that loses the race
+	 * reads the new value and tries again, three tries in all.
+	 *
+	 * @param int      $user_id User id.
+	 * @param callable $change  Takes the stored state array, returns the new one.
+	 * @return array|null The state saved, or null when every try lost.
+	 */
+	private static function change_state( $user_id, $change ) {
+		for ( $try = 0; $try < self::STATE_TRIES; $try++ ) {
+			$row = self::read_raw( $user_id, self::META_STATE );
+			if ( null === $row ) {
+				$state = call_user_func( $change, array() );
+				// Unique, so a row a parallel request just added is not doubled; the next try swaps over it.
+				if ( add_user_meta( $user_id, self::META_STATE, wp_slash( $state ), true ) ) {
+					return $state;
+				}
+				continue;
+			}
+
+			$stored = maybe_unserialize( $row['raw'] );
+			$state  = call_user_func( $change, is_array( $stored ) ? $stored : array() );
+			if ( maybe_serialize( $state ) === $row['raw'] || self::swap_raw( $user_id, $row, $state ) ) {
+				return $state;
+			}
+		}
+		return null;
 	}
 
 	/**
