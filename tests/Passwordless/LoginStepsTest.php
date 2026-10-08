@@ -349,6 +349,28 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		$this->assertNotNull( $user );
 	}
 
+	public function test_the_email_to_an_email_only_account_does_not_say_the_password_still_works() {
+		remove_filter( 'pre_wp_mail', array( $this, 'catch_mail' ), 10 );
+		reset_phpmailer_instance();
+		Settings::update( array( 'passwordless' => array( 'role_policy' => array( 'subscriber' => 'email_only' ) ) ) );
+		self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_email' => 'emailonly@example.org',
+			)
+		);
+		$this->post_request( 'emailonly@example.org' );
+		LoginSteps::flush_queue();
+
+		$mailer = tests_retrieve_phpmailer_instance();
+		$sent   = $mailer->get_sent();
+		$this->assertNotFalse( $sent );
+		$this->assertStringContainsString( "If you didn't ask for this, you can ignore this email.", $sent->body );
+		$this->assertStringNotContainsString( 'Your password still works.', $sent->body );
+		$this->assertStringContainsString( "If you didn't ask for this, you can ignore this email.", $mailer->AltBody ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+		$this->assertStringNotContainsString( 'Your password still works.', $mailer->AltBody ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+	}
+
 	public function test_queueing_a_mail_hooks_the_send_to_shutdown() {
 		self::factory()->user->create( array( 'user_email' => 'real@example.org' ) );
 		$this->post_request( 'real@example.org' );

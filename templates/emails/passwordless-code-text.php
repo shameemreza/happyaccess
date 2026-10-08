@@ -4,11 +4,12 @@
  *
  * @package HappyAccess
  *
- * @var string $site_name Site name.
- * @var string $code      Login code, already formatted.
- * @var string $link      Login link.
- * @var int    $minutes   Minutes until the code and link expire.
- * @var string $ip        IP address that asked for the code.
+ * @var string $site_name      Site name.
+ * @var string $code           Login code, already formatted.
+ * @var string $link           Login link.
+ * @var int    $minutes        Minutes until the code and link expire.
+ * @var string $ip             IP address that asked for the code.
+ * @var bool   $password_works Whether the account's password still logs it in.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -35,7 +36,7 @@ $happyaccess_text_lines = array(
 		wp_strip_all_tags( $ip )
 	),
 	'',
-	__( "If you didn't ask for this, you can ignore this email. Your password still works.", 'happyaccess' ),
+	__( "If you didn't ask for this, you can ignore this email.", 'happyaccess' ) . ( ! empty( $password_works ) ? ' ' . __( 'Your password still works.', 'happyaccess' ) : '' ),
 );
 
 echo implode( "\n", $happyaccess_text_lines ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Plain-text part; each value is cleaned above.

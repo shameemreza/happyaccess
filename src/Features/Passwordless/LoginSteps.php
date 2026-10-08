@@ -451,6 +451,8 @@ final class LoginSteps {
 			'link_key'   => $made['link_key'],
 			'expires_at' => $made['expires_at'],
 			'ip'         => $ip,
+			// An email-only account must not be told its password still works.
+			'password'   => RolePolicy::password_works( $user ),
 		);
 		add_action( 'shutdown', array( __CLASS__, 'flush_queue' ) );
 	}
@@ -483,10 +485,11 @@ final class LoginSteps {
 				__( 'Your login code', 'happyaccess' ),
 				'passwordless-code',
 				array(
-					'code'    => Codes::format_code( $item['code'] ),
-					'link'    => Router::url( 'verify', array( 'k' => $item['link_key'] ) ),
-					'minutes' => $minutes,
-					'ip'      => $item['ip'],
+					'code'           => Codes::format_code( $item['code'] ),
+					'link'           => Router::url( 'verify', array( 'k' => $item['link_key'] ) ),
+					'minutes'        => $minutes,
+					'ip'             => $item['ip'],
+					'password_works' => $item['password'],
 				)
 			);
 		}

@@ -87,6 +87,17 @@ final class RolePolicy {
 	}
 
 	/**
+	 * Whether the user's password logs them in: the role is not email-only,
+	 * or the wp-config switch turned the policy off.
+	 *
+	 * @param \WP_User $user User.
+	 * @return bool
+	 */
+	public static function password_works( \WP_User $user ) {
+		return self::EMAIL_ONLY !== self::for_user( $user ) || self::password_login_allowed();
+	}
+
+	/**
 	 * Refuses a password login for an email-only account. A WP_User result
 	 * (the password was right) and an incorrect_password error (it was wrong)
 	 * both get the same refusal, so the message does not tell an attacker

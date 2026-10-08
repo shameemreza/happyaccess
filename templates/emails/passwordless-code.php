@@ -4,11 +4,12 @@
  *
  * @package HappyAccess
  *
- * @var string $site_name Site name.
- * @var string $code      Login code, already formatted.
- * @var string $link      Login link.
- * @var int    $minutes   Minutes until the code and link expire.
- * @var string $ip        IP address that asked for the code.
+ * @var string $site_name      Site name.
+ * @var string $code           Login code, already formatted.
+ * @var string $link           Login link.
+ * @var int    $minutes        Minutes until the code and link expire.
+ * @var string $ip             IP address that asked for the code.
+ * @var bool   $password_works Whether the account's password still logs it in.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -48,4 +49,4 @@ echo esc_html(
 );
 ?>
 </p>
-<p style="margin:0;color:#646970;"><?php esc_html_e( "If you didn't ask for this, you can ignore this email. Your password still works.", 'happyaccess' ); ?></p>
+<p style="margin:0;color:#646970;"><?php esc_html_e( "If you didn't ask for this, you can ignore this email.", 'happyaccess' ); ?><?php echo ! empty( $password_works ) ? ' ' . esc_html__( 'Your password still works.', 'happyaccess' ) : ''; ?></p>
