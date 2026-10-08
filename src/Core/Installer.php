@@ -291,6 +291,10 @@ final class Installer {
 		if ( self::carry_legacy_grant_state() ) {
 			$result['failed'] = true;
 		}
+		// After the carry, so a single-use pass it just put back in time is not closed here.
+		if ( self::close_legacy_expired() ) {
+			$result['failed'] = true;
+		}
 		self::migrate_options( $is_upgrade );
 		self::backfill_blog_ids();
 
@@ -571,6 +575,42 @@ final class Installer {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 			if ( ! empty( $data ) && false === $wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) ) ) {
 				$failed = true;
+			}
+		}
+
+		return $failed;
+	}
+
+	/**
+	 * Closes passes that expired under 1.0.6. 1.0.6 never set revoked_at on
+	 * expiry, so without this the first 1.1.0 cleanup would end each one again
+	 * and mail the owner about passes that ended weeks ago. Each row gets
+	 * revoked_at = expires_at and end_reason "expired", with no hook and no log
+	 * row. A temp user still linked to one stays for Grants::retry_orphans(),
+	 * which hands its posts over and sends nothing. Safe to run more than once.
+	 *
+	 * @return bool Whether any write failed.
+	 */
+	private static function close_legacy_expired() {
+		global $wpdb;
+		$table = self::table( 'tokens' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT id, user_id, expires_at, metadata FROM {$table} WHERE revoked_at IS NULL AND expires_at <= %s", Clock::mysql() ), ARRAY_A );
+		$failed = false;
+
+		foreach ( (array) $rows as $row ) {
+			$metadata               = empty( $row['metadata'] ) ? array() : json_decode( $row['metadata'], true );
+			$metadata               = is_array( $metadata ) ? $metadata : array();
+			$metadata['end_reason'] = 'expired';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+			$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET revoked_at = expires_at, metadata = %s WHERE id = %d AND revoked_at IS NULL", wp_json_encode( $metadata ), (int) $row['id'] ) );
+			if ( false === $changed ) {
+				$failed = true;
+				continue;
+			}
+			$user_id = (int) $row['user_id'];
+			if ( $user_id > 0 && false !== get_userdata( $user_id ) ) {
+				\WP_Session_Tokens::get_instance( $user_id )->destroy_all();
 			}
 		}
 

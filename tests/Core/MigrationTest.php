@@ -11,6 +11,7 @@ use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\Notifications;
 
 class MigrationTest extends WP_UnitTestCase {
 
@@ -801,5 +802,91 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertNotNull( $this->token( 'once-expired' )['revoked_at'] );
 		$this->assertNotNull( $this->token( 'once-unmarked' )['revoked_at'], 'Without the 1.0.6 mark, the revoke may have been the merchant\'s.' );
 		$this->assertNotNull( $this->token( 'once-gone' )['revoked_at'] );
+	}
+
+	public function test_passes_that_expired_under_106_are_closed_quietly() {
+		$owner = self::factory()->user->create(
+			array(
+				'role'       => 'administrator',
+				'user_email' => 'owner@example.com',
+			)
+		);
+		$ids   = array();
+		foreach ( array( 3, 9, 20 ) as $days ) {
+			$ids[ $days ] = $this->insert_legacy_token(
+				'old-' . $days,
+				array(
+					'created_by' => $owner,
+					'created_at' => Clock::mysql( 1790000000 - ( $days + 3 ) * DAY_IN_SECONDS ),
+					'expires_at' => Clock::mysql( 1790000000 - $days * DAY_IN_SECONDS ),
+					'metadata'   => wp_json_encode( array( 'note' => 'Case ' . $days ) ),
+				)
+			);
+		}
+		$current = $this->insert_legacy_token( 'still-running', array( 'created_by' => $owner ) );
+
+		Installer::migrate();
+		Grants::flush_cache();
+
+		foreach ( $ids as $days => $id ) {
+			$row = $this->token( 'old-' . $days );
+			$this->assertSame( $row['expires_at'], $row['revoked_at'], 'The pass ended when it expired.' );
+			$grant = Grants::get( $id );
+			$this->assertSame( 'expired', $grant['status'] );
+			$this->assertSame( 'Case ' . $days, $grant['label'] );
+			$this->assertSame( 'Case ' . $days, json_decode( $row['metadata'], true )['note'], 'The 1.0.6 metadata stays.' );
+		}
+		$this->assertNull( $this->token( 'still-running' )['revoked_at'] );
+		$this->assertSame( 'active', Grants::get( $current )['status'] );
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'grant_ended' ) )['total'], 'No new ended rows for passes that ended weeks ago.' );
+
+		Notifications::register();
+		$mails = array();
+		$catch = static function ( $short, $atts ) use ( &$mails ) {
+			$mails[] = $atts['subject'];
+			return true;
+		};
+		add_filter( 'pre_wp_mail', $catch, 10, 2 );
+		$ended = Grants::cleanup_expired();
+		remove_filter( 'pre_wp_mail', $catch, 10 );
+
+		$this->assertSame( 0, $ended );
+		$this->assertSame( array(), $mails );
+	}
+
+	public function test_a_temp_user_left_by_an_expired_106_pass_is_retired_with_its_posts_handed_over() {
+		$owner = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$user  = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$id    = $this->insert_legacy_token(
+			'old-linked',
+			array(
+				'created_by' => $owner,
+				'user_id'    => $user,
+				'expires_at' => Clock::mysql( 1790000000 - DAY_IN_SECONDS ),
+			)
+		);
+		update_user_meta( $user, 'happyaccess_temp_user', true );
+		update_user_meta( $user, 'happyaccess_token_id', $id );
+		$post = self::factory()->post->create(
+			array(
+				'post_author' => $user,
+				'post_status' => 'draft',
+			)
+		);
+
+		Installer::migrate();
+		$mails = array();
+		$catch = static function ( $short, $atts ) use ( &$mails ) {
+			$mails[] = $atts['subject'];
+			return true;
+		};
+		Notifications::register();
+		add_filter( 'pre_wp_mail', $catch, 10, 2 );
+		Grants::cleanup_expired();
+		remove_filter( 'pre_wp_mail', $catch, 10 );
+
+		$this->assertFalse( get_userdata( $user ) );
+		$this->assertSame( $owner, (int) get_post( $post )->post_author, 'Posts go to the owner, never deleted.' );
+		$this->assertSame( array(), $mails );
 	}
 }
