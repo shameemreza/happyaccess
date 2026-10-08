@@ -565,6 +565,33 @@ describe( 'Settings tab', () => {
 			expect( liveText() ).toBe( 'Passwordless login turned off' );
 		} );
 
+		it( 'closes an open Support access question when it is switched', async () => {
+			const user = userEvent.setup();
+			await renderTab();
+
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Support access' } )
+			);
+			expect(
+				screen.getByRole( 'group', {
+					name: 'Turn off support access? Every current pass ends now.',
+				} )
+			).toBeInTheDocument();
+
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			);
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( {
+				features: { passwordless: true },
+			} );
+			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
+			expect(
+				screen.getByRole( 'switch', { name: 'Support access' } )
+			).toBeChecked();
+		} );
+
 		it( 'shows an inline error and leaves the switch off when the save fails', async () => {
 			const user = userEvent.setup();
 			await renderTab();

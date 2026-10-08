@@ -186,6 +186,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 		if ( saving ) {
 			return;
 		}
+		setConfirmOff( false );
 		setFeatureError( null );
 		try {
 			const result = await save( {
