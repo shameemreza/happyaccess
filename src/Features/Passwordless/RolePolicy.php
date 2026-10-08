@@ -83,12 +83,15 @@ final class RolePolicy {
 	}
 
 	/**
-	 * Refuses a password login for an email-only account. Only a WP_User
-	 * result is checked; an error or null passes through. Temp support users
-	 * are left to Session::block_core_auth() at priority 99, so they never see
-	 * this message. A result with no password is not a password login (the
-	 * cookie reauth check, single sign-on plugins), and an application
-	 * password login was made on purpose, so neither is refused.
+	 * Refuses a password login for an email-only account. A WP_User result
+	 * (the password was right) and an incorrect_password error (it was wrong)
+	 * both get the same refusal, so the message does not tell an attacker
+	 * whether a guessed password is correct. Other errors and null pass
+	 * through. Temp support users are left to Session::block_core_auth() at
+	 * priority 99, so they never see this message. A result with no password
+	 * is not a password login (the cookie reauth check, single sign-on
+	 * plugins), and an application password login was made on purpose, so
+	 * neither is refused.
 	 *
 	 * @param \WP_User|\WP_Error|null $user     Authentication result.
 	 * @param string                  $username Username or email typed.
@@ -96,7 +99,15 @@ final class RolePolicy {
 	 * @return \WP_User|\WP_Error|null
 	 */
 	public static function filter_authenticate( $user, $username = '', $password = '' ) {
-		if ( ! $user instanceof \WP_User ) {
+		if ( $user instanceof \WP_User ) {
+			$account = $user;
+		} elseif ( $user instanceof \WP_Error && in_array( 'incorrect_password', $user->get_error_codes(), true ) ) {
+			$account = self::user_from_login( $username );
+		} else {
+			return $user;
+		}
+
+		if ( ! $account instanceof \WP_User ) {
 			return $user;
 		}
 		if ( self::password_login_allowed() ) {
@@ -105,14 +116,36 @@ final class RolePolicy {
 		if ( ! is_string( $password ) || '' === $password ) {
 			return $user;
 		}
-		if ( isset( self::$app_password_users[ $user->ID ] ) || Capabilities::is_temp_user( $user->ID ) ) {
+		if ( isset( self::$app_password_users[ $account->ID ] ) || Capabilities::is_temp_user( $account->ID ) ) {
 			return $user;
 		}
-		if ( self::EMAIL_ONLY !== self::for_user( $user ) ) {
+		if ( self::EMAIL_ONLY !== self::for_user( $account ) ) {
 			return $user;
 		}
 
 		return new \WP_Error( 'happyaccess_email_only', self::refusal_message() );
+	}
+
+	/**
+	 * Finds the account a typed username or email points at, the way core
+	 * does: by email when it looks like one, otherwise by login.
+	 *
+	 * @param mixed $username Username or email typed.
+	 * @return \WP_User|null
+	 */
+	private static function user_from_login( $username ) {
+		if ( ! is_string( $username ) || '' === $username ) {
+			return null;
+		}
+
+		$user = false;
+		if ( is_email( $username ) ) {
+			$user = get_user_by( 'email', $username );
+		}
+		if ( ! $user ) {
+			$user = get_user_by( 'login', $username );
+		}
+		return $user instanceof \WP_User ? $user : null;
 	}
 
 	/**

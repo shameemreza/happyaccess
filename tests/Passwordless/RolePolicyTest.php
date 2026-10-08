@@ -147,6 +147,78 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 		$this->assertSame( 30, has_filter( 'authenticate', array( RolePolicy::class, 'filter_authenticate' ) ) );
 	}
 
+	public function test_a_wrong_password_gets_the_same_error_as_the_right_one_for_an_email_only_account() {
+		$this->make_user( 'subscriber', 'plsame' );
+
+		$wrong = wp_authenticate( 'plsame', 'not-the-password' );
+		$right = wp_authenticate( 'plsame', 'correct-horse-battery' );
+
+		$this->assertWPError( $wrong );
+		$this->assertWPError( $right );
+		$this->assertSame( 'happyaccess_email_only', $wrong->get_error_code() );
+		$this->assertSame( $right->get_error_code(), $wrong->get_error_code() );
+		$this->assertSame( $right->get_error_message(), $wrong->get_error_message() );
+		$this->assertSame( array( 'happyaccess_email_only' ), $wrong->get_error_codes() );
+	}
+
+	public function test_a_wrong_password_by_email_gets_the_same_error_as_the_right_one() {
+		$user = $this->make_user( 'subscriber', 'plsameemail' );
+
+		$wrong = wp_authenticate( $user->user_email, 'not-the-password' );
+		$right = wp_authenticate( $user->user_email, 'correct-horse-battery' );
+
+		$this->assertWPError( $wrong );
+		$this->assertWPError( $right );
+		$this->assertSame( 'happyaccess_email_only', $wrong->get_error_code() );
+		$this->assertSame( $right->get_error_code(), $wrong->get_error_code() );
+		$this->assertSame( $right->get_error_message(), $wrong->get_error_message() );
+	}
+
+	public function test_a_wrong_password_for_a_default_policy_user_is_left_alone() {
+		$this->make_user( 'editor', 'plwrongeditor' );
+
+		$result = wp_authenticate( 'plwrongeditor', 'not-the-password' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'incorrect_password', $result->get_error_code() );
+	}
+
+	public function test_a_wrong_password_for_a_missing_account_is_left_alone() {
+		$result = wp_authenticate( 'nobody-here', 'not-the-password' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_username', $result->get_error_code() );
+	}
+
+	public function test_a_wrong_password_for_a_temp_support_user_is_left_alone() {
+		$user = $this->make_user( 'subscriber', 'plwrongtemp' );
+		update_user_meta( $user->ID, 'happyaccess_temp_user', 1 );
+
+		$result = wp_authenticate( 'plwrongtemp', 'not-the-password' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'incorrect_password', $result->get_error_code() );
+	}
+
+	public function test_an_empty_password_error_is_left_alone() {
+		$this->make_user( 'subscriber', 'plwrongempty' );
+		$error = new WP_Error( 'incorrect_password', 'Wrong.' );
+
+		$this->assertSame( $error, RolePolicy::filter_authenticate( $error, 'plwrongempty', '' ) );
+	}
+
+	/**
+	 * The constant is defined here, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_wp_config_constant_leaves_a_wrong_password_error_alone() {
+		define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );
+		$this->make_user( 'subscriber', 'plconstwrong' );
+
+		$result = wp_authenticate( 'plconstwrong', 'not-the-password' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'incorrect_password', $result->get_error_code() );
+	}
+
 	/**
 	 * The constant is defined here, so this runs in its own process.
 	 *
