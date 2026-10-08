@@ -22,8 +22,9 @@ defined( 'ABSPATH' ) || exit;
  *   belongs to the person, so the secret uses the network key.
  * - _happyaccess_backup_codes: the hashes of the unused backup codes.
  *
- * - _happyaccess_twostep_recheck: Unix time the user last proved it was
- *   them on the profile, before changing a method.
+ * - _happyaccess_twostep_recheck: when the user last proved it was them on
+ *   the profile, before changing a method, as a map of the login session
+ *   (a hash of its token) to the Unix time.
  *
  * The app is on when a secret is stored. Backup codes alone never turn
  * two-step login on.
@@ -39,6 +40,12 @@ final class UserState {
 	 * Tries of a compare-and-swap write to the state meta.
 	 */
 	const STATE_TRIES = 3;
+
+	/**
+	 * Seconds a change lock in the state meta holds, in case the request
+	 * that took it never let go.
+	 */
+	const LOCK_TTL = 30;
 
 	/**
 	 * The enabled methods, from app, email and backup, in that order. Backup
@@ -188,11 +195,11 @@ final class UserState {
 	/**
 	 * Clears every two-step meta key of the user, as recovery does. The grace
 	 * period starts over with them. The log entry is written only when there
-	 * was something to clear.
+	 * was something to clear, a re-check alone included.
 	 *
 	 * @param int   $user_id User id.
 	 * @param array $meta    Log meta: who reset it and from where. Never a secret.
-	 * @return void
+	 * @return bool Whether there was anything to clear.
 	 */
 	public static function reset( $user_id, array $meta = array() ) {
 		$user_id = (int) $user_id;
@@ -208,6 +215,65 @@ final class UserState {
 			$args['meta'] = $meta;
 			AuditLog::add( 'twostep_reset', $args );
 		}
+		return $had;
+	}
+
+	/**
+	 * Runs a change while holding a lock kept in the state meta, taken with
+	 * a compare-and-swap write. A second change for the same user that
+	 * arrives meanwhile is refused, so two requests can't each pass a check
+	 * that only one of them may pass, like turning off the last method.
+	 *
+	 * @param int      $user_id User id.
+	 * @param callable $change  Runs under the lock; its result is returned.
+	 * @return mixed|\WP_Error The result of the change, or a 409 error when another change holds the lock.
+	 */
+	public static function locked( $user_id, $change ) {
+		$user_id = (int) $user_id;
+		$lock    = wp_generate_password( 20, false );
+		if ( ! self::take_lock( $user_id, $lock ) ) {
+			return new \WP_Error( 'happyaccess_busy', __( 'Another change to two-step login is running. Try again.', 'happyaccess' ), array( 'status' => 409 ) );
+		}
+		try {
+			return call_user_func( $change );
+		} finally {
+			self::change_state(
+				$user_id,
+				static function ( array $state ) use ( $lock ) {
+					if ( isset( $state['lock'] ) && $lock === $state['lock'] ) {
+						unset( $state['lock'], $state['lock_at'] );
+					}
+					return $state;
+				}
+			);
+		}
+	}
+
+	/**
+	 * Takes the change lock: one compare-and-swap write that fails when the
+	 * state changed since it was read or another fresh lock is in it.
+	 *
+	 * @param int    $user_id User id.
+	 * @param string $lock    This request's lock id.
+	 * @return bool Whether this request holds the lock.
+	 */
+	private static function take_lock( $user_id, $lock ) {
+		$row = self::read_raw( $user_id, self::META_STATE );
+		if ( null === $row ) {
+			add_user_meta( $user_id, self::META_STATE, array(), true );
+			$row = self::read_raw( $user_id, self::META_STATE );
+			if ( null === $row ) {
+				return false;
+			}
+		}
+		$state = maybe_unserialize( $row['raw'] );
+		$state = is_array( $state ) ? $state : array();
+		if ( ! empty( $state['lock'] ) && Clock::now() - ( isset( $state['lock_at'] ) ? (int) $state['lock_at'] : 0 ) < self::LOCK_TTL ) {
+			return false;
+		}
+		$state['lock']    = $lock;
+		$state['lock_at'] = Clock::now();
+		return self::swap_raw( $user_id, $row, $state );
 	}
 
 	/**

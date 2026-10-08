@@ -44,6 +44,13 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 	public function tear_down() {
 		// The parent always runs, so a failed reset can't leave the test transaction open.
 		try {
+			unset( $_GET['user_id'] );
+			foreach ( array( Profile::HANDLE, 'happyaccess-twostep-setup', 'happyaccess-qrcode' ) as $handle ) {
+				wp_dequeue_script( $handle );
+				wp_deregister_script( $handle );
+				wp_dequeue_style( $handle );
+				wp_deregister_style( $handle );
+			}
 			Router::reset();
 			Challenge::reset();
 		} finally {
@@ -255,9 +262,60 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		ob_start();
 		do_action( 'admin_notices' );
 		$this->assertStringContainsString( 'HAPPYACCESS_DISABLE_TWOSTEP', (string) ob_get_clean(), 'It prints on admin_notices.' );
+		ob_start();
+		do_action( 'network_admin_notices' );
+		$this->assertStringContainsString( 'HAPPYACCESS_DISABLE_TWOSTEP', (string) ob_get_clean(), 'And on network_admin_notices.' );
 		$this->assertFalse( Challenge::applies( $admin ) );
 
 		wp_set_current_user( $this->user()->ID );
 		$this->assertSame( '', Profile::pause_notice(), 'Only for users who can manage options.' );
+	}
+
+	public function test_your_own_profile_on_user_edit_loads_the_script_like_profile_php() {
+		$user = $this->user();
+		wp_set_current_user( $user->ID );
+		$_GET['user_id'] = (string) $user->ID;
+
+		Profile::enqueue( 'user-edit.php' );
+
+		$this->assertTrue( wp_script_is( Profile::HANDLE, 'enqueued' ), 'The profile script loads.' );
+		$this->assertTrue( wp_style_is( Profile::HANDLE, 'enqueued' ) );
+	}
+
+	public function test_someone_elses_profile_loads_only_the_stylesheet() {
+		$admin = $this->admin();
+		$user  = $this->user();
+		UserState::enable_app( $user->ID, Totp::new_secret() );
+		wp_set_current_user( $admin->ID );
+		$_GET['user_id'] = (string) $user->ID;
+
+		Profile::enqueue( 'user-edit.php' );
+
+		$this->assertTrue( wp_style_is( Profile::HANDLE, 'enqueued' ) );
+		$this->assertFalse( wp_script_is( Profile::HANDLE, 'enqueued' ) );
+	}
+
+	public function test_a_reset_with_only_a_recheck_left_still_logs_and_emails() {
+		$admin = $this->admin();
+		$user  = $this->user( 'editor', array( 'user_email' => 'sam@example.org' ) );
+		update_user_meta( $user->ID, UserState::META_RECHECK, array( 'session' => time() ) );
+		wp_set_current_user( $admin->ID );
+
+		$this->assertTrue( Profile::reset_user( $user->ID, wp_create_nonce( Profile::NONCE . '_' . $user->ID ) ) );
+
+		$this->assertCount( 1, $this->log_rows( 'twostep_reset' ) );
+		$this->assertCount( 1, $this->mails, 'The user hears about it.' );
+		$this->assertFalse( metadata_exists( 'user', $user->ID, UserState::META_RECHECK ) );
+	}
+
+	public function test_a_reset_with_nothing_stored_logs_and_emails_nothing() {
+		$admin = $this->admin();
+		$user  = $this->user();
+		wp_set_current_user( $admin->ID );
+
+		$this->assertTrue( Profile::reset_user( $user->ID, wp_create_nonce( Profile::NONCE . '_' . $user->ID ) ) );
+
+		$this->assertCount( 0, $this->log_rows( 'twostep_reset' ) );
+		$this->assertCount( 0, $this->mails );
 	}
 }

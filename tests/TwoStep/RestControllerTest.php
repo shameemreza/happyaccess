@@ -9,8 +9,10 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\TwoStep\BackupCodes;
+use HappyAccess\Features\TwoStep\Challenge;
 use HappyAccess\Features\TwoStep\Feature;
 use HappyAccess\Features\TwoStep\RestController;
 use HappyAccess\Features\TwoStep\Totp;
@@ -53,7 +55,9 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 	public function tear_down() {
 		// The parent always runs, so a failed reset can't leave the test transaction open.
 		try {
-			$GLOBALS['wp_rest_server'] = null;
+			$GLOBALS['wp_rest_server']                     = null;
+			$GLOBALS['wp_rest_application_password_uuid'] = null;
+			unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
 			foreach ( $this->settings_globals as $name => $value ) {
 				$GLOBALS[ $name ] = $value;
 			}
@@ -88,7 +92,35 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 			)
 		);
 		wp_set_current_user( $user->ID );
+		$this->start_session( $user->ID );
 		return $user;
+	}
+
+	/**
+	 * Starts a login session for the user and sends its cookie, as a browser
+	 * would.
+	 *
+	 * @param int $user_id User id.
+	 * @return string The session token.
+	 */
+	private function start_session( $user_id ) {
+		$expires = time() + HOUR_IN_SECONDS;
+		$token   = WP_Session_Tokens::get_instance( $user_id )->create( $expires );
+
+		$_COOKIE[ LOGGED_IN_COOKIE ] = wp_generate_auth_cookie( $user_id, $expires, 'logged_in', $token );
+		return $token;
+	}
+
+	/**
+	 * The re-check time stored for this session, 0 for none.
+	 *
+	 * @param int $user_id User id.
+	 * @return int
+	 */
+	private function recheck_at( $user_id ) {
+		$map = get_user_meta( $user_id, UserState::META_RECHECK, true );
+		$key = hash( 'sha256', wp_get_session_token() );
+		return is_array( $map ) && isset( $map[ $key ] ) ? (int) $map[ $key ] : 0;
 	}
 
 	/**
@@ -163,7 +195,7 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 			$this->assertSame( 'happyaccess_recheck_required', $this->code_of( $response ), $route );
 		}
 
-		update_user_meta( $user->ID, UserState::META_RECHECK, Clock::now() - 16 * MINUTE_IN_SECONDS );
+		update_user_meta( $user->ID, UserState::META_RECHECK, array( hash( 'sha256', wp_get_session_token() ) => Clock::now() - 16 * MINUTE_IN_SECONDS ) );
 		foreach ( $this->change_routes() as $route ) {
 			$this->assertSame( 'happyaccess_recheck_required', $this->code_of( $this->call( $route ) ), $route . ' with a stale re-check' );
 		}
@@ -185,7 +217,7 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 
 		$response = $this->call( 'recheck', array( 'password' => self::PASSWORD ) );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( Clock::now(), (int) get_user_meta( $user->ID, UserState::META_RECHECK, true ) );
+		$this->assertSame( Clock::now(), $this->recheck_at( $user->ID ) );
 		$this->assertStringContainsString( 'no-store', $response->get_headers()['Cache-Control'] );
 
 		wp_set_current_user( 0 );
@@ -339,5 +371,125 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 
 		UserState::enable_email( $user->ID );
 		$this->assertSame( 200, $this->call( 'email/disable' )->get_status(), 'A method that is on can still be turned off.' );
+	}
+
+	public function test_the_recheck_only_counts_in_the_session_that_passed_it() {
+		$user  = $this->editor();
+		$first = $_COOKIE[ LOGGED_IN_COOKIE ];
+		UserState::enable_email( $user->ID );
+		$this->recheck();
+		$this->assertSame( 200, $this->call( 'backup/regenerate' )->get_status() );
+
+		$this->start_session( $user->ID );
+		$other = $this->call( 'backup/regenerate' );
+		$this->assertSame( 403, $other->get_status(), 'Another browser has not passed it.' );
+		$this->assertSame( 'happyaccess_recheck_required', $this->code_of( $other ) );
+
+		$_COOKIE[ LOGGED_IN_COOKIE ] = $first;
+		$this->assertSame( 200, $this->call( 'backup/regenerate' )->get_status(), 'The first browser still has it.' );
+	}
+
+	public function test_the_recheck_map_drops_entries_older_than_15_minutes() {
+		$user = $this->editor();
+		update_user_meta(
+			$user->ID,
+			UserState::META_RECHECK,
+			array(
+				'old'   => Clock::now() - 15 * MINUTE_IN_SECONDS,
+				'fresh' => Clock::now() - 60,
+			)
+		);
+		$this->recheck();
+
+		$map = get_user_meta( $user->ID, UserState::META_RECHECK, true );
+		$this->assertSame(
+			array(
+				'fresh'                                  => Clock::now() - 60,
+				hash( 'sha256', wp_get_session_token() ) => Clock::now(),
+			),
+			$map
+		);
+		$this->assertStringNotContainsString( wp_get_session_token(), maybe_serialize( $map ), 'The token itself is never stored.' );
+	}
+
+	public function test_without_a_session_the_recheck_is_refused() {
+		$user = $this->editor();
+		unset( $_COOKIE[ LOGGED_IN_COOKIE ] );
+
+		$response = $this->call( 'recheck', array( 'password' => self::PASSWORD ) );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( '', get_user_meta( $user->ID, UserState::META_RECHECK, true ) );
+	}
+
+	public function test_an_application_password_request_is_refused() {
+		$user = $this->editor();
+		UserState::enable_email( $user->ID );
+		$this->recheck();
+		$GLOBALS['wp_rest_application_password_uuid'] = wp_generate_uuid4();
+
+		foreach ( array_merge( array( 'recheck' ), $this->change_routes() ) as $route ) {
+			$response = $this->call( $route, array( 'password' => self::PASSWORD ) );
+			$this->assertSame( 403, $response->get_status(), $route );
+			$this->assertSame( 'happyaccess_app_password', $this->code_of( $response ), $route );
+		}
+		$this->assertTrue( UserState::email_enabled( $user->ID ), 'Nothing changed.' );
+	}
+
+	public function test_a_wrong_recheck_fires_wp_login_failed_and_a_wrong_code_counts_on_the_site_cap() {
+		$user   = $this->editor();
+		$failed = array();
+		$record = static function ( $login, $error ) use ( &$failed ) {
+			$failed[] = array( $login, $error instanceof WP_Error ? $error->get_error_code() : '' );
+		};
+		add_action( 'wp_login_failed', $record, 10, 2 );
+		$site = static function () {
+			return RateLimiter::count( Challenge::CODE_ACTION, 'site', 'site', HOUR_IN_SECONDS );
+		};
+
+		try {
+			$this->assertSame( 403, $this->call( 'recheck', array( 'password' => 'wrong' ) )->get_status() );
+			$this->assertSame( array( array( $user->user_login, 'happyaccess_recheck_failed' ) ), $failed );
+			$this->assertSame( 0, $site(), 'A wrong password is not a code.' );
+
+			$this->assertSame( 403, $this->call( 'recheck', array( 'code' => 'ABCDE-FGHIJ' ) )->get_status() );
+			$this->assertCount( 2, $failed );
+			$this->assertSame( 1, $site(), 'A wrong code counts on the site cap.' );
+
+			$this->recheck();
+			$this->assertCount( 2, $failed, 'A pass fires nothing.' );
+		} finally {
+			remove_action( 'wp_login_failed', $record, 10 );
+		}
+	}
+
+	public function test_two_disables_at_once_cannot_both_pass_the_last_method_check() {
+		$this->set_policy( array( 'editor' => 'required' ) );
+		$user = $this->editor();
+		UserState::enable_app( $user->ID, Totp::new_secret() );
+		UserState::enable_email( $user->ID );
+		$this->recheck();
+
+		// The email request lands while the app request is in the middle of turning the app off.
+		$inner = null;
+		$race  = function ( $meta_ids, $object_id, $meta_key ) use ( &$inner, $user ) {
+			unset( $meta_ids );
+			if ( null === $inner && UserState::META_TOTP === $meta_key && $user->ID === (int) $object_id ) {
+				$inner = $this->call( 'email/disable' );
+			}
+		};
+		add_action( 'delete_user_meta', $race, 10, 3 );
+		try {
+			$outer = $this->call( 'app/disable' );
+		} finally {
+			remove_action( 'delete_user_meta', $race, 10 );
+		}
+
+		$this->assertSame( 200, $outer->get_status() );
+		$this->assertInstanceOf( WP_REST_Response::class, $inner );
+		$this->assertSame( 409, $inner->get_status(), 'The second request is refused.' );
+		$this->assertTrue( UserState::is_enabled( $user->ID ), 'One method stays on.' );
+		$this->assertTrue( UserState::email_enabled( $user->ID ) );
+
+		$this->assertSame( 403, $this->call( 'email/disable' )->get_status(), 'Afterwards email is the last method.' );
 	}
 }

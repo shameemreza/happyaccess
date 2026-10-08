@@ -912,6 +912,22 @@ final class Challenge {
 	}
 
 	/**
+	 * Counts one wrong code on the site-wide cap, and tells the owner once
+	 * when the cap pauses the step. The profile re-check counts its wrong
+	 * codes here too.
+	 *
+	 * @return void
+	 */
+	public static function count_wrong_code() {
+		// Only a wrong code counts on the site scope, and it is never cleared.
+		RateLimiter::hit( self::CODE_ACTION, 'site', 'site' );
+		$wait = self::site_wait();
+		if ( $wait > 0 ) {
+			self::site_lock_alert( $wait );
+		}
+	}
+
+	/**
 	 * Counts a wrong code on the site cap and logs it. The try is already
 	 * counted on the pending login, and the fifth one cancels it. The setup
 	 * step uses this for its codes too.
@@ -923,12 +939,7 @@ final class Challenge {
 	 * @return array|null The redirect to the login when the pending login was cancelled, else null.
 	 */
 	public static function wrong_code( \WP_User $user, array $pending, array $carry, $attempts ) {
-		// Only a wrong code counts on the site scope, and it is never cleared.
-		RateLimiter::hit( self::CODE_ACTION, 'site', 'site' );
-		$wait = self::site_wait();
-		if ( $wait > 0 ) {
-			self::site_lock_alert( $wait );
-		}
+		self::count_wrong_code();
 
 		if ( $attempts >= self::MAX_ATTEMPTS ) {
 			self::cancel( $pending['id'] );

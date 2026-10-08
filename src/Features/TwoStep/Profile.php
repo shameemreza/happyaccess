@@ -64,6 +64,7 @@ final class Profile {
 		add_action( 'admin_post_' . self::ACTION, array( __CLASS__, 'handle_reset' ) );
 		add_action( 'admin_footer', array( __CLASS__, 'print_reset_form' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'print_pause_notice' ) );
+		add_action( 'network_admin_notices', array( __CLASS__, 'print_pause_notice' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'print_reset_notice' ) );
 		add_action( 'network_admin_notices', array( __CLASS__, 'print_reset_notice' ) );
 	}
@@ -148,8 +149,7 @@ final class Profile {
 		}
 
 		$admin = wp_get_current_user();
-		$had   = UserState::is_enabled( $user->ID ) || BackupCodes::remaining( $user->ID ) > 0;
-		UserState::reset(
+		$had   = UserState::reset(
 			$user->ID,
 			array(
 				'source'  => 'admin',
@@ -248,7 +248,8 @@ final class Profile {
 	/**
 	 * Loads the stylesheet when the section shows. On the user's own
 	 * profile it also loads the QR library, the shared setup script and the
-	 * profile script.
+	 * profile script. Edit User with your own id shows your own profile, so
+	 * it loads the same as profile.php.
 	 *
 	 * @param string $hook_suffix Admin page.
 	 * @return void
@@ -257,13 +258,17 @@ final class Profile {
 		if ( 'user-edit.php' === $hook_suffix ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only; picks the user whose profile is shown.
 			$shown = get_userdata( isset( $_GET['user_id'] ) ? absint( wp_unslash( $_GET['user_id'] ) ) : 0 );
-			if ( $shown instanceof \WP_User && '' !== self::section( $shown ) ) {
-				self::$reset_form_for = 0;
-				wp_enqueue_style( self::HANDLE, plugins_url( 'assets/twostep-setup.css', HAPPYACCESS_PLUGIN_FILE ), array(), SetupSteps::asset_version( 'assets/twostep-setup.css' ) );
+			if ( ! $shown instanceof \WP_User ) {
+				return;
 			}
-			return;
-		}
-		if ( 'profile.php' !== $hook_suffix ) {
+			if ( get_current_user_id() !== (int) $shown->ID ) {
+				if ( '' !== self::section( $shown ) ) {
+					self::$reset_form_for = 0;
+					wp_enqueue_style( self::HANDLE, plugins_url( 'assets/twostep-setup.css', HAPPYACCESS_PLUGIN_FILE ), array(), SetupSteps::asset_version( 'assets/twostep-setup.css' ) );
+				}
+				return;
+			}
+		} elseif ( 'profile.php' !== $hook_suffix ) {
 			return;
 		}
 		$user = wp_get_current_user();

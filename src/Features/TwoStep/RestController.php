@@ -19,9 +19,12 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Every route acts on the logged-in user only, through the cookie and the
- * wp_rest nonce, and refuses Support Access temp users. Changing a method
- * needs a re-check: the current password, an app code or a backup code
- * within the last 15 minutes, stored as a Unix time in user meta.
+ * wp_rest nonce, and refuses Support Access temp users and application
+ * passwords. Changing a method needs a re-check: the current password, an
+ * app code or a backup code within the last 15 minutes. It is stored in
+ * user meta as a map of the login session (a hash of its token) to the
+ * Unix time it passed, so passing it in one browser unlocks nothing in
+ * another.
  *
  * The app secret waits for its first code in a transient named after the
  * user, encrypted with the network key, for 10 minutes. Every response is
@@ -108,13 +111,17 @@ final class RestController {
 	}
 
 	/**
-	 * Lets in a logged-in user who is not a Support Access temp user.
+	 * Lets in a logged-in user who is not a Support Access temp user and did
+	 * not sign the request with an application password.
 	 *
 	 * @return true|\WP_Error
 	 */
 	public static function can_use() {
 		if ( ! is_user_logged_in() ) {
 			return new \WP_Error( 'rest_forbidden', __( 'Log in to change two-step login.', 'happyaccess' ), array( 'status' => rest_authorization_required_code() ) );
+		}
+		if ( function_exists( 'rest_get_authenticated_app_password' ) && null !== rest_get_authenticated_app_password() ) {
+			return new \WP_Error( 'happyaccess_app_password', __( "An application password can't change two-step login.", 'happyaccess' ), array( 'status' => 403 ) );
 		}
 		if ( Capabilities::is_temp_user( get_current_user_id() ) ) {
 			return new \WP_Error( 'happyaccess_forbidden', __( "Support access can't change two-step login.", 'happyaccess' ), array( 'status' => 403 ) );
@@ -140,14 +147,19 @@ final class RestController {
 	}
 
 	/**
-	 * Whether the user passed the re-check within the last 15 minutes.
+	 * Whether the user passed the re-check in this login session within the
+	 * last 15 minutes. Never without a session.
 	 *
 	 * @param int $user_id User id.
 	 * @return bool
 	 */
 	public static function recheck_fresh( $user_id ) {
-		$at = (int) get_user_meta( (int) $user_id, UserState::META_RECHECK, true );
-		return $at > 0 && $at <= Clock::now() && Clock::now() - $at < self::RECHECK_TTL;
+		$key = self::session_key();
+		if ( '' === $key ) {
+			return false;
+		}
+		$map = self::recheck_map( $user_id );
+		return isset( $map[ $key ] ) && self::is_fresh( $map[ $key ] );
 	}
 
 	/**
@@ -164,6 +176,10 @@ final class RestController {
 		$code     = trim( (string) $request->get_param( 'code' ) );
 		if ( '' === $password && '' === $code ) {
 			return new \WP_Error( 'happyaccess_bad_request', __( 'Enter your password or a code.', 'happyaccess' ), array( 'status' => 400 ) );
+		}
+		$session = self::session_key();
+		if ( '' === $session ) {
+			return new \WP_Error( 'happyaccess_no_session', __( 'Log in again to change two-step login.', 'happyaccess' ), array( 'status' => 403 ) );
 		}
 
 		$wait = RateLimiter::attempt(
@@ -191,11 +207,17 @@ final class RestController {
 			? wp_check_password( $password, $user->user_pass, $user->ID )
 			: self::check_code( $user->ID, $code );
 		if ( ! $passed ) {
-			return new \WP_Error( 'happyaccess_recheck_failed', __( "That password or code didn't work.", 'happyaccess' ), array( 'status' => 403 ) );
+			$error = new \WP_Error( 'happyaccess_recheck_failed', __( "That password or code didn't work.", 'happyaccess' ), array( 'status' => 403 ) );
+			// A wrong code also counts on the site-wide cap of the login step.
+			if ( '' === $password ) {
+				Challenge::count_wrong_code();
+			}
+			do_action( 'wp_login_failed', $user->user_login, $error ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so security plugins see a wrong re-check as a failed login of this account.
+			return $error;
 		}
 
 		RateLimiter::clear( self::RECHECK_ACTION, 'ip', RateLimiter::ip_subject() );
-		update_user_meta( $user->ID, UserState::META_RECHECK, Clock::now() );
+		self::remember_recheck( $user->ID, $session );
 		return self::respond( array( 'expires_in' => self::RECHECK_TTL ) );
 	}
 
@@ -285,12 +307,19 @@ final class RestController {
 	 */
 	public static function app_disable() {
 		$user = wp_get_current_user();
-		if ( UserState::app_enabled( $user->ID ) && self::is_last_required( $user, 'app' ) ) {
-			return self::role_requires();
-		}
-		UserState::disable_app( $user->ID );
-		self::drop_unused_backup_codes( $user->ID );
-		return self::respond( array( 'codes' => array() ) );
+		return self::respond_after(
+			UserState::locked(
+				$user->ID,
+				static function () use ( $user ) {
+					if ( UserState::app_enabled( $user->ID ) && self::is_last_required( $user, 'app' ) ) {
+						return self::role_requires();
+					}
+					UserState::disable_app( $user->ID );
+					self::drop_unused_backup_codes( $user->ID );
+					return true;
+				}
+			)
+		);
 	}
 
 	/**
@@ -315,12 +344,19 @@ final class RestController {
 	 */
 	public static function email_disable() {
 		$user = wp_get_current_user();
-		if ( UserState::email_enabled( $user->ID ) && self::is_last_required( $user, 'email' ) ) {
-			return self::role_requires();
-		}
-		UserState::disable_email( $user->ID );
-		self::drop_unused_backup_codes( $user->ID );
-		return self::respond( array( 'codes' => array() ) );
+		return self::respond_after(
+			UserState::locked(
+				$user->ID,
+				static function () use ( $user ) {
+					if ( UserState::email_enabled( $user->ID ) && self::is_last_required( $user, 'email' ) ) {
+						return self::role_requires();
+					}
+					UserState::disable_email( $user->ID );
+					self::drop_unused_backup_codes( $user->ID );
+					return true;
+				}
+			)
+		);
 	}
 
 	/**
@@ -472,6 +508,69 @@ final class RestController {
 	 */
 	private static function no_site_key() {
 		return new \WP_Error( 'happyaccess_no_site_key', __( 'The authenticator app could not be set up. Try again later.', 'happyaccess' ), array( 'status' => 503 ) );
+	}
+
+	/**
+	 * The response of a turn-off: the refusal, or a 200 with no codes.
+	 *
+	 * @param true|\WP_Error $result Result of the locked change.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private static function respond_after( $result ) {
+		return is_wp_error( $result ) ? $result : self::respond( array( 'codes' => array() ) );
+	}
+
+	/**
+	 * Hash of the current login session's token, or an empty string when the
+	 * request has no session. The token itself is never stored.
+	 *
+	 * @return string
+	 */
+	private static function session_key() {
+		$token = wp_get_session_token();
+		return is_string( $token ) && '' !== $token ? hash( 'sha256', $token ) : '';
+	}
+
+	/**
+	 * The stored re-checks, session key to Unix time. A value from before
+	 * the map, a bare time, counts for no session.
+	 *
+	 * @param int $user_id User id.
+	 * @return array<string,int>
+	 */
+	private static function recheck_map( $user_id ) {
+		$map = get_user_meta( (int) $user_id, UserState::META_RECHECK, true );
+		return is_array( $map ) ? $map : array();
+	}
+
+	/**
+	 * Whether a re-check time is inside the last 15 minutes.
+	 *
+	 * @param mixed $at Unix time.
+	 * @return bool
+	 */
+	private static function is_fresh( $at ) {
+		$at = (int) $at;
+		return $at > 0 && $at <= Clock::now() && Clock::now() - $at < self::RECHECK_TTL;
+	}
+
+	/**
+	 * Stores a passed re-check for this session, and drops the ones that
+	 * are no longer fresh.
+	 *
+	 * @param int    $user_id User id.
+	 * @param string $session Session key.
+	 * @return void
+	 */
+	private static function remember_recheck( $user_id, $session ) {
+		$map = array();
+		foreach ( self::recheck_map( $user_id ) as $key => $at ) {
+			if ( is_string( $key ) && self::is_fresh( $at ) ) {
+				$map[ $key ] = (int) $at;
+			}
+		}
+		$map[ $session ] = Clock::now();
+		update_user_meta( (int) $user_id, UserState::META_RECHECK, $map );
 	}
 
 	/**

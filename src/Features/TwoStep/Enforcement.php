@@ -40,9 +40,10 @@ final class Enforcement {
 
 	/**
 	 * The policy for a user: required when any of their roles is required,
-	 * else optional when any is optional, else off. A super admin on
-	 * multisite follows the main site's policy, with administrator added to
-	 * their roles there, because they act as one on every site.
+	 * else optional when any is optional or missing from the setting, else
+	 * off. A super admin on multisite follows the main site's policy, with
+	 * administrator added to their roles there, because they act as one on
+	 * every site.
 	 *
 	 * The answer is kept for the rest of the request, so one login doesn't
 	 * switch to the main site again on every check. A settings or role
@@ -186,23 +187,26 @@ final class Enforcement {
 	}
 
 	/**
-	 * The strongest policy among the roles.
+	 * The strongest policy among the roles. A role missing from the policy
+	 * counts as optional, and so does a user with no roles on the site, so
+	 * off is only ever a choice someone made.
 	 *
 	 * @param mixed    $policy Role policy setting, role slug to choice.
 	 * @param string[] $roles  Role slugs.
 	 * @return string
 	 */
 	private static function resolve( $policy, array $roles ) {
-		if ( ! is_array( $policy ) ) {
-			return self::OFF;
+		$policy = is_array( $policy ) ? $policy : array();
+		if ( array() === $roles ) {
+			return self::OPTIONAL;
 		}
 		$found = self::OFF;
 		foreach ( $roles as $role ) {
-			$choice = isset( $policy[ $role ] ) ? $policy[ $role ] : '';
+			$choice = isset( $policy[ $role ] ) ? $policy[ $role ] : self::OPTIONAL;
 			if ( self::REQUIRED === $choice ) {
 				return self::REQUIRED;
 			}
-			if ( self::OPTIONAL === $choice ) {
+			if ( self::OFF !== $choice ) {
 				$found = self::OPTIONAL;
 			}
 		}

@@ -83,4 +83,53 @@ class TwoStepCliTest extends WP_UnitTestCase {
 		$user = self::factory()->user->create_and_get();
 		$this->assertSame( 'Two-step login is off for ' . $user->user_login . '.', Cli::reset_user( $user->user_login ) );
 	}
+
+	/**
+	 * WP-CLI is stubbed here, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_register_adds_the_command_only_under_wp_cli() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wp-cli.php';
+
+		Cli::register();
+		$this->assertSame( array(), WP_CLI::$commands, 'Not without the WP_CLI constant.' );
+
+		define( 'WP_CLI', true );
+		Cli::register();
+		$this->assertSame( array( 'happyaccess twostep' => Cli::class ), WP_CLI::$commands );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_reset_command_prints_success_and_resets() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wp-cli.php';
+		$user = $this->two_step_user();
+
+		( new Cli() )->reset( array( $user->user_login ), array() );
+
+		$this->assertSame( array( array( 'success', 'Two-step login is off for ' . $user->user_login . '.' ) ), WP_CLI::$calls );
+		$this->assertFalse( UserState::is_enabled( $user->ID ) );
+	}
+
+	/**
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_reset_command_needs_exactly_one_known_user() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wp-cli.php';
+		$user = $this->two_step_user();
+		$cli  = new Cli();
+
+		$cli->reset( array( 'nobody-here' ), array() );
+		$cli->reset( array(), array() );
+		$cli->reset( array( $user->user_login, 'another' ), array() );
+
+		$error = array( 'error', 'No user matches that id, login or email address.' );
+		$this->assertSame( array( $error, $error, $error ), WP_CLI::$calls );
+		$this->assertTrue( UserState::is_enabled( $user->ID ), 'Nothing was reset.' );
+	}
 }

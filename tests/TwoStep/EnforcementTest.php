@@ -70,7 +70,7 @@ class EnforcementTest extends WP_UnitTestCase {
 	public function test_policy_resolution_for_mixed_roles() {
 		$user = $this->user_with( array( 'editor', 'author' ) );
 
-		$this->assertSame( 'off', Enforcement::policy( $user ), 'No policy set.' );
+		$this->assertSame( 'optional', Enforcement::policy( $user ), 'No policy set: a missing role is optional.' );
 
 		$this->set_policy( array( 'editor' => 'optional' ) );
 		$this->assertSame( 'optional', Enforcement::policy( $user ) );
@@ -101,6 +101,18 @@ class EnforcementTest extends WP_UnitTestCase {
 
 		$this->set_policy( array( 'subscriber' => 'required' ) );
 		$this->assertSame( 'off', Enforcement::policy( $user ), 'Roles the user lacks do not count.' );
+	}
+
+	public function test_a_role_missing_from_the_policy_is_optional() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'author' => 'off' ) ) ) );
+
+		$this->assertSame( 'optional', Enforcement::policy( $this->user_with( array( 'editor' ) ) ), 'Editor is not in the policy.' );
+		$this->assertSame( 'off', Enforcement::policy( $this->user_with( array( 'author' ) ) ), 'Author is off by choice.' );
+		$this->assertSame( 'optional', Enforcement::policy( $this->user_with( array( 'author', 'editor' ) ) ), 'A missing role counts as optional next to an off one.' );
+
+		$nobody = self::factory()->user->create_and_get( array( 'role' => '' ) );
+		$this->assertSame( array(), get_userdata( $nobody->ID )->roles );
+		$this->assertSame( 'optional', Enforcement::policy( get_userdata( $nobody->ID ) ), 'A user with no roles on the site.' );
 	}
 
 	public function test_needs_setup_only_for_a_required_role_without_a_method() {
