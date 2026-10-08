@@ -295,7 +295,9 @@ final class Installer {
 		if ( self::close_legacy_expired() ) {
 			$result['failed'] = true;
 		}
-		self::migrate_options( $is_upgrade );
+		if ( self::migrate_options( $is_upgrade ) ) {
+			$result['failed'] = true;
+		}
 		self::backfill_blog_ids();
 
 		if ( $result['failed'] ) {
@@ -700,10 +702,11 @@ final class Installer {
 	}
 
 	/**
-	 * Moves 1.0.x options into happyaccess_settings.
+	 * Moves 1.0.x options into happyaccess_settings. The legacy options are
+	 * deleted only once the new settings are stored.
 	 *
 	 * @param bool $is_upgrade Whether this site ran 1.0.x before.
-	 * @return void
+	 * @return bool Whether the settings write failed.
 	 */
 	private static function migrate_options( $is_upgrade ) {
 		$map = array(
@@ -737,7 +740,13 @@ final class Installer {
 		}
 
 		if ( ! empty( $changes ) ) {
+			$expected = Settings::merge( $changes );
 			Settings::update( $changes );
+			Settings::flush_cache();
+			// update_option() also returns false for an unchanged value, so compare what is stored with what was meant to be.
+			if ( Settings::all() !== $expected ) {
+				return true;
+			}
 		}
 
 		$secret = get_option( 'happyaccess_recaptcha_secret_key', null );
@@ -754,6 +763,7 @@ final class Installer {
 		foreach ( self::LEGACY_OPTIONS as $option ) {
 			delete_option( $option );
 		}
+		return false;
 	}
 
 	/**

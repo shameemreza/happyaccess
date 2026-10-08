@@ -889,4 +889,29 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( $owner, (int) get_post( $post )->post_author, 'Posts go to the owner, never deleted.' );
 		$this->assertSame( array(), $mails );
 	}
+
+	public function test_a_failed_settings_write_keeps_the_legacy_options_and_retries() {
+		$keep = static function ( $value, $old_value ) {
+			unset( $value );
+			return $old_value;
+		};
+		add_filter( 'pre_update_option_' . Settings::OPTION, $keep, 10, 2 );
+
+		Installer::migrate();
+
+		remove_filter( 'pre_update_option_' . Settings::OPTION, $keep, 10 );
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( 'write_failed', get_transient( Installer::FAILED_TRANSIENT ) );
+		$this->assertSame( 8, (int) get_option( 'happyaccess_max_attempts' ), 'The legacy options stay until their values are stored.' );
+		$this->assertSame( 14, (int) get_option( 'happyaccess_cleanup_days' ) );
+		$this->assertSame( '1.0.6', get_option( 'happyaccess_version' ) );
+
+		delete_transient( Installer::FAILED_TRANSIENT );
+		Installer::maybe_upgrade();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( 8, Settings::get( 'security.max_attempts' ) );
+		$this->assertSame( 14, Settings::get( 'privacy.retention_days' ) );
+		$this->assertFalse( get_option( 'happyaccess_max_attempts' ) );
+	}
 }
