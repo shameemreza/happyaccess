@@ -12,6 +12,7 @@ use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Internal;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
@@ -52,6 +53,20 @@ final class LoginSteps {
 	 */
 	const ACCOUNT_REQUEST_LIMIT  = 3;
 	const ACCOUNT_REQUEST_WINDOW = 900;
+
+	/**
+	 * Wrong codes allowed on the whole site inside SITE_WINDOW, then the code
+	 * step locks for SITE_WINDOW. Only failures count, so a busy store's own
+	 * logins never trip it. At 1 in 1,000,000 a guess, 100 an hour is about
+	 * one lucky guess a year.
+	 */
+	const SITE_CODE_CAP = 100;
+	const SITE_WINDOW   = 3600;
+
+	/**
+	 * Set while the owner already has the email about a site-wide pause.
+	 */
+	const SITE_LOCK_TRANSIENT = 'happyaccess_pl_site_lock_alerted';
 
 	/**
 	 * Emails waiting for the end of the request.
@@ -267,8 +282,21 @@ final class LoginSteps {
 			return self::locked_error( $wait );
 		}
 
+		$wait = self::site_wait();
+		if ( $wait > 0 ) {
+			self::site_lock_alert( $wait );
+			return self::locked_error( $wait );
+		}
+
 		$result = Requests::verify_code( (string) $request_key, is_string( $code ) ? $code : '' );
 		if ( is_wp_error( $result ) ) {
+			// Only a wrong code counts on the site scope, and it is never cleared.
+			RateLimiter::hit( self::CODE_ACTION, 'site', 'site' );
+			$wait = self::site_wait();
+			if ( $wait > 0 ) {
+				self::site_lock_alert( $wait );
+			}
+
 			if ( 'happyaccess_code_locked' === $result->get_error_code() ) {
 				AuditLog::add( 'passwordless_locked', self::log_args( 0, __( 'Login code cancelled after too many wrong tries', 'happyaccess' ), array( 'reason' => 'attempts' ) ) );
 			} else {
@@ -515,6 +543,50 @@ final class LoginSteps {
 			(int) Settings::get( 'security.max_attempts' ),
 			(int) Settings::get( 'security.attempt_window' ),
 			(int) Settings::get( 'security.lockout_duration' )
+		);
+	}
+
+	/**
+	 * Seconds until the site-wide code cap lets codes through again. Reads
+	 * only; a wrong code adds the hit.
+	 *
+	 * @return int
+	 */
+	private static function site_wait() {
+		return RateLimiter::retry_after( self::CODE_ACTION, 'site', 'site', self::SITE_CODE_CAP, self::SITE_WINDOW, self::SITE_WINDOW );
+	}
+
+	/**
+	 * Emails the site owner once per pause and writes one log row.
+	 *
+	 * @param int $wait Seconds the pause lasts.
+	 * @return void
+	 */
+	private static function site_lock_alert( $wait ) {
+		// Transient calls can add or delete an option, so they run inside the bypass.
+		$alerted = Internal::run(
+			static function () {
+				return get_transient( self::SITE_LOCK_TRANSIENT );
+			}
+		);
+		if ( $alerted ) {
+			return;
+		}
+
+		$wait = max( 60, (int) $wait );
+		Internal::run(
+			static function () use ( $wait ) {
+				set_transient( self::SITE_LOCK_TRANSIENT, 1, $wait );
+			}
+		);
+
+		AuditLog::add( 'passwordless_locked', self::log_args( 0, __( 'Login codes paused for the whole site after too many wrong codes', 'happyaccess' ), array( 'reason' => 'site_cap' ) ) );
+
+		Mailer::send(
+			(string) get_option( 'admin_email' ),
+			__( 'Login codes are paused', 'happyaccess' ),
+			'passwordless-lock',
+			array( 'minutes' => (int) ceil( $wait / MINUTE_IN_SECONDS ) )
 		);
 	}
 

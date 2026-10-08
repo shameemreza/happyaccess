@@ -334,6 +334,21 @@ class PasswordlessRestControllerTest extends WP_UnitTestCase {
 		$this->assertSame( 'happyaccess_locked', $response->get_data()['code'] );
 	}
 
+	public function test_the_verify_route_shows_the_lock_text_when_the_site_cap_is_reached() {
+		$this->boot();
+		delete_transient( 'happyaccess_pl_site_lock_alerted' );
+		for ( $i = 1; $i <= LoginSteps::SITE_CODE_CAP; $i++ ) {
+			$_SERVER['REMOTE_ADDR'] = '198.51.100.' . $i;
+			$this->assertSame( 400, $this->call( 'verify', array( 'code' => '000000' ) )->get_status(), 'Wrong code ' . $i );
+		}
+
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.77';
+		$response               = $this->call( 'verify', array( 'code' => '000000' ) );
+		$this->assertSame( 429, $response->get_status() );
+		$this->assertSame( 'happyaccess_locked', $response->get_data()['code'] );
+		$this->assertSame( 'Too many attempts. Try again in 60 minutes.', $response->get_data()['message'] );
+	}
+
 	public function test_the_verify_route_logs_in_with_the_right_code_and_cookie() {
 		$this->boot();
 		$user = self::factory()->user->create_and_get(

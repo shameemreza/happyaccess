@@ -8,6 +8,7 @@
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\LoginSteps;
 use HappyAccess\Features\Passwordless\Requests;
@@ -506,6 +507,85 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		}
 		$res = $this->post_code( $made['code'], $made['cookie'] );
 		$this->assertSame( array( 'locked' ), $res['errors']->get_error_codes() );
+	}
+
+	/**
+	 * Sends wrong codes from one new IP each, so no IP limit is reached.
+	 *
+	 * @param int $count How many.
+	 * @return void
+	 */
+	private function wrong_codes_from_many_ips( $count ) {
+		for ( $i = 1; $i <= $count; $i++ ) {
+			$_SERVER['REMOTE_ADDR'] = '198.51.' . ( 100 + intdiv( $i, 250 ) ) . '.' . ( $i % 250 + 1 );
+			$result                 = LoginSteps::verify_flow( 'no-request-' . $i, '000000', false, '' );
+			$this->assertSame( 'happyaccess_invalid_code', $result->get_error_code(), 'Wrong code ' . $i );
+		}
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+	}
+
+	public function test_wrong_codes_from_many_ips_lock_the_code_step_but_not_the_link() {
+		delete_transient( 'happyaccess_pl_site_lock_alerted' );
+		$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$made = $this->request_as( $user );
+
+		$this->wrong_codes_from_many_ips( LoginSteps::SITE_CODE_CAP );
+
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.77';
+		$res                    = $this->post_code( $made['code'], $made['cookie'] );
+		$this->assertSame( array( 'locked' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 'Too many attempts. Try again in 60 minutes.', $res['errors']->get_error_message() );
+		$this->assertSame( 0, get_current_user_id() );
+		$this->assertNotNull( Requests::find_by_link( $made['key'] ), 'A locked code step leaves the request open.' );
+
+		$link = $this->post_link( $made['key'] );
+		$this->assertSame( 'redirect', $link['type'] );
+		$this->assertSame( $user->ID, get_current_user_id() );
+	}
+
+	public function test_right_codes_do_not_count_toward_the_site_cap() {
+		$this->wrong_codes_from_many_ips( LoginSteps::SITE_CODE_CAP - 1 );
+
+		foreach ( array( '192.0.2.10', '192.0.2.11' ) as $ip ) {
+			$_SERVER['REMOTE_ADDR'] = $ip;
+			wp_set_current_user( 0 );
+			$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+			$made = $this->request_as( $user );
+			$res  = $this->post_code( $made['code'], $made['cookie'] );
+			$this->assertSame( 'redirect', $res['type'], $ip );
+			$this->assertSame( $user->ID, get_current_user_id(), $ip );
+		}
+	}
+
+	public function test_the_site_cap_emails_the_owner_once() {
+		delete_transient( 'happyaccess_pl_site_lock_alerted' );
+		update_option( 'admin_email', 'owner@example.org' );
+		$this->wrong_codes_from_many_ips( LoginSteps::SITE_CODE_CAP );
+		foreach ( array( '192.0.2.20', '192.0.2.21' ) as $ip ) {
+			$_SERVER['REMOTE_ADDR'] = $ip;
+			$this->assertSame( 'locked', LoginSteps::verify_flow( 'no-request', '000000', false, '' )->get_error_code(), $ip );
+		}
+
+		$to_owner = array_values(
+			array_filter(
+				$this->mails,
+				static function ( $mail ) {
+					return 'owner@example.org' === $mail['to'];
+				}
+			)
+		);
+		$this->assertCount( 1, $to_owner );
+		$this->assertStringContainsString( 'Login codes are paused', $to_owner[0]['subject'] );
+		$this->assertStringContainsString( 'Login links still work.', $to_owner[0]['message'] );
+		$this->assertCount( 1, $this->log_rows( 'passwordless_locked' ) );
+		$this->assertSame( 'site_cap', $this->log_rows( 'passwordless_locked' )[0]['meta']['reason'] );
+	}
+
+	public function test_the_site_cap_is_separate_from_the_support_code_cap() {
+		$this->wrong_codes_from_many_ips( LoginSteps::SITE_CODE_CAP );
+
+		$this->assertSame( 0, RateLimiter::retry_after( 'support_code', 'site', 'site', (int) Settings::get( 'security.site_code_cap' ), 3600, 3600 ) );
+		$this->assertGreaterThan( 0, RateLimiter::retry_after( LoginSteps::CODE_ACTION, 'site', 'site', LoginSteps::SITE_CODE_CAP, 3600, 3600 ) );
 	}
 
 	public function test_a_link_shows_a_confirm_page_and_logs_in_only_on_post() {
