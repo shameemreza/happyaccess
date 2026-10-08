@@ -518,6 +518,8 @@ final class Installer {
 	 * on the token's temp user becomes suspended_at (the flag itself stays), the IP allowlist and the menu and
 	 * admin bar settings become restrictions, the note becomes the label, and
 	 * used_at and use_count become the login history when it is still empty.
+	 * A single-use pass that 1.0.6 revoked at its login, while the session it
+	 * started still runs, loses that revoke so 1.1.0 reads it as used.
 	 * The old columns stay as they are. Safe to run more than once.
 	 *
 	 * @return bool Whether any write failed.
@@ -526,7 +528,7 @@ final class Installer {
 		global $wpdb;
 		$table = self::table( 'tokens' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, no input.
-		$rows   = $wpdb->get_results( "SELECT id, user_id, label, restrictions, suspended_at, ip_restrictions, metadata, used_at, use_count, last_login_at, login_count FROM {$table}", ARRAY_A );
+		$rows   = $wpdb->get_results( "SELECT id, user_id, label, restrictions, suspended_at, revoked_at, expires_at, ip_restrictions, metadata, used_at, max_uses, use_count, last_login_at, login_count FROM {$table}", ARRAY_A );
 		$failed = false;
 
 		foreach ( (array) $rows as $row ) {
@@ -537,6 +539,11 @@ final class Installer {
 			// Only the token's own user_id column is site-local. The happyaccess_token_id meta is network-wide while token ids are per site, so on multisite it can point at another site's token.
 			if ( ! empty( $row['user_id'] ) && empty( $row['suspended_at'] ) && get_user_meta( (int) $row['user_id'], 'happyaccess_deactivated', true ) ) {
 				$data['suspended_at'] = Clock::mysql();
+			}
+
+			if ( self::in_use_single_use( $row ) ) {
+				// use_count already equals max_uses and the plain code is gone, so the pass can't start another login.
+				$data['revoked_at'] = null;
 			}
 
 			if ( empty( $row['restrictions'] ) ) {
@@ -568,6 +575,26 @@ final class Installer {
 		}
 
 		return $failed;
+	}
+
+	/**
+	 * Whether a token row is a 1.0.6 single-use pass whose one login is still
+	 * running. 1.0.6 set revoked_at right after that login and marked the
+	 * account with happyaccess_single_use_revoked; the support person kept
+	 * working until expires_at.
+	 *
+	 * @param array $row Token row.
+	 * @return bool
+	 */
+	private static function in_use_single_use( array $row ) {
+		if ( 1 !== (int) $row['max_uses'] || (int) $row['use_count'] < 1 || empty( $row['revoked_at'] ) || empty( $row['user_id'] ) ) {
+			return false;
+		}
+		if ( Clock::from_mysql( $row['expires_at'] ) <= Clock::now() ) {
+			return false;
+		}
+		// Only this mark tells the 1.0.6 auto revoke apart from a merchant's revoke, which deleted the account.
+		return (bool) get_user_meta( (int) $row['user_id'], 'happyaccess_single_use_revoked', true );
 	}
 
 	/**

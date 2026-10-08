@@ -10,6 +10,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
+use HappyAccess\Features\SupportAccess\Grants;
 
 class MigrationTest extends WP_UnitTestCase {
 
@@ -715,5 +716,90 @@ class MigrationTest extends WP_UnitTestCase {
 
 		$this->assertFalse( Installer::table_exists( 'otp_shares' ) );
 		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+	}
+
+	/**
+	 * A 1.0.6 single-use pass after its login: 1.0.6 set revoked_at right
+	 * away, kept the session, and marked the account.
+	 *
+	 * @param string $hash       Token hash.
+	 * @param int    $expires_at Expiry timestamp.
+	 * @param bool   $marked     Whether the account has the 1.0.6 single-use mark.
+	 * @return array Grant id and temp user id.
+	 */
+	private function used_single_use_pass( $hash, $expires_at, $marked = true ) {
+		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$id   = $this->insert_legacy_token(
+			$hash,
+			array(
+				'otp_code'   => '777777',
+				'user_id'    => $user,
+				'max_uses'   => 1,
+				'use_count'  => 1,
+				'used_at'    => Clock::mysql( 1790000000 - 600 ),
+				'expires_at' => Clock::mysql( $expires_at ),
+				'revoked_at' => Clock::mysql( 1790000000 - 600 ),
+			)
+		);
+		update_user_meta( $user, 'happyaccess_temp_user', true );
+		update_user_meta( $user, 'happyaccess_token_id', $id );
+		if ( $marked ) {
+			update_user_meta( $user, 'happyaccess_single_use_revoked', true );
+		}
+		return array( $id, $user );
+	}
+
+	public function test_a_used_single_use_pass_in_time_keeps_its_session_and_account() {
+		list( $id, $user ) = $this->used_single_use_pass( 'once-in-use', 1790000000 + DAY_IN_SECONDS );
+		$post              = self::factory()->post->create(
+			array(
+				'post_author' => $user,
+				'post_status' => 'draft',
+			)
+		);
+
+		Installer::migrate();
+		Grants::flush_cache();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertNull( $this->token( 'once-in-use' )['revoked_at'] );
+		$this->assertSame( 'used', Grants::get( $id )['status'] );
+		$this->assertSame( 'active', Grants::resolve_user( $user )['state'] );
+
+		Grants::retry_orphans();
+		$this->assertNotFalse( get_userdata( $user ), 'The account stays until the pass expires.' );
+		$this->assertSame( $user, (int) get_post( $post )->post_author );
+	}
+
+	public function test_a_carried_single_use_pass_cannot_log_in_again() {
+		list( $id ) = $this->used_single_use_pass( 'once-no-reuse', 1790000000 + DAY_IN_SECONDS );
+
+		Installer::migrate();
+		Grants::flush_cache();
+
+		$this->assertEmpty( $this->token( 'once-no-reuse' )['code_hash'] );
+		$this->assertNull( Grants::find_by_code( '777777' ) );
+		$this->assertFalse( Grants::record_login( $id ) );
+		$this->assertSame( 1, (int) $this->token( 'once-no-reuse' )['use_count'] );
+	}
+
+	public function test_single_use_passes_outside_the_carry_stay_revoked() {
+		$this->used_single_use_pass( 'once-expired', 1790000000 - HOUR_IN_SECONDS );
+		$this->used_single_use_pass( 'once-unmarked', 1790000000 + DAY_IN_SECONDS, false );
+		$this->insert_legacy_token(
+			'once-gone',
+			array(
+				'user_id'    => 0,
+				'max_uses'   => 1,
+				'use_count'  => 1,
+				'revoked_at' => Clock::mysql( 1790000000 - 600 ),
+			)
+		);
+
+		Installer::migrate();
+
+		$this->assertNotNull( $this->token( 'once-expired' )['revoked_at'] );
+		$this->assertNotNull( $this->token( 'once-unmarked' )['revoked_at'], 'Without the 1.0.6 mark, the revoke may have been the merchant\'s.' );
+		$this->assertNotNull( $this->token( 'once-gone' )['revoked_at'] );
 	}
 }
