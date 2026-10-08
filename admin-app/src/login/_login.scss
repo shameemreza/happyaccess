@@ -1,0 +1,104 @@
+.happyaccess-app {
+
+	.ha-login {
+		min-width: 0;
+		max-inline-size: 760px;
+	}
+
+	.ha-login__group {
+		min-width: 0;
+		padding-block-start: 16px;
+		border-block-start: 1px solid var(--ha-line-soft);
+	}
+
+	.ha-login__heading {
+		margin: 0 0 4px;
+		padding: 0;
+		color: var(--ha-text);
+		font-size: 13px;
+		font-weight: 600;
+		line-height: 1.5;
+	}
+
+	.ha-login__places,
+	.ha-roles {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.ha-roles {
+		container-type: inline-size;
+	}
+
+	.ha-login__place,
+	.ha-roles__row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
+		margin: 0;
+		padding-block: 10px;
+
+		& + & {
+			border-block-start: 1px solid var(--ha-line-soft);
+		}
+	}
+
+	.ha-login__place {
+		justify-content: space-between;
+	}
+
+	// A warning under the select makes the row taller, so the name stays
+	// level with the select instead of the middle of the row.
+	.ha-roles__row {
+		align-items: flex-start;
+	}
+
+	// The name and the select share a row on wide screens and stack on
+	// narrow ones, with no breakpoint to keep in step.
+	.ha-roles__name {
+		display: flex;
+		flex: 1 1 12rem;
+		align-items: center;
+		min-width: 0;
+		color: var(--ha-text);
+		font-weight: 500;
+	}
+
+	.ha-roles__control {
+		flex: 1 1 18rem;
+		min-width: 0;
+	}
+
+	.ha-settings__form .ha-roles__control .components-base-control__help {
+		margin-block-start: 8px;
+	}
+
+	.ha-roles__warning {
+		display: block;
+		padding: 8px 10px;
+		border-radius: 4px;
+		background: #fcf9e8;
+		color: #614200;
+		font-size: 12px;
+		line-height: 1.5;
+
+		code {
+			padding: 1px 4px;
+			background: rgba(97, 66, 0, 0.08);
+			color: inherit;
+			font-size: 11px;
+			overflow-wrap: anywhere;
+		}
+	}
+
+	// Name and select fit side by side (12rem + 18rem + the gap), so the name
+	// takes the select's height and lines up with it.
+	@container (min-width: 31rem) {
+
+		.ha-roles__name {
+			min-height: 40px;
+		}
+	}
+}

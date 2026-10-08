@@ -123,6 +123,60 @@ describe( 'App shell', () => {
 		] );
 	} );
 
+	it( 'reads loginReady from the boot data', () => {
+		render(
+			<App
+				boot={ boot( {
+					loginReady: true,
+					features: { support_access: true, passwordless: true },
+				} ) }
+			/>
+		);
+
+		expect( tabNames() ).toContain( 'Login' );
+	} );
+
+	it( 'hides Login when both login features are off, and shows the Login tab when Passwordless is on', async () => {
+		const { unmount } = render(
+			<App
+				boot={ boot( {
+					loginReady: true,
+					features: {
+						support_access: true,
+						passwordless: false,
+						two_step: false,
+					},
+				} ) }
+			/>
+		);
+		expect( tabNames() ).not.toContain( 'Login' );
+		unmount();
+
+		const user = userEvent.setup();
+		render(
+			<App
+				boot={ boot( {
+					loginReady: true,
+					woocommerce: false,
+					roles: [
+						{
+							slug: 'administrator',
+							name: 'Administrator',
+							isAdmin: true,
+						},
+					],
+					features: { support_access: true, passwordless: true },
+				} ) }
+			/>
+		);
+		await user.click( screen.getByRole( 'link', { name: 'Login' } ) );
+
+		expect(
+			await screen.findByRole( 'heading', { name: 'Passwordless login' } )
+		).toBeInTheDocument();
+		expect( screen.getByLabelText( 'Administrator' ) ).toBeInTheDocument();
+	} );
+
 	it( 'hides Support access when that feature is off', () => {
 		render(
 			<App boot={ boot( { features: { support_access: false } } ) } />
@@ -449,6 +503,29 @@ describe( 'App shell', () => {
 		expect( await axe( container ) ).toHaveNoViolations();
 	} );
 
+	it( 'has no accessibility violations on the Login tab', async () => {
+		window.localStorage.setItem( 'happyaccess.tab', 'login' );
+		const { container } = render(
+			<App
+				boot={ boot( {
+					loginReady: true,
+					woocommerce: true,
+					roles: [
+						{
+							slug: 'administrator',
+							name: 'Administrator',
+							isAdmin: true,
+						},
+						{ slug: 'editor', name: 'Editor', isAdmin: false },
+					],
+					features: { support_access: true, passwordless: true },
+				} ) }
+			/>
+		);
+		await screen.findByRole( 'heading', { name: 'Passwordless login' } );
+		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+
 	it( 'has no accessibility violations on the setup gate', async () => {
 		const { container } = render(
 			<App boot={ boot( { needsSetup: true } ) } />
@@ -489,6 +566,33 @@ describe( 'data kept between tabs', () => {
 		expect( gets( '/grants' ) ).toBe( 1 );
 		expect( gets( '/settings' ) ).toBe( 1 );
 		expect( gets( '/catalog' ) ).toBe( 1 );
+	} );
+
+	it( 'opens the Login tab from the settings already loaded, with no second fetch', async () => {
+		const user = userEvent.setup();
+		render(
+			<App
+				boot={ boot( {
+					loginReady: true,
+					woocommerce: true,
+					roles: [],
+					features: { support_access: true, passwordless: true },
+				} ) }
+			/>
+		);
+		await goTo( user, 'Settings' );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+
+		await goTo( user, 'Login' );
+
+		// Shown at once, with no loading line in between.
+		expect(
+			screen.getByRole( 'heading', { name: 'Passwordless login' } )
+		).toBeInTheDocument();
+		expect( screen.queryByText( 'Loading settings' ) ).toBeNull();
+		await goTo( user, 'Support access' );
+		await goTo( user, 'Login' );
+		expect( gets( '/settings' ) ).toBe( 1 );
 	} );
 
 	it( 'does not fetch the first Activity page or the latest line again within seconds', async () => {

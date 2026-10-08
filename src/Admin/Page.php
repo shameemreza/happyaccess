@@ -271,20 +271,30 @@ final class Page {
 			'maxDays'     => self::MAX_DAYS,
 			'isMultisite' => is_multisite(),
 			'roles'       => self::roles(),
+			'loginReady'  => true,
+			'woocommerce' => class_exists( 'WooCommerce' ),
 		);
 	}
 
 	/**
-	 * Roles a protected pass can use instead of administrator, as slug and name.
+	 * Roles the current user may give out, as slug, name and whether the role
+	 * can manage options. A protected pass picks from them, and the Login tab
+	 * sets how each one logs in.
 	 *
 	 * @return array
 	 */
 	private static function roles() {
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+
 		$roles = array();
-		foreach ( wp_roles()->get_names() as $slug => $name ) {
+		foreach ( get_editable_roles() as $slug => $role ) {
+			$caps    = isset( $role['capabilities'] ) && is_array( $role['capabilities'] ) ? $role['capabilities'] : array();
 			$roles[] = array(
-				'slug' => (string) $slug,
-				'name' => translate_user_role( $name ),
+				'slug'    => (string) $slug,
+				'name'    => translate_user_role( $role['name'] ),
+				'isAdmin' => ! empty( $caps['manage_options'] ),
 			);
 		}
 		return $roles;

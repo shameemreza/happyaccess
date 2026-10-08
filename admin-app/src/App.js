@@ -9,6 +9,7 @@ import ActivityTab from './activity/ActivityTab';
 import { AnnounceProvider } from './Announcer';
 import DataProvider, { useActivityCache, useGrants } from './data/DataProvider';
 import Header from './Header';
+import LoginTab from './login/LoginTab';
 import SettingsTab from './settings/SettingsTab';
 import Setup from './setup/Setup';
 import SupportTab from './support/SupportTab';
@@ -64,10 +65,12 @@ function RefreshOnLock( { count } ) {
  *
  * @param {Object}  props            Props.
  * @param {Object}  props.boot       Boot data printed by the PHP page.
- * @param {boolean} props.loginReady Whether the Login tab exists yet.
+ * @param {boolean} props.loginReady Whether the Login tab exists. Defaults to boot.loginReady.
  * @return {Element} The app.
  */
-export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
+export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
+	const loginReady =
+		undefined === readyProp ? !! boot.loginReady : !! readyProp;
 	// Both change while the app is open: Settings switches features, and
 	// setup ends. Neither needs a page reload.
 	const [ features, setFeatures ] = useState(
@@ -160,12 +163,18 @@ export default function App( { boot = DEFAULT_BOOT, loginReady = false } ) {
 								onOpenSettings={ openSettings }
 							/>
 						) }
+						{ 'login' === active.slug && (
+							<LoginTab boot={ appBoot } />
+						) }
 						{ 'settings' === active.slug && (
 							<SettingsTab onFeaturesChange={ updateFeatures } />
 						) }
-						{ ! [ 'support', 'activity', 'settings' ].includes(
-							active.slug
-						) && (
+						{ ! [
+							'support',
+							'activity',
+							'login',
+							'settings',
+						].includes( active.slug ) && (
 							<section
 								className="ha-panel"
 								aria-labelledby="ha-panel-title"

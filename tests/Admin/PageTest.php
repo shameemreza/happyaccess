@@ -198,7 +198,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginReady', 'woocommerce' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );
@@ -217,9 +217,50 @@ class PageTest extends WP_UnitTestCase {
 
 		$roles = Page::boot_data()['roles'];
 
-		$this->assertSame( array( 'slug', 'name' ), array_keys( $roles[0] ) );
+		$this->assertSame( array( 'slug', 'name', 'isAdmin' ), array_keys( $roles[0] ) );
 		$this->assertContains( 'editor', wp_list_pluck( $roles, 'slug' ) );
 		$this->assertSame( array_values( $roles ), $roles );
+	}
+
+	public function test_boot_data_marks_roles_that_can_manage_options() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$by_slug = array_column( Page::boot_data()['roles'], 'isAdmin', 'slug' );
+
+		$this->assertTrue( $by_slug['administrator'] );
+		$this->assertFalse( $by_slug['editor'] );
+		$this->assertFalse( $by_slug['subscriber'] );
+	}
+
+	public function test_boot_data_lists_only_the_roles_the_user_can_edit() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		add_filter( 'editable_roles', array( $this, 'drop_editor_role' ) );
+
+		$slugs = wp_list_pluck( Page::boot_data()['roles'], 'slug' );
+
+		remove_filter( 'editable_roles', array( $this, 'drop_editor_role' ) );
+		$this->assertNotContains( 'editor', $slugs );
+		$this->assertContains( 'author', $slugs );
+	}
+
+	/**
+	 * Filter callback for the editable roles test.
+	 *
+	 * @param array $roles Editable roles.
+	 * @return array
+	 */
+	public function drop_editor_role( $roles ) {
+		unset( $roles['editor'] );
+		return $roles;
+	}
+
+	public function test_boot_data_says_the_login_tab_is_ready_and_whether_woocommerce_is_active() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$data = Page::boot_data();
+
+		$this->assertTrue( $data['loginReady'] );
+		$this->assertSame( class_exists( 'WooCommerce' ), $data['woocommerce'] );
 	}
 
 	public function test_boot_data_needs_setup_follows_consent() {
