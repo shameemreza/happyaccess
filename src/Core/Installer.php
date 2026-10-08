@@ -30,6 +30,12 @@ final class Installer {
 
 	const LEGACY_CODE_MAX_AGE = 7 * DAY_IN_SECONDS;
 
+	/**
+	 * A site whose stored DB version is below this one still has 1.0.x data
+	 * to carry. Later DB_VERSION bumps must not carry it again.
+	 */
+	const LEGACY_BELOW = '1.1.0';
+
 	const LEGACY_CRON_HOOKS = array( 'happyaccess_cleanup_expired', 'happyaccess_cleanup_attempts' );
 
 	const NETWORK_HOOK = 'happyaccess_network_upgrade';
@@ -287,17 +293,28 @@ final class Installer {
 			return $missing;
 		}
 
-		$result = self::hash_legacy_codes();
-		if ( self::carry_legacy_grant_state() ) {
-			$result['failed'] = true;
-		}
-		// After the carry, so a single-use pass it just put back in time is not closed here.
-		if ( self::close_legacy_expired() ) {
-			$result['failed'] = true;
-		}
-		$options = self::migrate_options( $is_upgrade );
-		if ( $options['failed'] ) {
-			$result['failed'] = true;
+		$result  = array(
+			'hashed' => 0,
+			'failed' => false,
+		);
+		$options = array(
+			'failed'  => false,
+			'changed' => array(),
+		);
+		// The 1.0.x flags and options stay behind, so carrying them on a later bump would undo what the merchant changed since.
+		if ( version_compare( $previous, self::LEGACY_BELOW, '<' ) ) {
+			$result = self::hash_legacy_codes();
+			if ( self::carry_legacy_grant_state() ) {
+				$result['failed'] = true;
+			}
+			// After the carry, so a single-use pass it just put back in time is not closed here.
+			if ( self::close_legacy_expired() ) {
+				$result['failed'] = true;
+			}
+			$options = self::migrate_options( $is_upgrade );
+			if ( $options['failed'] ) {
+				$result['failed'] = true;
+			}
 		}
 		self::backfill_blog_ids();
 

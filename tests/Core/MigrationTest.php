@@ -950,4 +950,35 @@ class MigrationTest extends WP_UnitTestCase {
 		$entry = AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['items'][0];
 		$this->assertArrayNotHasKey( 'retention_days', $entry['meta'] );
 	}
+
+	public function test_the_legacy_carry_runs_only_when_coming_from_below_110() {
+		global $wpdb;
+		$id   = $this->insert_legacy_token( 'resumed', array( 'metadata' => wp_json_encode( array( 'note' => 'Old note' ) ) ) );
+		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $user, 'happyaccess_deactivated', true );
+		$wpdb->update( $wpdb->prefix . 'happyaccess_tokens', array( 'user_id' => $user ), array( 'id' => $id ) );
+
+		Installer::migrate();
+		$this->assertNotEmpty( $this->token( 'resumed' )['suspended_at'] );
+		$this->assertSame( 'Old note', $this->token( 'resumed' )['label'] );
+
+		// The merchant resumes the pass and clears its label in 1.1.0.
+		$wpdb->update(
+			$wpdb->prefix . 'happyaccess_tokens',
+			array(
+				'suspended_at' => null,
+				'label'        => '',
+			),
+			array( 'id' => $id )
+		);
+		// A later release raises DB_VERSION, so the migration runs again from 1.1.0.
+		update_option( 'happyaccess_max_attempts', 3 );
+		Clock::freeze( 1790000000 + HOUR_IN_SECONDS );
+		Installer::migrate();
+
+		$row = $this->token( 'resumed' );
+		$this->assertNull( $row['suspended_at'], 'The old 1.0.6 flag must not suspend the pass again.' );
+		$this->assertSame( '', $row['label'], 'The old note must not come back.' );
+		$this->assertSame( 8, Settings::get( 'security.max_attempts' ), 'Legacy options are not read again.' );
+	}
 }
