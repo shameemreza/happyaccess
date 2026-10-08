@@ -28,7 +28,17 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 
 	public function tear_down() {
 		ActivityTracker::reset();
+		$GLOBALS['current_screen']  = null;
+		$_SERVER['REQUEST_METHOD'] = 'GET';
 		parent::tear_down();
+	}
+
+	/**
+	 * Option writes from a plain front-end page view are core side effects,
+	 * so the option tests run as a wp-admin request.
+	 */
+	private function in_admin() {
+		set_current_screen( 'options-general' );
 	}
 
 	private function rows_for( $user_login ) {
@@ -49,12 +59,14 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	}
 
 	public function test_normal_admin_changes_are_not_tracked() {
+		$this->in_admin();
 		update_option( 'blogname', 'Changed by owner' );
 		ActivityTracker::flush();
 		$this->assertSame( 0, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
 	}
 
 	public function test_settings_saves_are_grouped_without_values() {
+		$this->in_admin();
 		wp_set_current_user( $this->temp );
 		update_option( 'blogname', 'Secret-ish value' );
 		update_option( 'blogdescription', 'Another' );
@@ -108,6 +120,7 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	}
 
 	public function test_noise_options_are_skipped() {
+		$this->in_admin();
 		wp_set_current_user( $this->temp );
 		update_option( 'active_plugins', array( 'hello.php' ) );
 		update_option( 'cron', array() );
@@ -123,6 +136,7 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	}
 
 	public function test_the_role_table_is_left_to_the_roles_changed_event() {
+		$this->in_admin();
 		global $wpdb;
 		wp_set_current_user( $this->temp );
 		$key                              = $wpdb->prefix . 'user_roles';
@@ -137,6 +151,7 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	}
 
 	public function test_only_noise_options_write_no_entry() {
+		$this->in_admin();
 		wp_set_current_user( $this->temp );
 		update_option( 'active_plugins', array( 'hello.php' ) );
 		update_option( 'happyaccess_anything', 'x' );
@@ -145,6 +160,7 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	}
 
 	public function test_flush_uses_the_user_stored_when_the_option_changed() {
+		$this->in_admin();
 		wp_set_current_user( $this->temp );
 		update_option( 'blogname', 'Changed by support' );
 		wp_set_current_user( 0 );
@@ -155,11 +171,64 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	}
 
 	public function test_flush_empties_the_collected_options() {
+		$this->in_admin();
 		wp_set_current_user( $this->temp );
 		update_option( 'blogname', 'Changed once' );
 		ActivityTracker::flush();
 		ActivityTracker::flush();
 		$this->assertSame( 1, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_a_front_end_page_view_does_not_log_core_option_writes() {
+		wp_set_current_user( $this->temp );
+		$this->assertFalse( is_admin() );
+		update_option( 'theme_mods_x', array( 'custom_css_post_id' => -1 ) );
+		ActivityTracker::flush();
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_a_front_end_head_request_does_not_log_option_writes() {
+		$_SERVER['REQUEST_METHOD'] = 'HEAD';
+		wp_set_current_user( $this->temp );
+		update_option( 'theme_mods_x', array( 'custom_css_post_id' => -1 ) );
+		ActivityTracker::flush();
+		$this->assertSame( 0, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_the_same_option_write_in_an_admin_request_is_logged() {
+		$this->in_admin();
+		wp_set_current_user( $this->temp );
+		update_option( 'theme_mods_x', array( 'custom_css_post_id' => -1 ) );
+		ActivityTracker::flush();
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( array( 'theme_mods_x' ), $items[0]['meta']['options'] );
+	}
+
+	public function test_a_front_end_form_post_still_logs_option_writes() {
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		wp_set_current_user( $this->temp );
+		update_option( 'theme_mods_x', array( 'custom_css_post_id' => -1 ) );
+		ActivityTracker::flush();
+		$this->assertSame( 1, AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_a_rest_request_still_logs_option_writes() {
+		$_GET['rest_route'] = '/wp/v2/settings';
+		wp_set_current_user( $this->temp );
+		update_option( 'blogname', 'Saved over REST' );
+		unset( $_GET['rest_route'] );
+		ActivityTracker::flush();
+		$this->assertSame( 1, AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['total'] );
+	}
+
+	public function test_an_ajax_request_still_logs_option_writes() {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		wp_set_current_user( $this->temp );
+		update_option( 'theme_mods_x', array( 'custom_css_post_id' => -1 ) );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		ActivityTracker::flush();
+		$this->assertSame( 1, AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['total'] );
 	}
 
 	public function test_permanent_delete_is_tracked_even_after_trash() {

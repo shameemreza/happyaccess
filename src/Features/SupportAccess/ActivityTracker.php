@@ -10,6 +10,7 @@ namespace HappyAccess\Features\SupportAccess;
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Internal;
+use HappyAccess\Login\Session;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -495,7 +496,7 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function collect_option( $option ) {
-		if ( ! self::is_tracking() ) {
+		if ( ! self::is_tracking() || self::is_front_end_page_view() ) {
 			return;
 		}
 		if ( ! is_string( $option ) || self::is_skipped_option( $option ) ) {
@@ -666,6 +667,22 @@ final class ActivityTracker {
 			return false;
 		}
 		return ! wp_is_post_revision( $post );
+	}
+
+	/**
+	 * Whether this is a plain front-end page view. Core writes options there
+	 * on its own, such as a block theme's theme_mods on the first visit, so
+	 * those writes are not the temp user's. Form posts, the Customizer and
+	 * wp-admin saves are not page views.
+	 *
+	 * @return bool
+	 */
+	private static function is_front_end_page_view() {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) || Session::is_rest_request() ) {
+			return false;
+		}
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '';
+		return 'GET' === $method || 'HEAD' === $method;
 	}
 
 	/**

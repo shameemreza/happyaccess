@@ -308,7 +308,7 @@ final class Session {
 	 *
 	 * @return bool
 	 */
-	private static function is_rest_request() {
+	public static function is_rest_request() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
 		if ( isset( $_GET['rest_route'] ) ) {
 			return true;
