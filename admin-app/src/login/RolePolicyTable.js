@@ -17,19 +17,19 @@ function choices() {
 
 /**
  * The warning for a role that can manage the site and may log in by email
- * code only. The constant stays out of the translated text.
+ * code only. The wp-config line stays out of the translated text.
  *
  * @return {Element} The warning text.
  */
 function adminWarning() {
 	return createInterpolateElement(
 		sprintf(
-			/* translators: %s: a PHP constant name. */
+			/* translators: %s: a line of PHP to add to wp-config.php. */
 			__(
 				'Anyone who can read this email inbox can log in as this role. If email stops working, add <code>%s</code> to wp-config.php to get back in.',
 				'happyaccess'
 			),
-			'HAPPYACCESS_ALLOW_PASSWORD_LOGIN'
+			"define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );"
 		),
 		{ code: <code /> }
 	);

@@ -198,7 +198,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginReady', 'woocommerce' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );
@@ -217,30 +217,42 @@ class PageTest extends WP_UnitTestCase {
 
 		$roles = Page::boot_data()['roles'];
 
-		$this->assertSame( array( 'slug', 'name', 'isAdmin' ), array_keys( $roles[0] ) );
+		$this->assertSame( array( 'slug', 'name' ), array_keys( $roles[0] ) );
 		$this->assertContains( 'editor', wp_list_pluck( $roles, 'slug' ) );
 		$this->assertSame( array_values( $roles ), $roles );
 	}
 
-	public function test_boot_data_marks_roles_that_can_manage_options() {
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-
-		$by_slug = array_column( Page::boot_data()['roles'], 'isAdmin', 'slug' );
-
-		$this->assertTrue( $by_slug['administrator'] );
-		$this->assertFalse( $by_slug['editor'] );
-		$this->assertFalse( $by_slug['subscriber'] );
-	}
-
-	public function test_boot_data_lists_only_the_roles_the_user_can_edit() {
+	public function test_boot_data_roles_for_the_support_picker_ignore_the_editable_roles_filter() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		add_filter( 'editable_roles', array( $this, 'drop_editor_role' ) );
 
 		$slugs = wp_list_pluck( Page::boot_data()['roles'], 'slug' );
 
 		remove_filter( 'editable_roles', array( $this, 'drop_editor_role' ) );
-		$this->assertNotContains( 'editor', $slugs );
-		$this->assertContains( 'author', $slugs );
+		$this->assertContains( 'editor', $slugs );
+	}
+
+	public function test_boot_data_login_roles_list_slug_name_and_whether_the_role_can_manage_options() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$roles = Page::boot_data()['loginRoles'];
+
+		$this->assertSame( array( 'slug', 'name', 'isAdmin' ), array_keys( $roles[0] ) );
+		$this->assertSame( array_values( $roles ), $roles );
+		$by_slug = array_column( $roles, 'isAdmin', 'slug' );
+		$this->assertTrue( $by_slug['administrator'] );
+		$this->assertFalse( $by_slug['editor'] );
+		$this->assertFalse( $by_slug['subscriber'] );
+	}
+
+	public function test_boot_data_login_roles_include_every_role_even_when_the_editable_roles_filter_drops_one() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		add_filter( 'editable_roles', array( $this, 'drop_editor_role' ) );
+
+		$slugs = wp_list_pluck( Page::boot_data()['loginRoles'], 'slug' );
+
+		remove_filter( 'editable_roles', array( $this, 'drop_editor_role' ) );
+		$this->assertSame( array_keys( wp_roles()->roles ), $slugs );
 	}
 
 	/**

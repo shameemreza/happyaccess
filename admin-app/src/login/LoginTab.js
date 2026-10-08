@@ -80,7 +80,7 @@ function places( woocommerce ) {
  * changed, inside the `passwordless` group.
  *
  * @param {Object} props      Props.
- * @param {Object} props.boot Boot data: features, woocommerce and roles.
+ * @param {Object} props.boot Boot data: features, woocommerce and loginRoles.
  * @return {Element} The tab.
  */
 export default function LoginTab( { boot } ) {
@@ -318,7 +318,7 @@ export default function LoginTab( { boot } ) {
 									) }
 								</h3>
 								<RolePolicyTable
-									roles={ boot?.roles || [] }
+									roles={ boot?.loginRoles || [] }
 									policy={ policy }
 									onChange={ setRole }
 								/>

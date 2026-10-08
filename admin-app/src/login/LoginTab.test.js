@@ -59,7 +59,7 @@ const ROLES = [
 const boot = ( overrides = {} ) => ( {
 	features: { support_access: true, passwordless: true, two_step: false },
 	woocommerce: true,
-	roles: ROLES,
+	loginRoles: ROLES,
 	...overrides,
 } );
 
@@ -71,7 +71,7 @@ const liveText = () =>
 const saveButton = () => screen.getByRole( 'button', { name: 'Save changes' } );
 
 const WARNING =
-	'Anyone who can read this email inbox can log in as this role. If email stops working, add HAPPYACCESS_ALLOW_PASSWORD_LOGIN to wp-config.php to get back in.';
+	"Anyone who can read this email inbox can log in as this role. If email stops working, add define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true ); to wp-config.php to get back in.";
 
 async function renderTab( bootData = boot() ) {
 	const view = render(
@@ -190,8 +190,9 @@ describe( 'Login tab', () => {
 		const warning = screen.getByText( /Anyone who can read/ );
 		expect( warning.textContent ).toBe( WARNING );
 		expect(
-			within( warning ).getByText( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN' )
-				.tagName
+			within( warning ).getByText(
+				"define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );"
+			).tagName
 		).toBe( 'CODE' );
 		expect(
 			screen.getByLabelText( 'Administrator' )

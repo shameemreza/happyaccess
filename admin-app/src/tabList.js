@@ -47,6 +47,25 @@ export function getVisibleTabs( context ) {
 }
 
 /**
+ * The tab to show for the current one. A Login tab that just went away
+ * (Passwordless switched off) leaves you on Settings, where the switch is.
+ * Any other tab that is gone falls back to the first one shown.
+ *
+ * @param {Array}  visibleTabs Tabs this site shows.
+ * @param {string} current     The tab slug in use.
+ * @return {string} Tab slug.
+ */
+export function resolveCurrentTab( visibleTabs, current ) {
+	const slugs = visibleTabs.map( ( tab ) => tab.slug );
+	if ( slugs.includes( current ) ) {
+		return current;
+	}
+	return 'login' === current && slugs.includes( 'settings' )
+		? 'settings'
+		: slugs[ 0 ];
+}
+
+/**
  * @return {string} The tab slug in the current URL, or an empty string.
  */
 export function readQueryTab() {

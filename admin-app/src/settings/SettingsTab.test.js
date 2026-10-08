@@ -493,6 +493,100 @@ describe( 'Settings tab', () => {
 		} );
 	} );
 
+	describe( 'Passwordless login', () => {
+		it( 'shows an off switch with its help text, and no two-step switch', async () => {
+			await renderTab();
+
+			const toggle = screen.getByRole( 'switch', {
+				name: 'Passwordless login',
+			} );
+			expect( toggle ).not.toBeChecked();
+			expect( toggle ).toHaveAccessibleDescription(
+				'Let people log in with a code or link sent to their email.'
+			);
+			expect(
+				screen.queryByRole( 'switch', { name: /two-step/i } )
+			).not.toBeInTheDocument();
+		} );
+
+		it( 'turns on right away and saves only that key', async () => {
+			const onFeaturesChange = vi.fn();
+			const user = userEvent.setup();
+			await renderTab( { onFeaturesChange } );
+			// An unsaved edit elsewhere must survive the switch.
+			await user.selectOptions(
+				screen.getByLabelText( 'Keep activity for' ),
+				'90'
+			);
+
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			);
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( {
+				features: { passwordless: true },
+			} );
+			expect( onFeaturesChange ).toHaveBeenCalledWith(
+				expect.objectContaining( { passwordless: true } )
+			);
+			expect(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			).toBeChecked();
+			expect(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			).toHaveFocus();
+			expect( liveText() ).toBe( 'Passwordless login turned on' );
+			expect( screen.getByText( 'Unsaved changes' ) ).toBeInTheDocument();
+		} );
+
+		it( 'turns off right away, without a question, and saves only that key', async () => {
+			mockServer(
+				settingsFixture( {
+					features: { passwordless: true },
+				} )
+			);
+			const onFeaturesChange = vi.fn();
+			const user = userEvent.setup();
+			await renderTab( { onFeaturesChange } );
+
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			);
+
+			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+			expect( posts[ 0 ] ).toEqual( {
+				features: { passwordless: false },
+			} );
+			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
+			expect( onFeaturesChange ).toHaveBeenCalledWith(
+				expect.objectContaining( { passwordless: false } )
+			);
+			expect( liveText() ).toBe( 'Passwordless login turned off' );
+		} );
+
+		it( 'shows an inline error and leaves the switch off when the save fails', async () => {
+			const user = userEvent.setup();
+			await renderTab();
+			apiFetch.mockRejectedValueOnce( {
+				code: 'happyaccess_failed',
+				message: 'Could not turn it on.',
+				data: { status: 500 },
+			} );
+
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			);
+
+			expect(
+				await within( page() ).findByText( 'Could not turn it on.' )
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			).not.toBeChecked();
+		} );
+	} );
+
 	describe( 'reCAPTCHA', () => {
 		it( 'hides the keys until it is switched on', async () => {
 			const user = userEvent.setup();

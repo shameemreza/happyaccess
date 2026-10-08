@@ -158,7 +158,7 @@ describe( 'App shell', () => {
 				boot={ boot( {
 					loginReady: true,
 					woocommerce: false,
-					roles: [
+					loginRoles: [
 						{
 							slug: 'administrator',
 							name: 'Administrator',
@@ -175,6 +175,38 @@ describe( 'App shell', () => {
 			await screen.findByRole( 'heading', { name: 'Passwordless login' } )
 		).toBeInTheDocument();
 		expect( screen.getByLabelText( 'Administrator' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the Login tab when Passwordless is switched on in Settings, and hides it when it is switched off', async () => {
+		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
+		const user = userEvent.setup();
+		render( <App boot={ boot( { loginReady: true } ) } /> );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+		expect( tabNames() ).not.toContain( 'Login' );
+
+		await user.click(
+			screen.getByRole( 'switch', { name: 'Passwordless login' } )
+		);
+
+		await waitFor( () => expect( tabNames() ).toContain( 'Login' ) );
+		expect( tabNames() ).toEqual( [
+			'Support access',
+			'Activity',
+			'Login',
+			'Settings',
+		] );
+		expect(
+			screen.getByRole( 'heading', { name: 'Safety and privacy' } )
+		).toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole( 'switch', { name: 'Passwordless login' } )
+		);
+
+		await waitFor( () => expect( tabNames() ).not.toContain( 'Login' ) );
+		expect(
+			screen.getByRole( 'heading', { name: 'Safety and privacy' } )
+		).toBeInTheDocument();
 	} );
 
 	it( 'hides Support access when that feature is off', () => {
@@ -510,7 +542,7 @@ describe( 'App shell', () => {
 				boot={ boot( {
 					loginReady: true,
 					woocommerce: true,
-					roles: [
+					loginRoles: [
 						{
 							slug: 'administrator',
 							name: 'Administrator',
@@ -575,7 +607,7 @@ describe( 'data kept between tabs', () => {
 				boot={ boot( {
 					loginReady: true,
 					woocommerce: true,
-					roles: [],
+					loginRoles: [],
 					features: { support_access: true, passwordless: true },
 				} ) }
 			/>

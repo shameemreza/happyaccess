@@ -14,7 +14,13 @@ import SettingsTab from './settings/SettingsTab';
 import Setup from './setup/Setup';
 import SupportTab from './support/SupportTab';
 import TabNav from './TabNav';
-import { getVisibleTabs, pickInitialTab, storeTab, tabUrl } from './tabList';
+import {
+	getVisibleTabs,
+	pickInitialTab,
+	resolveCurrentTab,
+	storeTab,
+	tabUrl,
+} from './tabList';
 
 const NO_FEATURES = {};
 const DEFAULT_BOOT = { features: NO_FEATURES, needsSetup: false };
@@ -132,7 +138,16 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 		[ updateFeatures, select ]
 	);
 
-	const active = tabs.find( ( tab ) => tab.slug === current ) || tabs[ 0 ];
+	const activeSlug = resolveCurrentTab( tabs, current );
+	const active = tabs.find( ( tab ) => tab.slug === activeSlug );
+
+	// The Login tab can go away while it is open. Settings takes over, and
+	// the address bar and remembered tab follow.
+	useEffect( () => {
+		if ( 'login' === current && 'login' !== activeSlug ) {
+			select( activeSlug );
+		}
+	}, [ current, activeSlug, select ] );
 
 	return (
 		<AnnounceProvider>

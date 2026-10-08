@@ -271,25 +271,38 @@ final class Page {
 			'maxDays'     => self::MAX_DAYS,
 			'isMultisite' => is_multisite(),
 			'roles'       => self::roles(),
+			'loginRoles'  => self::login_roles(),
 			'loginReady'  => true,
 			'woocommerce' => class_exists( 'WooCommerce' ),
 		);
 	}
 
 	/**
-	 * Roles the current user may give out, as slug, name and whether the role
-	 * can manage options. A protected pass picks from them, and the Login tab
-	 * sets how each one logs in.
+	 * Roles a protected pass can use instead of administrator, as slug and name.
 	 *
 	 * @return array
 	 */
 	private static function roles() {
-		if ( ! function_exists( 'get_editable_roles' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-		}
-
 		$roles = array();
-		foreach ( get_editable_roles() as $slug => $role ) {
+		foreach ( wp_roles()->get_names() as $slug => $name ) {
+			$roles[] = array(
+				'slug' => (string) $slug,
+				'name' => translate_user_role( $name ),
+			);
+		}
+		return $roles;
+	}
+
+	/**
+	 * Every role, for the Login tab: slug, name and whether the role can
+	 * manage options. The login policy applies to every role, so this list is
+	 * not limited to the roles the current user may edit.
+	 *
+	 * @return array
+	 */
+	private static function login_roles() {
+		$roles = array();
+		foreach ( wp_roles()->roles as $slug => $role ) {
 			$caps    = isset( $role['capabilities'] ) && is_array( $role['capabilities'] ) ? $role['capabilities'] : array();
 			$roles[] = array(
 				'slug'    => (string) $slug,

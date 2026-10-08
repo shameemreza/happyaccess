@@ -27,6 +27,7 @@ const noop = () => {};
 
 const FALLBACKS = {
 	'features.support_access': true,
+	'features.passwordless': false,
 	'security.max_attempts': 5,
 	'security.lockout_duration': 1800,
 	'security.proxy_header': '',
@@ -77,6 +78,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 	const [ saveError, setSaveError ] = useState( null );
 	const [ justSaved, setJustSaved ] = useState( false );
 	const switchRef = useRef( null );
+	const passwordlessRef = useRef( null );
 	const secretRef = useRef( null );
 
 	if ( loading && ! settings ) {
@@ -125,6 +127,7 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 	const setValue = ( path, value ) => setValues( { [ path ]: value } );
 
 	const supportOn = !! saved( 'features.support_access' );
+	const passwordlessOn = !! saved( 'features.passwordless' );
 	const patch = buildPatch( edits );
 	const recaptchaOn = !! val( 'security.recaptcha_enabled' );
 	// A typed secret only counts while reCAPTCHA is on.
@@ -175,6 +178,29 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 			setFeatureError( null );
 			setConfirmOff( true );
 		}
+	};
+
+	// Passwordless login saves as soon as it is switched, either way. Turning
+	// it off ends nothing, so it needs no question.
+	const switchPasswordless = async ( next ) => {
+		if ( saving ) {
+			return;
+		}
+		setFeatureError( null );
+		try {
+			const result = await save( {
+				features: { passwordless: next },
+			} );
+			finish( result );
+			announce(
+				next
+					? __( 'Passwordless login turned on', 'happyaccess' )
+					: __( 'Passwordless login turned off', 'happyaccess' )
+			);
+		} catch ( e ) {
+			setFeatureError( e );
+		}
+		passwordlessRef.current?.focus();
 	};
 
 	const removeSecret = async () => {
@@ -276,6 +302,57 @@ export default function SettingsTab( { onFeaturesChange = noop } ) {
 								onChange={ onSwitch }
 								aria-labelledby={ `${ ids }-support-name` }
 								aria-describedby={ `${ ids }-support-desc` }
+							/>
+						</li>
+						<li className="ha-feature">
+							<span
+								className="ha-feature__icon"
+								aria-hidden="true"
+							>
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="2"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									focusable="false"
+								>
+									<rect
+										x="3"
+										y="5"
+										width="18"
+										height="14"
+										rx="2"
+									/>
+									<path d="m3 7 9 6 9-6" />
+								</svg>
+							</span>
+							<div className="ha-feature__text">
+								<div
+									className="ha-feature__name"
+									id={ `${ ids }-passwordless-name` }
+								>
+									{ __(
+										'Passwordless login',
+										'happyaccess'
+									) }
+								</div>
+								<div id={ `${ ids }-passwordless-desc` }>
+									{ __(
+										'Let people log in with a code or link sent to their email.',
+										'happyaccess'
+									) }
+								</div>
+							</div>
+							<Switch
+								ref={ passwordlessRef }
+								checked={ passwordlessOn }
+								onChange={ switchPasswordless }
+								aria-labelledby={ `${ ids }-passwordless-name` }
+								aria-describedby={ `${ ids }-passwordless-desc` }
 							/>
 						</li>
 					</ul>
