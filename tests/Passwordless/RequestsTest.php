@@ -456,4 +456,31 @@ class RequestsTest extends WP_UnitTestCase {
 	public function test_eligible_accepts_a_member_of_the_current_site_on_multisite() {
 		$this->assertSame( $this->user->ID, Requests::eligible( $this->user->user_email )->ID );
 	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_a_spam_user_cannot_use_passwordless_on_multisite() {
+		global $wpdb;
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+
+		$spam    = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$other   = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$by_code = Requests::create( $spam, 'request-key' );
+		$by_link = Requests::create( $other, 'other-key' );
+		$this->assertIsArray( $by_code );
+		$this->assertIsArray( $by_link );
+
+		$wpdb->update( $wpdb->users, array( 'spam' => 1 ), array( 'ID' => $spam->ID ) );
+		$wpdb->update( $wpdb->users, array( 'spam' => 1 ), array( 'ID' => $other->ID ) );
+		clean_user_cache( $spam->ID );
+		clean_user_cache( $other->ID );
+
+		$this->assertNull( Requests::eligible( $spam->user_email ) );
+		$this->assertInstanceOf( 'WP_Error', Requests::create( get_userdata( $spam->ID ), 'second-key' ) );
+		$this->assertInstanceOf( 'WP_Error', Requests::verify_code( 'request-key', $by_code['code'] ) );
+		$this->assertInstanceOf( 'WP_Error', Requests::consume_link( $by_link['link_key'] ) );
+	}
 }

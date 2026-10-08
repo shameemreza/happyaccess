@@ -237,6 +237,10 @@ final class Requests {
 		if ( is_multisite() && ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) ) {
 			return false;
 		}
+		// Core blocks spam users in its own sign-in check, which this path skips.
+		if ( is_multisite() && is_user_spammy( $user ) ) {
+			return false;
+		}
 		/**
 		 * Filters whether a user may log in without a password.
 		 *

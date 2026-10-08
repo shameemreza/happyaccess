@@ -35,6 +35,12 @@ final class LoginSteps {
 	const CODE_ACTION    = 'passwordless_code';
 	const LINK_ACTION    = 'passwordless_link';
 	const COOKIE         = 'happyaccess_pl_request';
+	const CONFIRM_COOKIE = 'happyaccess_pl_confirm';
+
+	/**
+	 * Seconds the link confirm cookie lives.
+	 */
+	const CONFIRM_LIFETIME = 600;
 
 	/**
 	 * Requests allowed per IP bucket inside an hour, then the lock lasts an hour.
@@ -142,14 +148,15 @@ final class LoginSteps {
 			return self::request_screen( $redirect, self::locked_error( $wait ) );
 		}
 
-		// Keyed on what was typed, so a missing account is limited the same way as a real one.
-		$account_wait = RateLimiter::attempt( self::REQUEST_ACTION, 'account', strtolower( $typed ), self::ACCOUNT_REQUEST_LIMIT, self::ACCOUNT_REQUEST_WINDOW, self::ACCOUNT_REQUEST_WINDOW );
+		// A real account is keyed on its id, so its username and email share one limit. A missing one is keyed on what was typed, so it is limited the same way.
+		$user         = Requests::eligible( $typed );
+		$subject      = null !== $user ? 'u:' . $user->ID : 't:' . strtolower( $typed );
+		$account_wait = RateLimiter::attempt( self::REQUEST_ACTION, 'account', $subject, self::ACCOUNT_REQUEST_LIMIT, self::ACCOUNT_REQUEST_WINDOW, self::ACCOUNT_REQUEST_WINDOW );
 
 		// Every request gets a fresh key and a cookie, whether or not a code was made.
 		$request_key = Codes::link_key();
 		self::send_cookie( self::COOKIE, $request_key, Clock::now() + self::lifetime() );
 
-		$user = Requests::eligible( $typed );
 		if ( null !== $user && $account_wait > 0 ) {
 			AuditLog::add( 'passwordless_failed', self::log_args( $user->ID, __( 'Login code not sent: too many requests', 'happyaccess' ), array( 'reason' => 'account_limit' ) ) );
 		} elseif ( null !== $user ) {
@@ -188,7 +195,7 @@ final class LoginSteps {
 		}
 
 		if ( '' !== $key ) {
-			return self::handle_link( $post_method, $key, $post );
+			return self::handle_link( $post_method, $key, $post, $cookies );
 		}
 
 		$redirect = self::valid_redirect( '' !== self::text( $post, 'redirect_to' ) ? self::text( $post, 'redirect_to' ) : self::text( $get, 'redirect_to' ) );
@@ -202,7 +209,6 @@ final class LoginSteps {
 		}
 
 		if ( ! self::nonce_ok( $post, 'happyaccess_pl_verify' ) ) {
-			AuditLog::add( 'passwordless_failed', self::log_args( 0, __( 'Login code form expired', 'happyaccess' ), array( 'reason' => 'nonce' ) ) );
 			return self::verify_screen( $redirect, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
@@ -219,7 +225,8 @@ final class LoginSteps {
 			} else {
 				AuditLog::add( 'passwordless_failed', self::log_args( 0, __( 'Login code did not work', 'happyaccess' ), array( 'reason' => 'invalid_code' ) ) );
 			}
-			return self::verify_screen( $redirect, new \WP_Error( $result->get_error_code(), esc_html( $result->get_error_message() ) ) );
+			// One message and one code for every failure, so the fifth wrong code doesn't show that the account exists.
+			return self::verify_screen( $redirect, new \WP_Error( 'happyaccess_invalid_code', esc_html__( 'That code is not right or has expired. Ask for a new code.', 'happyaccess' ) ) );
 		}
 
 		return self::log_in( $result, 'code', ! empty( $post['rememberme'] ), $redirect );
@@ -231,9 +238,10 @@ final class LoginSteps {
 	 * @param bool   $post_method Whether the request is a POST.
 	 * @param string $key         Link key.
 	 * @param array  $post        Unslashed $_POST.
+	 * @param array  $cookies     Unslashed $_COOKIE.
 	 * @return array Response for Screens::respond().
 	 */
-	private static function handle_link( $post_method, $key, array $post ) {
+	private static function handle_link( $post_method, $key, array $post, array $cookies ) {
 		if ( ! self::db_ready() ) {
 			return self::link_error( new \WP_Error( 'updating', self::updating_text() ) );
 		}
@@ -250,6 +258,15 @@ final class LoginSteps {
 				return self::link_error();
 			}
 			return self::link_confirm( $user, $key, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Select Log in again.', 'happyaccess' ) ) );
+		}
+
+		// Logged-out nonces are shared, so the nonce alone can't tell this form from one another site posts for a stranger's key.
+		if ( ! self::confirm_ok( $post, $cookies ) ) {
+			// A key that is already used or expired still gets the plain expired message.
+			if ( null === self::user_for_link( $key ) ) {
+				return self::link_error();
+			}
+			return self::link_error( new \WP_Error( 'confirm_missing', esc_html__( 'Open the link from your email again, then select Log in.', 'happyaccess' ) ) );
 		}
 
 		$wait = self::ip_wait( self::LINK_ACTION );
@@ -283,6 +300,9 @@ final class LoginSteps {
 
 		RateLimiter::clear( 'link' === $method ? self::LINK_ACTION : self::CODE_ACTION, 'ip', RateLimiter::ip_subject() );
 		self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
+		if ( 'link' === $method ) {
+			self::send_cookie( self::CONFIRM_COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
+		}
 
 		AuditLog::add( 'passwordless_login', self::log_args( $user->ID, __( 'Logged in with a login code or link', 'happyaccess' ), array( 'method' => $method ) ) );
 
@@ -309,7 +329,11 @@ final class LoginSteps {
 			return $redirect;
 		}
 
+		// Same default as core: a user who can't edit posts has no use for the dashboard.
 		$default = admin_url();
+		if ( ! user_can( $user, 'edit_posts' ) ) {
+			$default = user_can( $user, 'read' ) ? admin_url( 'profile.php' ) : home_url();
+		}
 		if ( function_exists( 'wc_get_page_permalink' ) && in_array( 'customer', (array) $user->roles, true ) ) {
 			$account = wc_get_page_permalink( 'myaccount' );
 			if ( is_string( $account ) && '' !== $account ) {
@@ -361,6 +385,8 @@ final class LoginSteps {
 
 		if ( function_exists( 'fastcgi_finish_request' ) ) {
 			fastcgi_finish_request();
+		} elseif ( function_exists( 'litespeed_finish_request' ) ) {
+			litespeed_finish_request();
 		}
 
 		foreach ( $queue as $item ) {
@@ -492,6 +518,21 @@ final class LoginSteps {
 	 */
 	private static function db_ready() {
 		return get_option( 'happyaccess_db_version' ) === Installer::DB_VERSION;
+	}
+
+	/**
+	 * Whether the link form was opened in this browser: the confirm cookie
+	 * is present and the hidden field holds its hash. A form posted from
+	 * another site carries no cookie, because it is SameSite Lax.
+	 *
+	 * @param array $post    Unslashed $_POST.
+	 * @param array $cookies Unslashed $_COOKIE.
+	 * @return bool
+	 */
+	private static function confirm_ok( array $post, array $cookies ) {
+		$cookie = isset( $cookies[ self::CONFIRM_COOKIE ] ) && is_string( $cookies[ self::CONFIRM_COOKIE ] ) ? trim( $cookies[ self::CONFIRM_COOKIE ] ) : '';
+		$field  = self::text( $post, 'c' );
+		return '' !== $cookie && '' !== $field && Codes::verify_key( $cookie, $field );
 	}
 
 	/**
@@ -654,9 +695,13 @@ final class LoginSteps {
 			$user->display_name
 		);
 
+		$confirm = Codes::link_key();
+		self::send_cookie( self::CONFIRM_COOKIE, $confirm, Clock::now() + self::CONFIRM_LIFETIME );
+
 		$body  = '<form name="happyaccess-link" method="post" action="' . esc_url( Router::url( 'verify' ) ) . '">';
 		$body .= '<p>' . esc_html( $question ) . '</p>';
 		$body .= '<input type="hidden" name="k" value="' . esc_attr( $key ) . '" />';
+		$body .= '<input type="hidden" name="c" value="' . esc_attr( Codes::hash_key( $confirm ) ) . '" />';
 		$body .= wp_nonce_field( 'happyaccess_pl_link', '_wpnonce', false, false );
 		$body .= '<p class="submit"><input type="submit" class="button button-primary button-large" value="' . esc_attr__( 'Log in', 'happyaccess' ) . '" /></p>';
 		$body .= '</form>';

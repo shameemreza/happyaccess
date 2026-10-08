@@ -137,15 +137,53 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		);
 	}
 
-	private function post_link( $key ) {
+	/**
+	 * Opens the confirm page like a browser and returns the cookie it set
+	 * and the hidden field it printed.
+	 *
+	 * @param string $key Link key.
+	 * @return array cookie and field.
+	 */
+	private function open_link( $key ) {
+		$this->cookies = array();
+		$res           = LoginSteps::handle_verify( 'GET', array( 'k' => $key ), array(), array() );
+		$cookie        = '';
+		foreach ( $this->cookies as $one ) {
+			if ( 'happyaccess_pl_confirm' === $one['name'] ) {
+				$cookie = $one['value'];
+			}
+		}
+		$field = 1 === preg_match( '/name="c" value="([^"]*)"/', $res['body'], $found ) ? $found[1] : '';
+		return array(
+			'cookie' => $cookie,
+			'field'  => $field,
+		);
+	}
+
+	/**
+	 * Posts the confirm form. Without $confirm it opens the page first, like
+	 * a browser does.
+	 *
+	 * @param string     $key     Link key.
+	 * @param array|null $confirm cookie and field, or null to open the page first.
+	 * @return array
+	 */
+	private function post_link( $key, $confirm = null ) {
+		if ( null === $confirm ) {
+			$confirm = $this->open_link( $key );
+		}
+		$post = array(
+			'k'        => $key,
+			'_wpnonce' => wp_create_nonce( 'happyaccess_pl_link' ),
+		);
+		if ( null !== $confirm['field'] ) {
+			$post['c'] = $confirm['field'];
+		}
 		return LoginSteps::handle_verify(
 			'POST',
 			array(),
-			array(
-				'k'        => $key,
-				'_wpnonce' => wp_create_nonce( 'happyaccess_pl_link' ),
-			),
-			array()
+			$post,
+			'' === $confirm['cookie'] ? array() : array( 'happyaccess_pl_confirm' => $confirm['cookie'] )
 		);
 	}
 
@@ -195,11 +233,12 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 
 		$seen = array();
 		foreach ( array( 'real@example.org', 'nobody@example.org', 'support@example.org', 'LIMITED@example.org' ) as $typed ) {
-			$this->cookies = array();
-			$response      = $this->post_request( $typed );
+			$this->cookies  = array();
+			$response       = $this->post_request( $typed );
 			$seen[ $typed ] = array(
 				'response' => $response,
 				'names'    => wp_list_pluck( $this->cookies, 'name' ),
+				'options'  => wp_list_pluck( $this->cookies, 'options' ),
 			);
 		}
 
@@ -210,6 +249,14 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		foreach ( $seen as $typed => $one ) {
 			$this->assertSame( $first['response'], $one['response'], $typed );
 			$this->assertSame( $first['names'], $one['names'], $typed );
+			$this->assertCount( count( $first['options'] ), $one['options'], $typed );
+			foreach ( $first['options'] as $index => $options ) {
+				$expires_a = $options['expires'];
+				$expires_b = $one['options'][ $index ]['expires'];
+				unset( $options['expires'], $one['options'][ $index ]['expires'] );
+				$this->assertSame( $options, $one['options'][ $index ], $typed . ' cookie flags, path and domain' );
+				$this->assertEqualsWithDelta( $expires_a, $expires_b, 3, $typed . ' cookie expiry' );
+			}
 		}
 
 		$this->assertCount( 0, $this->mails, 'Nothing is sent before shutdown.' );
@@ -395,11 +442,58 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		for ( $i = 0; $i < 5; $i++ ) {
 			$res = $this->post_code( $wrong, $made['cookie'] );
 		}
-		$this->assertSame( array( 'happyaccess_code_locked' ), $res['errors']->get_error_codes() );
+		$this->assertSame( array( 'happyaccess_invalid_code' ), $res['errors']->get_error_codes() );
 		$this->assertCount( 1, $this->log_rows( 'passwordless_locked' ) );
 
 		$late = $this->post_code( $made['code'], $made['cookie'] );
 		$this->assertSame( 'render', $late['type'] );
+	}
+
+	public function test_five_wrong_codes_look_the_same_for_a_real_and_a_missing_account() {
+		$user = self::factory()->user->create_and_get( array( 'user_email' => 'real@example.org' ) );
+		$real = $this->request_as( $user );
+
+		$this->cookies = array();
+		$this->post_request( 'ghost@example.org' );
+		$ghost_cookie = $this->cookies[0]['value'];
+
+		$wrong = '000000' === $real['code'] ? '111111' : '000000';
+		$seen  = array();
+		foreach ( array(
+			'real'  => array( $real['cookie'], '203.0.113.20' ),
+			'ghost' => array( $ghost_cookie, '203.0.113.21' ),
+		) as $name => $case ) {
+			$_SERVER['REMOTE_ADDR'] = $case[1];
+			for ( $i = 1; $i <= 5; $i++ ) {
+				$res = $this->post_code( $wrong, $case[0] );
+				$this->assertSame( 'render', $res['type'] );
+				$seen[ $name ][ $i ] = array(
+					'codes'   => $res['errors']->get_error_codes(),
+					'message' => $res['errors']->get_error_message(),
+				);
+			}
+		}
+
+		$this->assertSame( $seen['real'], $seen['ghost'] );
+		$this->assertSame( array( 'happyaccess_invalid_code' ), $seen['real'][5]['codes'] );
+		$this->assertSame( 'That code is not right or has expired. Ask for a new code.', $seen['real'][5]['message'] );
+		$this->assertCount( 1, $this->log_rows( 'passwordless_locked' ), 'The real account still logs its lockout.' );
+	}
+
+	public function test_a_bad_nonce_on_the_code_form_writes_no_log_row() {
+		for ( $i = 0; $i < 3; $i++ ) {
+			$res = LoginSteps::handle_verify(
+				'POST',
+				array(),
+				array(
+					'pwd'      => '123456',
+					'_wpnonce' => 'nope',
+				),
+				array()
+			);
+			$this->assertSame( array( 'expired_page' ), $res['errors']->get_error_codes() );
+		}
+		$this->assertSame( array(), AuditLog::query( array( 'feature' => 'passwordless' ) )['items'] );
 	}
 
 	public function test_the_code_screen_locks_an_ip_after_too_many_tries() {
@@ -495,7 +589,7 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		$user = self::factory()->user->create_and_get();
 		$made = $this->request_as( $user );
 		$res  = $this->post_code( $made['code'], $made['cookie'], array( 'redirect_to' => 'https://evil.example/' ) );
-		$this->assertSame( admin_url(), $res['url'] );
+		$this->assertSame( admin_url( 'profile.php' ), $res['url'] );
 	}
 
 	public function test_the_login_redirect_filter_decides_when_no_target_was_carried() {
@@ -656,8 +750,8 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 	}
 
 	public function test_a_success_clears_the_ip_count() {
-		$user = self::factory()->user->create_and_get();
-		$made = $this->request_as( $user );
+		$user  = self::factory()->user->create_and_get();
+		$made  = $this->request_as( $user );
 		$wrong = '000000' === $made['code'] ? '111111' : '000000';
 		for ( $i = 0; $i < 3; $i++ ) {
 			$this->post_code( $wrong, $made['cookie'] );
@@ -677,5 +771,139 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 'render', $res['type'] );
 		$this->assertSame( array( 'empty' ), $res['errors']->get_error_codes() );
 		$this->assertCount( 0, $this->cookies );
+	}
+
+	public function test_username_and_email_share_one_account_limit() {
+		$user = self::factory()->user->create_and_get( array( 'user_email' => 'shared@example.org' ) );
+
+		foreach ( array( $user->user_login, $user->user_email, $user->user_login, $user->user_email ) as $typed ) {
+			$this->post_request( $typed );
+		}
+		LoginSteps::flush_queue();
+		$this->assertCount( 3, $this->mails, 'The fourth request sends nothing.' );
+
+		$rows = $this->log_rows( 'passwordless_failed' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'account_limit', $rows[0]['meta']['reason'] );
+	}
+
+	public function test_a_missing_account_is_limited_by_what_was_typed_ignoring_case() {
+		$responses = array();
+		foreach ( array( 'ghost@example.org', 'GHOST@example.org', 'ghost@example.org', 'Ghost@Example.org' ) as $typed ) {
+			$responses[] = $this->post_request( $typed );
+		}
+		$this->assertCount( 1, array_unique( array_map( 'wp_json_encode', $responses ) ) );
+	}
+
+	public function test_a_link_post_without_the_confirm_cookie_fails_and_leaves_the_link_unused() {
+		$user = self::factory()->user->create_and_get();
+		$made = $this->request_as( $user );
+		$open = $this->open_link( $made['key'] );
+		$this->assertNotSame( '', $open['cookie'] );
+		$this->assertNotSame( '', $open['field'] );
+
+		$none = $this->post_link(
+			$made['key'],
+			array(
+				'cookie' => '',
+				'field'  => $open['field'],
+			)
+		);
+		$this->assertSame( 'render', $none['type'] );
+		$this->assertSame( array( 'confirm_missing' ), $none['errors']->get_error_codes() );
+		$this->assertStringContainsString( 'Open the link from your email again', $none['errors']->get_error_message() );
+		$this->assertStringContainsString( 'step=request', $none['body'] );
+		$this->assertSame( 0, get_current_user_id() );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertNotNull( Requests::find_by_link( $made['key'] ), 'The link stays unused.' );
+
+		$no_field = $this->post_link(
+			$made['key'],
+			array(
+				'cookie' => $open['cookie'],
+				'field'  => null,
+			)
+		);
+		$this->assertSame( array( 'confirm_missing' ), $no_field['errors']->get_error_codes() );
+
+		$wrong = $this->post_link(
+			$made['key'],
+			array(
+				'cookie' => LoginSteps::class . 'x',
+				'field'  => $open['field'],
+			)
+		);
+		$this->assertSame( array( 'confirm_missing' ), $wrong['errors']->get_error_codes() );
+		$this->assertNotNull( Requests::find_by_link( $made['key'] ) );
+		$this->assertSame( 0, $this->wp_login_count );
+
+		$ok = $this->post_link( $made['key'], $open );
+		$this->assertSame( 'redirect', $ok['type'] );
+		$this->assertSame( $user->ID, get_current_user_id() );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_the_confirm_cookie_options() {
+		$_SERVER['HTTPS'] = 'on';
+		$user             = self::factory()->user->create_and_get();
+		$made             = $this->request_as( $user );
+		$this->cookies    = array();
+		LoginSteps::handle_verify( 'GET', array( 'k' => $made['key'] ), array(), array() );
+
+		$this->assertCount( 1, $this->cookies );
+		$cookie  = $this->cookies[0];
+		$options = $cookie['options'];
+		$this->assertSame( 'happyaccess_pl_confirm', $cookie['name'] );
+		$this->assertMatchesRegularExpression( '/^[A-Za-z0-9_-]{43}$/', $cookie['value'] );
+		$this->assertTrue( $options['httponly'] );
+		$this->assertTrue( $options['secure'] );
+		$this->assertSame( 'Lax', $options['samesite'] );
+		$this->assertSame( COOKIEPATH, $options['path'] );
+		$this->assertEqualsWithDelta( time() + 600, $options['expires'], 5 );
+	}
+
+	public function test_an_unknown_link_sets_no_confirm_cookie() {
+		$this->cookies = array();
+		LoginSteps::handle_verify( 'GET', array( 'k' => 'nope' ), array(), array() );
+		$this->assertCount( 0, $this->cookies );
+	}
+
+	public function test_a_user_without_edit_posts_goes_to_their_profile_by_default() {
+		$subscriber = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$made       = $this->request_as( $subscriber );
+		$this->assertSame( admin_url( 'profile.php' ), $this->post_code( $made['code'], $made['cookie'] )['url'] );
+
+		wp_set_current_user( 0 );
+		add_role( 'happyaccess_nocaps', 'No caps', array() );
+		$bare = self::factory()->user->create_and_get( array( 'role' => 'happyaccess_nocaps' ) );
+		$made = $this->request_as( $bare );
+		$this->assertSame( home_url(), $this->post_code( $made['code'], $made['cookie'] )['url'] );
+
+		wp_set_current_user( 0 );
+		$editor = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$made   = $this->request_as( $editor );
+		$this->assertSame( admin_url(), $this->post_code( $made['code'], $made['cookie'] )['url'] );
+	}
+
+	/**
+	 * Runs in its own process because it defines a function that must not
+	 * stay defined for other tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_queue_finishes_the_request_on_litespeed_when_fastcgi_is_missing() {
+		$this->assertFalse( function_exists( 'fastcgi_finish_request' ) );
+		// phpcs:ignore Universal.Files.SeparateFunctionsFromOO, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+		eval( 'function litespeed_finish_request() { $GLOBALS["happyaccess_test_litespeed"] = ( $GLOBALS["happyaccess_test_litespeed"] ?? 0 ) + 1; }' );
+		Features::set( 'passwordless', true );
+
+		self::factory()->user->create( array( 'user_email' => 'real@example.org' ) );
+		$this->post_request( 'real@example.org' );
+		$this->assertArrayNotHasKey( 'happyaccess_test_litespeed', $GLOBALS );
+		LoginSteps::flush_queue();
+
+		$this->assertSame( 1, $GLOBALS['happyaccess_test_litespeed'] );
+		$this->assertCount( 1, $this->mails );
 	}
 }
