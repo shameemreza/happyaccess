@@ -516,7 +516,8 @@ final class Installer {
 	/**
 	 * Carries 1.0.6 grant state into the 1.1.0 columns: the deactivated flag
 	 * on the token's temp user becomes suspended_at (the flag itself stays), the IP allowlist and the menu and
-	 * admin bar settings become restrictions, and the note becomes the label.
+	 * admin bar settings become restrictions, the note becomes the label, and
+	 * used_at and use_count become the login history when it is still empty.
 	 * The old columns stay as they are. Safe to run more than once.
 	 *
 	 * @return bool Whether any write failed.
@@ -525,7 +526,7 @@ final class Installer {
 		global $wpdb;
 		$table = self::table( 'tokens' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table, no input.
-		$rows   = $wpdb->get_results( "SELECT id, user_id, label, restrictions, suspended_at, ip_restrictions, metadata FROM {$table}", ARRAY_A );
+		$rows   = $wpdb->get_results( "SELECT id, user_id, label, restrictions, suspended_at, ip_restrictions, metadata, used_at, use_count, last_login_at, login_count FROM {$table}", ARRAY_A );
 		$failed = false;
 
 		foreach ( (array) $rows as $row ) {
@@ -550,6 +551,14 @@ final class Installer {
 				if ( '' !== $note ) {
 					$data['label'] = $note;
 				}
+			}
+
+			// 1.0.6 kept the first use in used_at and never wrote the 1.1.0 columns, so without this a used pass reads as never logged in.
+			if ( empty( $row['last_login_at'] ) && ! empty( $row['used_at'] ) ) {
+				$data['last_login_at'] = $row['used_at'];
+			}
+			if ( 0 === (int) $row['login_count'] && (int) $row['use_count'] > 0 ) {
+				$data['login_count'] = (int) $row['use_count'];
 			}
 
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.

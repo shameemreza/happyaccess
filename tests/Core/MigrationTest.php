@@ -395,6 +395,51 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( 'Chosen label', $this->token( 'note-kept' )['label'] );
 	}
 
+	public function test_legacy_use_becomes_the_login_history() {
+		$used  = $this->insert_legacy_token(
+			'used-once',
+			array(
+				'used_at'   => '2026-09-01 10:00:00',
+				'use_count' => 1,
+			)
+		);
+		$fresh = $this->insert_legacy_token( 'never-used' );
+		$this->insert_legacy_token(
+			'new-history',
+			array(
+				'used_at'   => '2026-09-02 10:00:00',
+				'use_count' => 3,
+			)
+		);
+
+		Installer::migrate();
+		// A 1.1.0 login has since filled the new columns, so a later run must not put the legacy values back.
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->prefix . 'happyaccess_tokens',
+			array(
+				'last_login_at' => '2026-09-05 08:00:00',
+				'login_count'   => 5,
+			),
+			array( 'token_hash' => 'new-history' )
+		);
+		$first = $this->token( 'used-once' );
+		Installer::migrate();
+
+		$this->assertSame( $used, (int) $first['id'] );
+		$this->assertSame( '2026-09-01 10:00:00', $first['last_login_at'] );
+		$this->assertSame( 1, (int) $first['login_count'] );
+		$this->assertSame( $first, $this->token( 'used-once' ) );
+
+		$never = $this->token( 'never-used' );
+		$this->assertSame( $fresh, (int) $never['id'] );
+		$this->assertNull( $never['last_login_at'] );
+		$this->assertSame( 0, (int) $never['login_count'] );
+
+		$this->assertSame( '2026-09-05 08:00:00', $this->token( 'new-history' )['last_login_at'] );
+		$this->assertSame( 5, (int) $this->token( 'new-history' )['login_count'] );
+	}
+
 	public function test_carried_state_is_stable_when_the_migration_runs_twice() {
 		$id = $this->insert_legacy_token(
 			'twice',
