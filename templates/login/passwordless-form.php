@@ -10,6 +10,7 @@
  * @var string $context      woo_account, woo_checkout, shortcode or block.
  * @var string $redirect     Validated redirect target, or empty.
  * @var string $button_class Button classes.
+ * @var string $toggle_class Classes for the toggle: the link style or the button style.
  * @var string $input_class  Text field class.
  * @var string $row_class    Field row classes.
  * @var string $fallback_url Request screen URL for browsers without JavaScript.
@@ -17,9 +18,9 @@
 
 defined( 'ABSPATH' ) || exit;
 ?>
-<div class="happyaccess-pl" id="<?php echo esc_attr( $form_id ); ?>" data-happyaccess-pl data-context="<?php echo esc_attr( $context ); ?>" data-redirect="<?php echo esc_attr( $redirect ); ?>">
-	<p class="happyaccess-pl__toggle-row">
-		<button type="button" class="happyaccess-pl__toggle <?php echo esc_attr( $button_class ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $form_id . '-panel' ); ?>"><?php esc_html_e( 'Email me a login code instead', 'happyaccess' ); ?></button>
+<div class="happyaccess-pl" id="<?php echo esc_attr( $form_id ); ?>" data-happyaccess-pl data-context="<?php echo esc_attr( $context ); ?>" data-redirect="<?php echo esc_url( $redirect ); ?>">
+	<p class="happyaccess-pl__toggle-row" hidden>
+		<button type="button" class="<?php echo esc_attr( $toggle_class ); ?>" aria-expanded="false" aria-controls="<?php echo esc_attr( $form_id . '-panel' ); ?>"><?php esc_html_e( 'Email me a login code instead', 'happyaccess' ); ?></button>
 	</p>
 	<div class="happyaccess-pl__panel" id="<?php echo esc_attr( $form_id . '-panel' ); ?>" hidden>
 		<div class="happyaccess-pl__step" data-step="request">
@@ -44,12 +45,11 @@ defined( 'ABSPATH' ) || exit;
 				<button type="button" class="<?php echo esc_attr( $button_class ); ?>" data-action="verify"><?php esc_html_e( 'Log in', 'happyaccess' ); ?></button>
 			</p>
 			<p class="happyaccess-pl__restart">
-				<a href="<?php echo esc_attr( '#' . $form_id . '-login' ); ?>" data-action="restart"><?php esc_html_e( 'Use a different email', 'happyaccess' ); ?></a>
+				<a href="<?php echo esc_url( '#' . $form_id . '-login' ); ?>" data-action="restart"><?php esc_html_e( 'Use a different email', 'happyaccess' ); ?></a>
 			</p>
 		</div>
 		<div class="happyaccess-pl__message" aria-live="polite" tabindex="-1"></div>
 	</div>
-	<noscript>
-		<p><a href="<?php echo esc_url( $fallback_url ); ?>"><?php esc_html_e( 'Email me a login code', 'happyaccess' ); ?></a></p>
-	</noscript>
+	<?php // Shown until assets/login.js unhides the toggle above, so a visitor without a working script still has a way in. ?>
+	<p class="happyaccess-pl__fallback"><a href="<?php echo esc_url( $fallback_url ); ?>"><?php esc_html_e( 'Email me a login code', 'happyaccess' ); ?></a></p>
 </div>

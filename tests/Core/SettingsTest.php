@@ -139,6 +139,18 @@ class SettingsTest extends WP_UnitTestCase {
 		$this->assertTrue( Settings::get( 'passwordless.show_on.woo_account' ) );
 		$this->assertTrue( Settings::get( 'passwordless.show_on.woo_checkout' ) );
 		$this->assertSame( array(), Settings::get( 'passwordless.role_policy' ) );
+		$this->assertSame( 'link', Settings::get( 'passwordless.toggle_style' ) );
+	}
+
+	public function test_toggle_style_takes_link_or_button_and_nothing_else() {
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );
+
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'Rainbow' ) ) );
+		$this->assertSame( 'link', Settings::get( 'passwordless.toggle_style' ) );
+
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => array( 'button' ) ) ) );
+		$this->assertSame( 'link', Settings::get( 'passwordless.toggle_style' ) );
 	}
 
 	public function test_code_lifetime_is_clamped_to_300_to_1800() {

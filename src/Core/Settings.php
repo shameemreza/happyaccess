@@ -35,8 +35,9 @@ final class Settings {
 	 * Allowed values for string settings by dotted path.
 	 */
 	const CHOICES = array(
-		'security.proxy_header'    => array( '', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP' ),
-		'passwordless.role_policy' => array( 'either', 'email_only' ),
+		'security.proxy_header'     => array( '', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP' ),
+		'passwordless.role_policy'  => array( 'either', 'email_only' ),
+		'passwordless.toggle_style' => array( 'link', 'button' ),
 	);
 
 	/**
@@ -87,6 +88,7 @@ final class Settings {
 					'woo_checkout' => true,
 				),
 				'role_policy'   => array(),
+				'toggle_style'  => 'link',
 			),
 		);
 	}

@@ -15,6 +15,34 @@
 	border-radius: 4px;
 }
 
+/* The toggle as a text link: a real button, drawn like a link. */
+.happyaccess-pl .happyaccess-pl__toggle--link {
+	display: inline;
+	inline-size: auto;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: none;
+	box-shadow: none;
+	color: inherit;
+	font: inherit;
+	text-decoration: underline;
+	text-transform: none;
+	cursor: pointer;
+}
+
+.happyaccess-pl .happyaccess-pl__toggle--link:hover {
+	background: none;
+	color: inherit;
+	text-decoration: none;
+}
+
+.happyaccess-pl .happyaccess-pl__toggle--link:focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: 2px;
+}
+
 .happyaccess-pl__field label {
 	display: block;
 	margin-block-end: 0.25em;
@@ -34,12 +62,14 @@
 	margin-block-end: 0;
 }
 
-.happyaccess-pl__message:empty {
-	display: none;
-}
-
 .happyaccess-pl__message {
 	margin-block-start: 1em;
+}
+
+/* The live region stays in the layout so a screen reader sees it before the first message. */
+.happyaccess-pl__message:empty {
+	margin: 0;
+	padding: 0;
 }
 
 .happyaccess-pl__message.is-error {

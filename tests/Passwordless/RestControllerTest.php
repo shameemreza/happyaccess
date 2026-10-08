@@ -124,12 +124,16 @@ class PasswordlessRestControllerTest extends WP_UnitTestCase {
 	 * @param string $path   request or verify.
 	 * @param array  $params Body params.
 	 * @param string $header Value of the custom header, or null for none.
+	 * @param array  $extra  More request headers: name => value.
 	 * @return WP_REST_Response
 	 */
-	private function call( $path, array $params, $header = '1' ) {
+	private function call( $path, array $params, $header = '1', array $extra = array() ) {
 		$request = new WP_REST_Request( 'POST', '/happyaccess/v1/passwordless/' . $path );
 		if ( null !== $header ) {
 			$request->set_header( 'X-HappyAccess-Login', $header );
+		}
+		foreach ( $extra as $name => $value ) {
+			$request->set_header( $name, $value );
 		}
 		$request->set_body_params( $params );
 		$response = rest_do_request( $request );
@@ -171,6 +175,89 @@ class PasswordlessRestControllerTest extends WP_UnitTestCase {
 		$response = $this->call( 'verify', array( 'code' => '123456' ), null );
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertCount( 0, $this->auth );
+	}
+
+	public function provide_cross_origin_headers() {
+		return array(
+			'another origin'       => array( array( 'Origin' => 'https://evil.example.com' ) ),
+			'a lookalike host'     => array( array( 'Origin' => 'http://' . 'example.org.evil.example.com' ) ),
+			'the site on another port' => array( array( 'Origin' => 'http://example.org:8080' ) ),
+			'a null origin'        => array( array( 'Origin' => 'null' ) ),
+			'another referer'      => array( array( 'Referer' => 'https://evil.example.com/page' ) ),
+			'a junk referer'       => array( array( 'Referer' => 'not a url' ) ),
+			'origin wins referer'  => array(
+				array(
+					'Origin'  => 'https://evil.example.com',
+					'Referer' => 'http://example.org/my-account/',
+				),
+			),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_cross_origin_headers
+	 */
+	public function test_a_cross_origin_post_is_refused_even_with_the_header( $headers ) {
+		$this->boot();
+		self::factory()->user->create( array( 'user_email' => 'real@example.org' ) );
+
+		$response = $this->call( 'request', array( 'login' => 'real@example.org' ), '1', $headers );
+		LoginSteps::flush_queue();
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'happyaccess_cross_origin', $response->get_data()['code'] );
+		$this->assertCount( 0, $this->mails );
+		$this->assertCount( 0, $this->cookies );
+
+		$response = $this->call( 'verify', array( 'code' => '123456' ), '1', $headers );
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertCount( 0, $this->auth );
+	}
+
+	public function provide_same_origin_headers() {
+		return array(
+			'no origin or referer'  => array( array() ),
+			'the site origin'       => array( array( 'Origin' => 'http://' . WP_TESTS_DOMAIN ) ),
+			'upper case host'       => array( array( 'Origin' => 'http://' . strtoupper( WP_TESTS_DOMAIN ) ) ),
+			'the site as referer'   => array( array( 'Referer' => 'http://' . WP_TESTS_DOMAIN . '/my-account/?x=1' ) ),
+			'origin over referer'   => array(
+				array(
+					'Origin'  => 'http://' . WP_TESTS_DOMAIN,
+					'Referer' => 'https://evil.example.com/',
+				),
+			),
+			'an empty origin'       => array( array( 'Origin' => '' ) ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_same_origin_headers
+	 */
+	public function test_a_same_origin_post_passes( $headers ) {
+		$this->boot();
+		self::factory()->user->create( array( 'user_email' => 'real@example.org' ) );
+
+		$response = $this->call( 'request', array( 'login' => 'real@example.org' ), '1', $headers );
+		LoginSteps::flush_queue();
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $this->mails );
+	}
+
+	public function test_the_site_url_host_counts_as_the_site_when_it_differs_from_the_home_host() {
+		$this->boot();
+		add_filter(
+			'site_url',
+			static function ( $url ) {
+				return str_replace( WP_TESTS_DOMAIN, 'wp.' . WP_TESTS_DOMAIN, $url );
+			}
+		);
+
+		$response = $this->call( 'request', array( 'login' => 'nobody@example.org' ), '1', array( 'Origin' => 'http://wp.' . WP_TESTS_DOMAIN ) );
+		LoginSteps::flush_queue();
+		$this->assertSame( 200, $response->get_status() );
+
+		$response = $this->call( 'request', array( 'login' => 'nobody@example.org' ), '1', array( 'Origin' => 'http://' . WP_TESTS_DOMAIN ) );
+		LoginSteps::flush_queue();
+		$this->assertSame( 200, $response->get_status() );
 	}
 
 	public function test_a_header_with_another_value_is_refused() {

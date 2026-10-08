@@ -17,7 +17,8 @@ defined( 'ABSPATH' ) || exit;
  * the browser send a CORS preflight first, and WordPress doesn't allow this
  * header across origins, so another site's page can't post here. The verify
  * route also needs the request cookie, which is SameSite Lax and so is never
- * sent with a cross-site fetch.
+ * sent with a cross-site fetch. As a second layer, a request that names an
+ * Origin (or, without one, a Referer) must name this site.
  *
  * Both routes run the same rules as the login screens through
  * LoginSteps::request_flow() and LoginSteps::verify_flow().
@@ -89,17 +90,57 @@ final class RestController {
 	}
 
 	/**
-	 * Lets in only requests that carry the custom header. Logged-out
-	 * visitors are welcome: that is who these routes are for.
+	 * Lets in only requests that carry the custom header and that don't
+	 * come from another site. Logged-out visitors are welcome: that is who
+	 * these routes are for.
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return true|\WP_Error
 	 */
 	public static function has_header( \WP_REST_Request $request ) {
-		if ( '1' === $request->get_header( self::HEADER ) ) {
+		if ( '1' !== $request->get_header( self::HEADER ) ) {
+			return new \WP_Error( 'happyaccess_missing_header', __( 'This request is not allowed.', 'happyaccess' ), array( 'status' => 403 ) );
+		}
+		if ( ! self::from_this_site( $request ) ) {
+			return new \WP_Error( 'happyaccess_cross_origin', __( 'This request is not allowed.', 'happyaccess' ), array( 'status' => 403 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Whether the Origin header, or the Referer when there is no Origin,
+	 * names this site. A request with neither passes, because some browsers
+	 * and privacy tools strip both and the custom header still applies. The
+	 * scheme is ignored, because a proxy may change it.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return bool
+	 */
+	private static function from_this_site( \WP_REST_Request $request ) {
+		$sent = trim( (string) $request->get_header( 'origin' ) );
+		if ( '' === $sent ) {
+			$sent = trim( (string) $request->get_header( 'referer' ) );
+		}
+		if ( '' === $sent ) {
 			return true;
 		}
-		return new \WP_Error( 'happyaccess_missing_header', __( 'This request is not allowed.', 'happyaccess' ), array( 'status' => 403 ) );
+
+		$theirs = self::authority( $sent );
+		return '' !== $theirs && ( self::authority( home_url() ) === $theirs || self::authority( site_url() ) === $theirs );
+	}
+
+	/**
+	 * Host and port of a URL, in lower case. Empty when there is no host.
+	 *
+	 * @param string $url URL, or an Origin value.
+	 * @return string
+	 */
+	private static function authority( $url ) {
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+		return strtolower( $parts['host'] ) . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' );
 	}
 
 	/**

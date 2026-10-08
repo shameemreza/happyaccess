@@ -18,6 +18,10 @@ defined( 'ABSPATH' ) || exit;
  * inside its login form and a nested form would break both. The script
  * sends the fields to the REST routes instead. Without JavaScript, a link
  * leads to the wp-login.php request screen.
+ *
+ * Two forms on one page share one request cookie (the cookie name is fixed),
+ * so a code asked for in one form is only good for the browser's latest
+ * request, whichever form sent it. Each form still has its own ids and state.
  */
 final class Forms {
 
@@ -27,6 +31,11 @@ final class Forms {
 	 * Places a form can show up in.
 	 */
 	const CONTEXTS = array( 'woo_account', 'woo_checkout', 'shortcode', 'block' );
+
+	/**
+	 * Looks of the toggle.
+	 */
+	const STYLES = array( 'link', 'button' );
 
 	/**
 	 * Forms printed in this request, for unique ids.
@@ -62,7 +71,10 @@ final class Forms {
 			return;
 		}
 
-		if ( $checkout ) {
+		if ( $checkout && self::on_order_page() ) {
+			// Order-pay and order-received belong to one order, so a login there goes back to the same page.
+			$redirect = self::current_url();
+		} elseif ( $checkout ) {
 			$redirect = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : '';
 		} else {
 			// The checkout block's Log in link sends shoppers to My Account with a redirect_to back to checkout.
@@ -83,9 +95,35 @@ final class Forms {
 	}
 
 	/**
+	 * Whether this is the pay page or the thank-you page of an order.
+	 *
+	 * @return bool
+	 */
+	private static function on_order_page() {
+		return function_exists( 'is_wc_endpoint_url' ) && ( is_wc_endpoint_url( 'order-pay' ) || is_wc_endpoint_url( 'order-received' ) );
+	}
+
+	/**
+	 * The address of this request on this site. The scheme and host come
+	 * from the home URL, so the request can't point it elsewhere.
+	 *
+	 * @return string
+	 */
+	private static function current_url() {
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		$home = wp_parse_url( home_url() );
+		if ( '' === $uri || ! is_array( $home ) || empty( $home['host'] ) ) {
+			return '';
+		}
+		$origin = ( isset( $home['scheme'] ) ? $home['scheme'] : 'http' ) . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
+		return esc_url_raw( $origin . $uri );
+	}
+
+	/**
 	 * The form markup. Loads the script and stylesheet when it returns any.
 	 *
-	 * @param array $args redirect_to (string) and context (woo_account, woo_checkout, shortcode or block).
+	 * @param array $args redirect_to (string), context (woo_account, woo_checkout, shortcode or block)
+	 *                    and style (link or button; anything else, or empty, means the site setting).
 	 * @return string
 	 */
 	public static function render( array $args ) {
@@ -101,6 +139,8 @@ final class Forms {
 			return '';
 		}
 
+		$style = isset( $args['style'] ) && is_string( $args['style'] ) && in_array( $args['style'], self::STYLES, true ) ? $args['style'] : (string) Settings::get( 'passwordless.toggle_style' );
+
 		++self::$count;
 		$woo  = 0 === strpos( $context, 'woo_' );
 		$vars = array(
@@ -108,6 +148,7 @@ final class Forms {
 			'context'      => $context,
 			'redirect'     => $redirect,
 			'button_class' => self::button_class(),
+			'toggle_class' => self::toggle_class( $style ),
 			'input_class'  => $woo ? 'input-text' : 'input',
 			'row_class'    => $woo ? 'form-row form-row-wide' : '',
 			'fallback_url' => Router::url( 'request', '' !== $redirect ? array( 'redirect_to' => $redirect ) : array() ),
@@ -134,8 +175,8 @@ final class Forms {
 			return;
 		}
 
-		wp_enqueue_style( self::HANDLE, plugins_url( 'assets/login.css', HAPPYACCESS_PLUGIN_FILE ), array(), HAPPYACCESS_VERSION );
-		wp_enqueue_script( self::HANDLE, plugins_url( 'assets/login.js', HAPPYACCESS_PLUGIN_FILE ), array(), HAPPYACCESS_VERSION, true );
+		wp_enqueue_style( self::HANDLE, plugins_url( 'assets/login.css', HAPPYACCESS_PLUGIN_FILE ), array(), self::asset_version( 'assets/login.css' ) );
+		wp_enqueue_script( self::HANDLE, plugins_url( 'assets/login.js', HAPPYACCESS_PLUGIN_FILE ), array(), self::asset_version( 'assets/login.js' ), true );
 
 		$settings = array(
 			'url'    => rest_url( Routes::NS . RestController::BASE ),
@@ -147,6 +188,33 @@ final class Forms {
 			),
 		);
 		wp_add_inline_script( self::HANDLE, 'var happyaccessLogin = ' . wp_json_encode( $settings ) . ';', 'before' );
+	}
+
+	/**
+	 * The plugin version, plus the file's change time while WP_DEBUG is on,
+	 * so a development site doesn't keep serving a script cached under the
+	 * same version.
+	 *
+	 * @param string $path Path inside the plugin folder.
+	 * @return string
+	 */
+	private static function asset_version( $path ) {
+		$file = HAPPYACCESS_PLUGIN_DIR . $path;
+		return HAPPYACCESS_VERSION . ( WP_DEBUG && is_readable( $file ) ? '.' . filemtime( $file ) : '' );
+	}
+
+	/**
+	 * Classes for the toggle. The link style is a button drawn like a text
+	 * link; the button style takes the theme button look.
+	 *
+	 * @param string $style link or button.
+	 * @return string
+	 */
+	private static function toggle_class( $style ) {
+		if ( 'button' === $style ) {
+			return 'happyaccess-pl__toggle happyaccess-pl__toggle--button ' . self::button_class();
+		}
+		return 'happyaccess-pl__toggle happyaccess-pl__toggle--link';
 	}
 
 	/**

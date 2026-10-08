@@ -40,6 +40,8 @@
 			return root.querySelector( selector );
 		};
 		var toggle = find( '.happyaccess-pl__toggle' );
+		var toggleRow = find( '.happyaccess-pl__toggle-row' );
+		var fallback = find( '.happyaccess-pl__fallback' );
 		var panel = find( '.happyaccess-pl__panel' );
 		var steps = {
 			request: find( '[data-step="request"]' ),
@@ -55,11 +57,26 @@
 			return;
 		}
 
-		function say( text, isError ) {
+		// The plain link stays until the script is sure it can run the toggle.
+		if ( toggleRow ) {
+			toggleRow.hidden = false;
+		}
+		if ( fallback ) {
+			fallback.hidden = true;
+		}
+
+		// Text goes in first, focus moves on the next tick, so a screen
+		// reader announces the live region before it reads the focused field.
+		function say( text, isError, target ) {
 			message.textContent = text || '';
 			message.classList.toggle( 'is-error', !! isError );
 			if ( isError && text ) {
-				message.focus();
+				target = message;
+			}
+			if ( target ) {
+				window.setTimeout( function () {
+					target.focus();
+				}, 0 );
 			}
 		}
 
@@ -102,8 +119,7 @@
 			run( find( '[data-action="request"]' ), 'request', { login: typed }, function ( body ) {
 				show( 'verify' );
 				code.value = '';
-				say( body.message, false );
-				code.focus();
+				say( body.message, false, code );
 			} );
 		}
 
@@ -153,8 +169,7 @@
 			} else if ( 'restart' === action ) {
 				show( 'request' );
 				code.value = '';
-				say( '', false );
-				login.focus();
+				say( '', false, login );
 			}
 		} );
 

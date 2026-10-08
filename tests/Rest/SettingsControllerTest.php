@@ -505,6 +505,19 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( 300, $data['passwordless']['code_lifetime'] );
 	}
 
+	public function test_save_and_read_expose_the_toggle_style() {
+		$read = $this->request( 'GET', '/settings' );
+		$this->assertSame( 'link', $read->get_data()['passwordless']['toggle_style'] );
+
+		$response = $this->request( 'POST', '/settings', array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );
+		$this->assertSame( 'button', $response->get_data()['passwordless']['toggle_style'] );
+
+		$response = $this->request( 'POST', '/settings', array( 'passwordless' => array( 'toggle_style' => 'huge' ) ) );
+		$this->assertSame( 'link', $response->get_data()['passwordless']['toggle_style'] );
+	}
+
 	public function provide_bad_passwordless_groups() {
 		return array(
 			'a list for role policy'     => array( array( 'passwordless' => array( 'role_policy' => array( 'email_only' ) ) ) ),

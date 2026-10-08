@@ -116,7 +116,126 @@ class PasswordlessFormsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'autocomplete="one-time-code"', $html );
 		$this->assertStringContainsString( 'Use a different email', $html );
 		$this->assertStringContainsString( 'data-redirect="' . esc_attr( home_url( '/my-account/' ) ) . '"', $html );
-		$this->assertStringContainsString( 'class="button', $html );
+		$this->assertStringContainsString( 'class="button', $html, 'The submit buttons keep the theme button look.' );
+	}
+
+	public function test_urls_in_the_markup_go_through_esc_url() {
+		$this->boot();
+		$url  = home_url( '/pay/?pay_for_order=true&key=wc_order_abc' );
+		$html = Forms::render(
+			array(
+				'context'     => 'shortcode',
+				'redirect_to' => $url,
+			)
+		);
+
+		$this->assertStringContainsString( 'data-redirect="' . esc_url( $url ) . '"', $html );
+		$this->assertStringContainsString( '&#038;key=wc_order_abc', $html );
+		$this->assertStringContainsString( 'href="#happyaccess-pl-', $html );
+	}
+
+	public function test_the_toggle_starts_hidden_and_a_plain_link_stands_in_until_the_script_runs() {
+		$this->boot();
+		$html = Forms::render( array( 'context' => 'shortcode' ) );
+
+		$this->assertSame( 1, preg_match( '/<p class="happyaccess-pl__toggle-row"[^>]*\bhidden\b[^>]*>\s*<button type="button"/', $html ), 'The toggle row is hidden until the script unhides it.' );
+		$this->assertSame( 1, preg_match( '/<p class="happyaccess-pl__fallback"(?![^>]*\bhidden\b)[^>]*>\s*<a href="([^"]+)"/', $html, $link ), 'The plain link is visible by default.' );
+		$this->assertStringContainsString( 'step=request', html_entity_decode( $link[1] ) );
+		$this->assertStringContainsString( 'wp-login.php', $link[1] );
+	}
+
+	public function test_the_toggle_is_a_link_by_default() {
+		$this->boot();
+		$html = Forms::render( array( 'context' => 'shortcode' ) );
+
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--link', $html );
+		$this->assertStringNotContainsString( 'happyaccess-pl__toggle--button', $html );
+		$this->assertSame( 1, preg_match( '/<button type="button" class="([^"]*happyaccess-pl__toggle[^"]*)"/', $html, $toggle ) );
+		$this->assertStringNotContainsString( 'button ', $toggle[1] . ' ', 'The link style carries no theme button class.' );
+		$this->assertStringNotContainsString( 'wp-element-button', $toggle[1] );
+	}
+
+	public function test_the_site_setting_picks_the_button_style() {
+		$this->boot();
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$html = Forms::render( array( 'context' => 'shortcode' ) );
+
+		$this->assertSame( 1, preg_match( '/<button type="button" class="([^"]*happyaccess-pl__toggle[^"]*)"/', $html, $toggle ) );
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', $toggle[1] );
+		$this->assertContains( 'button', explode( ' ', $toggle[1] ) );
+		$this->assertStringNotContainsString( 'happyaccess-pl__toggle--link', $html );
+	}
+
+	public function test_the_style_argument_overrides_the_setting_and_a_bad_one_falls_back() {
+		$this->boot();
+
+		$html = Forms::render(
+			array(
+				'context' => 'shortcode',
+				'style'   => 'button',
+			)
+		);
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', $html );
+
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$html = Forms::render(
+			array(
+				'context' => 'shortcode',
+				'style'   => 'link',
+			)
+		);
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--link', $html );
+
+		foreach ( array( 'bogus', 'BUTTON', array( 'link' ), 5 ) as $bad ) {
+			$html = Forms::render(
+				array(
+					'context' => 'shortcode',
+					'style'   => $bad,
+				)
+			);
+			$this->assertStringContainsString( 'happyaccess-pl__toggle--button', $html, 'An invalid style uses the site setting (button).' );
+		}
+
+		$html = Forms::render(
+			array(
+				'context' => 'shortcode',
+				'style'   => '',
+			)
+		);
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', $html, 'An empty style means the site setting.' );
+	}
+
+	public function test_the_shortcode_style_attribute_overrides_the_setting() {
+		$this->boot();
+
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--link', do_shortcode( '[happyaccess_login]' ) );
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', do_shortcode( '[happyaccess_login style="button"]' ) );
+
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', do_shortcode( '[happyaccess_login]' ) );
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--link', do_shortcode( '[happyaccess_login style="link"]' ) );
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', do_shortcode( '[happyaccess_login style="fancy"]' ), 'An invalid attribute falls back to the setting.' );
+	}
+
+	public function test_the_woo_forms_use_the_site_style() {
+		$this->boot();
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--link', $this->woo_form_end() );
+
+		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', $this->woo_form_end() );
+	}
+
+	public function test_the_asset_version_adds_the_file_time_only_while_debugging() {
+		$this->boot();
+		Forms::render( array( 'context' => 'shortcode' ) );
+
+		$ver = wp_scripts()->registered['happyaccess-login']->ver;
+		$this->assertStringStartsWith( HAPPYACCESS_VERSION, $ver );
+		if ( WP_DEBUG ) {
+			$this->assertSame( HAPPYACCESS_VERSION . '.' . filemtime( HAPPYACCESS_PLUGIN_DIR . 'assets/login.js' ), $ver );
+		} else {
+			$this->assertSame( HAPPYACCESS_VERSION, $ver );
+		}
 	}
 
 	public function test_an_offsite_redirect_is_dropped() {
@@ -209,5 +328,39 @@ class PasswordlessFormsTest extends WP_UnitTestCase {
 			)
 		);
 		$this->assertSame( '', $this->woo_form_end() );
+	}
+
+	public function provide_order_endpoints() {
+		return array(
+			'order pay'      => array( 'order-pay', '/checkout/order-pay/55/?pay_for_order=true&key=wc_order_abc' ),
+			'order received' => array( 'order-received', '/checkout/order-received/55/?key=wc_order_abc' ),
+		);
+	}
+
+	/**
+	 * Runs in its own process because it defines WooCommerce functions that
+	 * must not leak into other tests.
+	 *
+	 * @dataProvider provide_order_endpoints
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_order_pay_and_order_received_forms_return_to_the_same_page( $endpoint, $uri ) {
+		if ( ! function_exists( 'is_checkout' ) ) {
+			// Both endpoints are part of the checkout page, so is_checkout() is true there.
+			eval(
+				'function is_checkout() { return true; }
+				function wc_get_checkout_url() { return home_url( "/checkout/" ); }
+				function is_wc_endpoint_url( $endpoint = false ) { return $endpoint === $GLOBALS["happyaccess_test_endpoint"]; }'
+			);
+		}
+		$GLOBALS['happyaccess_test_endpoint'] = $endpoint;
+		$_SERVER['REQUEST_URI']               = $uri;
+		$this->boot();
+
+		$html = $this->woo_form_end();
+		$this->assertStringContainsString( 'data-context="woo_checkout"', $html );
+		$this->assertStringContainsString( 'data-redirect="' . esc_url( home_url( $uri ) ) . '"', $html );
+		$this->assertStringNotContainsString( 'data-redirect="' . esc_url( home_url( '/checkout/' ) ) . '"', $html, 'Not the generic checkout.' );
 	}
 }

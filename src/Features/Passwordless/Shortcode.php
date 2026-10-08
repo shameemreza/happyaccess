@@ -29,7 +29,7 @@ final class Shortcode {
 	/**
 	 * Shortcode callback.
 	 *
-	 * @param array|string $atts Attributes: redirect_to.
+	 * @param array|string $atts Attributes: redirect_to, and style (link or button; anything else means the site setting).
 	 * @return string
 	 */
 	public static function render( $atts ) {
@@ -37,12 +37,20 @@ final class Shortcode {
 			return '';
 		}
 
-		$atts = shortcode_atts( array( 'redirect_to' => '' ), is_array( $atts ) ? $atts : array(), self::TAG );
+		$atts = shortcode_atts(
+			array(
+				'redirect_to' => '',
+				'style'       => '',
+			),
+			is_array( $atts ) ? $atts : array(),
+			self::TAG
+		);
 
 		return Forms::render(
 			array(
 				'redirect_to' => (string) $atts['redirect_to'],
 				'context'     => 'shortcode',
+				'style'       => (string) $atts['style'],
 			)
 		);
 	}
