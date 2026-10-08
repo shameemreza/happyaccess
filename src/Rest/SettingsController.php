@@ -32,7 +32,7 @@ final class SettingsController {
 	/**
 	 * Setting groups a request may change.
 	 */
-	const GROUPS = array( 'features', 'security', 'privacy', 'support', 'passwordless' );
+	const GROUPS = array( 'features', 'security', 'privacy', 'support', 'passwordless', 'two_step' );
 
 	/**
 	 * Keys inside a group that hold a flat map of plain values, such as
@@ -40,6 +40,7 @@ final class SettingsController {
 	 */
 	const MAP_KEYS = array(
 		'passwordless' => array( 'show_on', 'role_policy' ),
+		'two_step'     => array( 'role_policy' ),
 	);
 
 	/**

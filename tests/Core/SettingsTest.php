@@ -142,6 +142,102 @@ class SettingsTest extends WP_UnitTestCase {
 		$this->assertSame( 'link', Settings::get( 'passwordless.toggle_style' ) );
 	}
 
+	public function test_two_step_defaults() {
+		$this->assertSame( array(), Settings::get( 'two_step.role_policy' ) );
+		$this->assertSame( 'logins', Settings::get( 'two_step.grace_type' ) );
+		$this->assertSame( 3, Settings::get( 'two_step.grace_logins' ) );
+		$this->assertSame( 7, Settings::get( 'two_step.grace_days' ) );
+		$this->assertTrue( Settings::get( 'two_step.block_xmlrpc' ) );
+	}
+
+	public function test_two_step_grace_type_takes_logins_or_days_and_nothing_else() {
+		Settings::update( array( 'two_step' => array( 'grace_type' => 'days' ) ) );
+		$this->assertSame( 'days', Settings::get( 'two_step.grace_type' ) );
+
+		Settings::update( array( 'two_step' => array( 'grace_type' => 'weeks' ) ) );
+		$this->assertSame( 'logins', Settings::get( 'two_step.grace_type' ) );
+	}
+
+	public function test_two_step_grace_numbers_are_clamped() {
+		Settings::update(
+			array(
+				'two_step' => array(
+					'grace_logins' => 0,
+					'grace_days'   => 0,
+				),
+			)
+		);
+		$this->assertSame( 1, Settings::get( 'two_step.grace_logins' ) );
+		$this->assertSame( 1, Settings::get( 'two_step.grace_days' ) );
+
+		Settings::update(
+			array(
+				'two_step' => array(
+					'grace_logins' => '99',
+					'grace_days'   => 500,
+				),
+			)
+		);
+		$this->assertSame( 10, Settings::get( 'two_step.grace_logins' ) );
+		$this->assertSame( 30, Settings::get( 'two_step.grace_days' ) );
+
+		Settings::update(
+			array(
+				'two_step' => array(
+					'grace_logins' => 5,
+					'grace_days'   => 14,
+				),
+			)
+		);
+		$this->assertSame( 5, Settings::get( 'two_step.grace_logins' ) );
+		$this->assertSame( 14, Settings::get( 'two_step.grace_days' ) );
+	}
+
+	public function test_two_step_block_xmlrpc_is_cast_to_a_boolean() {
+		Settings::update( array( 'two_step' => array( 'block_xmlrpc' => 'false' ) ) );
+		$this->assertFalse( Settings::get( 'two_step.block_xmlrpc' ) );
+		Settings::update( array( 'two_step' => array( 'block_xmlrpc' => '1' ) ) );
+		$this->assertTrue( Settings::get( 'two_step.block_xmlrpc' ) );
+	}
+
+	public function test_two_step_role_policy_keeps_known_roles_and_choices_only() {
+		Settings::update(
+			array(
+				'two_step' => array(
+					'role_policy' => array(
+						'administrator' => 'required',
+						'editor'        => 'optional',
+						'author'        => 'off',
+						'subscriber'    => 'sometimes',
+						'not_a_role'    => 'required',
+						'customer'      => array( 'required' ),
+					),
+				),
+			)
+		);
+		$this->assertSame(
+			array(
+				'administrator' => 'required',
+				'editor'        => 'optional',
+				'author'        => 'off',
+			),
+			Settings::get( 'two_step.role_policy' )
+		);
+	}
+
+	public function test_two_step_role_policy_does_not_take_the_passwordless_choices() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'email_only' ) ) ) );
+		$this->assertSame( array(), Settings::get( 'two_step.role_policy' ) );
+
+		Settings::update( array( 'passwordless' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$this->assertSame( array(), Settings::get( 'passwordless.role_policy' ) );
+	}
+
+	public function test_a_role_policy_that_is_not_a_map_becomes_empty() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => 'required' ) ) );
+		$this->assertSame( array(), Settings::get( 'two_step.role_policy' ) );
+	}
+
 	public function test_toggle_style_takes_link_or_button_and_nothing_else() {
 		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
 		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );

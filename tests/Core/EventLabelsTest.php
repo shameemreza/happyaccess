@@ -17,6 +17,17 @@ class EventLabelsTest extends WP_UnitTestCase {
 		$this->assertSame( array(), $missing, "Add a label in EventLabels::all() for:\n" . implode( "\n", $missing ) );
 	}
 
+	public function test_every_user_event_has_a_label() {
+		$labels  = EventLabels::all();
+		$missing = array_values( array_diff( Privacy::USER_EVENTS, array_keys( $labels ) ) );
+		$this->assertSame( array(), $missing, "Add a label in EventLabels::all() for:\n" . implode( "\n", $missing ) );
+	}
+
+	public function test_the_two_step_events_are_user_events() {
+		$expected = array( 'twostep_enabled', 'twostep_disabled', 'twostep_passed', 'twostep_failed', 'twostep_locked', 'twostep_reset', 'twostep_backup_used', 'twostep_backup_regenerated' );
+		$this->assertSame( array(), array_values( array_diff( $expected, Privacy::USER_EVENTS ) ) );
+	}
+
 	public function test_labels_are_plain_sentence_case_text() {
 		foreach ( EventLabels::all() as $key => $label ) {
 			$this->assertNotSame( '', $label, $key );

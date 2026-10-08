@@ -16,6 +16,7 @@ use HappyAccess\Core\Uninstaller;
 use HappyAccess\Features\Passwordless\Feature as PasswordlessFeature;
 use HappyAccess\Features\SupportAccess\Feature;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\TwoStep\Feature as TwoStepFeature;
 use HappyAccess\Login\Router;
 use HappyAccess\Rest\Routes;
 
@@ -58,6 +59,7 @@ final class Plugin {
 		Router::register();
 		Feature::register();
 		PasswordlessFeature::register();
+		TwoStepFeature::register();
 		Routes::register();
 		Page::register();
 	}

@@ -29,6 +29,8 @@ final class Settings {
 		'privacy.retention_days'       => array( 1, 365 ),
 		'support.default_duration'     => array( 3600, 2592000 ),
 		'passwordless.code_lifetime'   => array( 300, 1800 ),
+		'two_step.grace_logins'        => array( 1, 10 ),
+		'two_step.grace_days'          => array( 1, 30 ),
 	);
 
 	/**
@@ -38,6 +40,8 @@ final class Settings {
 		'security.proxy_header'     => array( '', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP' ),
 		'passwordless.role_policy'  => array( 'either', 'email_only' ),
 		'passwordless.toggle_style' => array( 'link', 'button' ),
+		'two_step.role_policy'      => array( 'off', 'optional', 'required' ),
+		'two_step.grace_type'       => array( 'logins', 'days' ),
 	);
 
 	/**
@@ -89,6 +93,13 @@ final class Settings {
 				),
 				'role_policy'   => array(),
 				'toggle_style'  => 'link',
+			),
+			'two_step'     => array(
+				'role_policy'  => array(),
+				'grace_type'   => 'logins',
+				'grace_logins' => 3,
+				'grace_days'   => 7,
+				'block_xmlrpc' => true,
 			),
 		);
 	}
@@ -194,8 +205,8 @@ final class Settings {
 		foreach ( $defaults as $key => $default_value ) {
 			$path = '' === $prefix ? $key : $prefix . '.' . $key;
 			$has  = array_key_exists( $key, $values );
-			if ( 'passwordless.role_policy' === $path ) {
-				$out[ $key ] = self::clean_role_policy( $has ? $values[ $key ] : array() );
+			if ( 'passwordless.role_policy' === $path || 'two_step.role_policy' === $path ) {
+				$out[ $key ] = self::clean_role_policy( $path, $has ? $values[ $key ] : array() );
 				continue;
 			}
 			if ( is_array( $default_value ) ) {
@@ -208,14 +219,16 @@ final class Settings {
 	}
 
 	/**
-	 * Cleans the role policy, a map of role slug to a choice. Its keys are
+	 * Cleans a role policy, a map of role slug to a choice. Its keys are
 	 * not known ahead, so the defaults walk can't handle it. Slugs that are
-	 * not roles of this site, and values that are not a choice, are dropped.
+	 * not roles of this site, and values that are not a choice of that
+	 * policy, are dropped.
 	 *
-	 * @param mixed $policy Incoming value.
+	 * @param string $path   Dotted path of the policy, which names its choices.
+	 * @param mixed  $policy Incoming value.
 	 * @return array
 	 */
-	private static function clean_role_policy( $policy ) {
+	private static function clean_role_policy( $path, $policy ) {
 		if ( ! is_array( $policy ) || array() === $policy ) {
 			return array();
 		}
@@ -225,7 +238,7 @@ final class Settings {
 			if ( ! is_string( $slug ) || ! is_string( $choice ) || ! array_key_exists( $slug, $roles ) ) {
 				continue;
 			}
-			if ( in_array( $choice, self::CHOICES['passwordless.role_policy'], true ) ) {
+			if ( in_array( $choice, self::CHOICES[ $path ], true ) ) {
 				$out[ $slug ] = $choice;
 			}
 		}

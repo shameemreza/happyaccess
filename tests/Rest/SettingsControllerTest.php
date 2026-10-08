@@ -510,6 +510,39 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( 'link', $read->get_data()['passwordless']['toggle_style'] );
 
 		$response = $this->request( 'POST', '/settings', array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
+	public function test_save_takes_the_two_step_group_with_its_role_map() {
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'two_step' => array(
+					'grace_type'   => 'days',
+					'grace_days'   => 99,
+					'block_xmlrpc' => false,
+					'role_policy'  => array(
+						'administrator' => 'required',
+						'not_a_role'    => 'required',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'days', Settings::get( 'two_step.grace_type' ) );
+		$this->assertSame( 30, Settings::get( 'two_step.grace_days' ) );
+		$this->assertFalse( Settings::get( 'two_step.block_xmlrpc' ) );
+		$this->assertSame( array( 'administrator' => 'required' ), Settings::get( 'two_step.role_policy' ) );
+		$data = $response->get_data();
+		$this->assertSame( array( 'administrator' => 'required' ), $data['two_step']['role_policy'] );
+		$this->assertSame( 3, $data['two_step']['grace_logins'] );
+	}
+
+	public function test_save_refuses_a_nested_value_in_two_step_outside_the_role_map() {
+		$response = $this->request( 'POST', '/settings', array( 'two_step' => array( 'grace_days' => array( 5 ) ) ) );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 7, Settings::get( 'two_step.grace_days' ) );
+	}
+
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );
 		$this->assertSame( 'button', $response->get_data()['passwordless']['toggle_style'] );
