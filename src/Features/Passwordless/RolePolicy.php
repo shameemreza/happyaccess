@@ -7,7 +7,9 @@
 
 namespace HappyAccess\Features\Passwordless;
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Router;
 
@@ -19,8 +21,10 @@ defined( 'ABSPATH' ) || exit;
  * through the authenticate filter. Application passwords are separate keys
  * the user made on purpose, so they are left alone. Setting
  * HAPPYACCESS_ALLOW_PASSWORD_LOGIN to true in wp-config.php turns the policy
- * off, which is the way back in when email delivery breaks. The policy only
- * exists while the feature is on, because Feature::register() adds the filter.
+ * off, which is the way back in when email delivery breaks. The policy also
+ * stands aside while no login code can be made, because the schema is
+ * updating or the site key is not saved. The policy only exists while the
+ * feature is on, because Feature::register() adds the filter.
  */
 final class RolePolicy {
 
@@ -120,6 +124,22 @@ final class RolePolicy {
 			return $user;
 		}
 		if ( self::EMAIL_ONLY !== self::for_user( $account ) ) {
+			return $user;
+		}
+
+		// While no login code can reach the account, refusing the password would lock it out.
+		if ( ! LoginSteps::db_ready() || ! Secrets::is_persisted() ) {
+			if ( $user instanceof \WP_User ) {
+				AuditLog::add(
+					'passwordless_failed',
+					array(
+						'feature' => 'passwordless',
+						'user_id' => (int) $account->ID,
+						'summary' => __( 'Password allowed for an email code only account because login codes are not working', 'happyaccess' ),
+						'meta'    => array( 'reason' => 'policy_suspended' ),
+					)
+				);
+			}
 			return $user;
 		}
 

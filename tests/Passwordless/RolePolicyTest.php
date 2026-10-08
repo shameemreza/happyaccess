@@ -5,8 +5,10 @@
  * @package HappyAccess
  */
 
+use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\Feature;
 use HappyAccess\Features\Passwordless\RolePolicy;
@@ -57,6 +59,48 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'step=request', $result->get_error_message() );
 		$this->assertSame( 'either', RolePolicy::for_user( $this->make_user( 'editor', 'pled' ) ) );
 		$this->assertSame( 'email_only', RolePolicy::for_user( $user ) );
+	}
+
+	public function test_an_email_only_account_logs_in_with_its_password_while_login_is_updating() {
+		$user = $this->make_user( 'subscriber', 'plupdating' );
+		update_option( 'happyaccess_db_version', '1.0.4' );
+
+		$result = wp_authenticate( 'plupdating', 'correct-horse-battery' );
+		$this->assertInstanceOf( WP_User::class, $result );
+		$this->assertSame( $user->ID, $result->ID );
+
+		$rows = AuditLog::query( array( 'event' => 'passwordless_failed' ) )['items'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'policy_suspended', $rows[0]['meta']['reason'] );
+		$this->assertSame( 'passwordless', $rows[0]['feature'] );
+		$this->assertSame( $user->ID, (int) $rows[0]['user_id'] );
+
+		$wrong = wp_authenticate( 'plupdating', 'not-the-password' );
+		$this->assertSame( 'incorrect_password', $wrong->get_error_code() );
+		$this->assertCount( 1, AuditLog::query( array( 'event' => 'passwordless_failed' ) )['items'], 'A wrong password writes no row.' );
+	}
+
+	public function test_an_email_only_account_logs_in_with_its_password_when_the_site_key_is_not_saved() {
+		$user = $this->make_user( 'subscriber', 'plnokey' );
+		Secrets::key();
+		add_filter( 'pre_option_' . Secrets::OPTION, array( $this, 'other_site_key' ) );
+		$this->assertFalse( Secrets::is_persisted() );
+
+		$result = wp_authenticate( 'plnokey', 'correct-horse-battery' );
+		remove_filter( 'pre_option_' . Secrets::OPTION, array( $this, 'other_site_key' ) );
+
+		$this->assertInstanceOf( WP_User::class, $result );
+		$this->assertSame( $user->ID, $result->ID );
+		$this->assertSame( 'policy_suspended', AuditLog::query( array( 'event' => 'passwordless_failed' ) )['items'][0]['meta']['reason'] );
+	}
+
+	/**
+	 * A stored key that is not the one in use, as when saving the key failed.
+	 *
+	 * @return string
+	 */
+	public function other_site_key() {
+		return base64_encode( str_repeat( 'x', 32 ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- A stored key value.
 	}
 
 	public function test_a_role_left_at_either_still_logs_in() {
