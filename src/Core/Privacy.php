@@ -102,6 +102,7 @@ final class Privacy {
 		'twostep_reset',
 		'twostep_backup_used',
 		'twostep_backup_regenerated',
+		'twostep_skipped',
 	);
 
 	/**

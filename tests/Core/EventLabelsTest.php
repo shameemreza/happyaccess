@@ -24,7 +24,7 @@ class EventLabelsTest extends WP_UnitTestCase {
 	}
 
 	public function test_the_two_step_events_are_user_events() {
-		$expected = array( 'twostep_enabled', 'twostep_disabled', 'twostep_passed', 'twostep_failed', 'twostep_locked', 'twostep_reset', 'twostep_backup_used', 'twostep_backup_regenerated' );
+		$expected = array( 'twostep_enabled', 'twostep_disabled', 'twostep_passed', 'twostep_failed', 'twostep_locked', 'twostep_reset', 'twostep_backup_used', 'twostep_backup_regenerated', 'twostep_skipped' );
 		$this->assertSame( array(), array_values( array_diff( $expected, Privacy::USER_EVENTS ) ) );
 	}
 

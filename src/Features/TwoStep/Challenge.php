@@ -151,16 +151,17 @@ final class Challenge {
 	}
 
 	/**
-	 * Whether a user whose role requires two-step login has used up the
-	 * grace period and must set it up before logging in. Task 3 fills this
-	 * in, with the setup screen.
+	 * Whether the user goes to the setup screen instead of the code step: a
+	 * role that requires two-step login, no method set up, and not exempt.
+	 * Enforcement decides on the screen whether "Later" is still offered.
 	 *
 	 * @param \WP_User $user The user.
 	 * @return bool
 	 */
 	public static function needs_setup( \WP_User $user ) {
-		unset( $user );
-		return false;
+		return ! self::is_exempt( $user )
+			&& ! UserState::is_enabled( $user->ID )
+			&& Enforcement::REQUIRED === Enforcement::policy( $user );
 	}
 
 	/**
@@ -249,7 +250,8 @@ final class Challenge {
 	 * The hand-off after a passwordless code or link. The email code already
 	 * proved access to the mailbox, so a user whose only method is email logs
 	 * in directly. Anyone else goes to the step with the app and backup
-	 * codes only.
+	 * codes only. A required user with no method goes to the setup screen,
+	 * because the email code proves the inbox but setup still has to happen.
 	 *
 	 * @param \WP_User $user     The user.
 	 * @param bool     $remember Whether to keep the session.
@@ -257,7 +259,10 @@ final class Challenge {
 	 * @return string|null The step URL, or null to log in now.
 	 */
 	public static function after_passwordless( \WP_User $user, $remember, $redirect ) {
-		if ( ! self::applies( $user ) || array() === self::allowed_methods( $user, self::PURPOSE_AFTER_PASSWORDLESS ) ) {
+		if ( ! self::applies( $user ) ) {
+			return null;
+		}
+		if ( ! self::needs_setup( $user ) && array() === self::allowed_methods( $user, self::PURPOSE_AFTER_PASSWORDLESS ) ) {
 			return null;
 		}
 
@@ -276,8 +281,17 @@ final class Challenge {
 	 */
 	public static function run_step() {
 		// phpcs:ignore WordPress.Security.NonceVerification -- handle() verifies the nonce on every POST, the code and the email send.
-		$response = self::handle( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ), wp_unslash( $_COOKIE ) );
+		self::respond( self::handle( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ), wp_unslash( $_COOKIE ) ) );
+	}
 
+	/**
+	 * Sends a step response, with the interim login layout when it applies.
+	 * The setup step uses it too.
+	 *
+	 * @param array $response Response from a handle() method.
+	 * @return void
+	 */
+	public static function respond( array $response ) {
 		// wp-login.php sets this global after the login_form_ action, so the step sets it for the login layout.
 		if ( 'interim' === $response['type'] ) {
 			$GLOBALS['interim_login'] = 'success'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Core's interim login flag, read by login_header().
@@ -310,13 +324,22 @@ final class Challenge {
 		$carry   = self::carry_from( $input );
 
 		if ( ! self::db_ready() ) {
-			return self::login_screen( '', new \WP_Error( 'updating', esc_html( self::updating_error()->get_error_message() ) ) );
+			return self::unavailable();
 		}
 
-		$pending = self::find_pending( self::pending_key( $cookies ) );
-		$user    = null === $pending ? false : get_userdata( $pending['user_id'] );
-		if ( ! $user instanceof \WP_User ) {
+		$login = self::pending_login( $cookies );
+		if ( null === $login ) {
 			return self::back_to_login( 'expired', $carry );
+		}
+		$pending = $login['pending'];
+		$user    = $login['user'];
+
+		// A user with no method would get the email code here, which would skip setup.
+		if ( self::needs_setup( $user ) ) {
+			return array(
+				'type' => 'redirect',
+				'url'  => self::step_url( $carry, SetupSteps::STEP ),
+			);
 		}
 
 		$allowed = self::allowed_methods( $user, $pending['purpose'] );
@@ -340,18 +363,10 @@ final class Challenge {
 			return self::code_screen( $allowed, $carry, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
-		$wait = self::ip_wait();
-		if ( $wait > 0 ) {
-			return self::code_screen( $allowed, $carry, self::screen_error( self::locked_error( $wait ) ) );
+		$attempts = self::gate( $pending['id'] );
+		if ( is_wp_error( $attempts ) ) {
+			return self::code_screen( $allowed, $carry, $attempts );
 		}
-		$wait = self::site_wait();
-		if ( $wait > 0 ) {
-			self::site_lock_alert( $wait );
-			return self::code_screen( $allowed, $carry, self::screen_error( self::locked_error( $wait ) ) );
-		}
-
-		// The try counts on the pending login before any code is checked, so parallel requests can't check more than MAX_ATTEMPTS codes.
-		$attempts = self::count_check( $pending['id'] );
 		if ( $attempts < 1 ) {
 			return self::back_to_login( 'expired', $carry );
 		}
@@ -556,7 +571,9 @@ final class Challenge {
 
 	/**
 	 * Starts a pending login and builds the step URL. When the first method
-	 * is email, the code is sent now.
+	 * is email, the code is sent now. A user who needs setup goes to the
+	 * setup screen instead, and this login counts toward the grace period
+	 * here, once, not on every view of the screen.
 	 *
 	 * @param \WP_User $user    The user.
 	 * @param string   $purpose Challenge purpose.
@@ -567,6 +584,11 @@ final class Challenge {
 		$pending_id = self::start( $user, $purpose );
 		if ( is_wp_error( $pending_id ) ) {
 			return $pending_id;
+		}
+
+		if ( self::needs_setup( $user ) ) {
+			Enforcement::note_login( $user->ID );
+			return self::step_url( $carry, SetupSteps::STEP );
 		}
 
 		$allowed         = self::allowed_methods( $user, $purpose );
@@ -677,12 +699,14 @@ final class Challenge {
 	}
 
 	/**
-	 * The carried values from the step's own query or form.
+	 * The carried values from the step's own query or form: a validated
+	 * redirect, remember me, interim login and the WooCommerce marker. The
+	 * setup step reads them the same way.
 	 *
 	 * @param array $input Unslashed $_GET or $_POST.
 	 * @return array
 	 */
-	private static function carry_from( array $input ) {
+	public static function carry_from( array $input ) {
 		$carry = array( 'redirect_to' => self::valid_redirect( self::text( $input, 'redirect_to' ) ) );
 		if ( ! empty( $input['rememberme'] ) ) {
 			$carry['rememberme'] = 1;
@@ -728,19 +752,20 @@ final class Challenge {
 	}
 
 	/**
-	 * URL of the step with the carried values.
+	 * URL of the code step, or another two-step screen, with the carried values.
 	 *
-	 * @param array $carry Carried values.
+	 * @param array  $carry Carried values.
+	 * @param string $step  Step name.
 	 * @return string
 	 */
-	private static function step_url( array $carry ) {
+	public static function step_url( array $carry, $step = self::STEP ) {
 		$args = array();
 		foreach ( array( 'method', 'sent', 'redirect_to', 'rememberme', 'interim-login', 'from' ) as $key ) {
 			if ( isset( $carry[ $key ] ) && is_scalar( $carry[ $key ] ) && '' !== (string) $carry[ $key ] ) {
 				$args[ $key ] = (string) $carry[ $key ];
 			}
 		}
-		return Router::url( self::STEP, $args );
+		return Router::url( $step, $args );
 	}
 
 	/**
@@ -766,7 +791,7 @@ final class Challenge {
 	 * @param array  $carry  Carried values.
 	 * @return array
 	 */
-	private static function back_to_login( $reason, array $carry ) {
+	public static function back_to_login( $reason, array $carry ) {
 		return array(
 			'type' => 'redirect',
 			'url'  => self::login_url( $reason, $carry ),
@@ -802,13 +827,14 @@ final class Challenge {
 	}
 
 	/**
-	 * Sends an email code, within the account's send limit.
+	 * Sends an email code, within the account's send limit. The setup step
+	 * sends its code through here too, so both share the limit.
 	 *
 	 * @param \WP_User $user       The user.
 	 * @param int      $pending_id Pending login id.
 	 * @return true|\WP_Error Error messages are plain text.
 	 */
-	private static function send_email( \WP_User $user, $pending_id ) {
+	public static function send_email( \WP_User $user, $pending_id ) {
 		$wait = RateLimiter::attempt( self::SEND_ACTION, 'account', 'u:' . $user->ID, self::SEND_LIMIT, self::LIFETIME, self::LIFETIME );
 		if ( $wait > 0 ) {
 			return self::locked_error( $wait );
@@ -856,6 +882,25 @@ final class Challenge {
 	 * @return array
 	 */
 	private static function fail( \WP_User $user, array $pending, array $allowed, array $carry, $attempts ) {
+		$cancelled = self::wrong_code( $user, $pending, $carry, $attempts );
+		if ( null !== $cancelled ) {
+			return $cancelled;
+		}
+		return self::code_screen( $allowed, $carry, self::invalid_code_error() );
+	}
+
+	/**
+	 * Counts a wrong code on the site cap and logs it. The try is already
+	 * counted on the pending login, and the fifth one cancels it. The setup
+	 * step uses this for its codes too.
+	 *
+	 * @param \WP_User $user     The user.
+	 * @param array    $pending  Pending login row.
+	 * @param array    $carry    Carried values, with method.
+	 * @param int      $attempts Checks counted on the pending login.
+	 * @return array|null The redirect to the login when the pending login was cancelled, else null.
+	 */
+	public static function wrong_code( \WP_User $user, array $pending, array $carry, $attempts ) {
 		// Only a wrong code counts on the site scope, and it is never cleared.
 		RateLimiter::hit( self::CODE_ACTION, 'site', 'site' );
 		$wait = self::site_wait();
@@ -873,8 +918,56 @@ final class Challenge {
 		}
 
 		UserState::log_failed( $user->ID, $carry['method'] );
-		// One message for every failure, so it says nothing about which method or why.
-		return self::code_screen( $allowed, $carry, new \WP_Error( 'happyaccess_invalid_code', esc_html__( "That code didn't work. Try again.", 'happyaccess' ) ) );
+		return null;
+	}
+
+	/**
+	 * The error for a wrong code, made safe for the login screen. One message
+	 * for every failure, so it says nothing about which method or why.
+	 *
+	 * @return \WP_Error
+	 */
+	public static function invalid_code_error() {
+		return new \WP_Error( 'happyaccess_invalid_code', esc_html__( "That code didn't work. Try again.", 'happyaccess' ) );
+	}
+
+	/**
+	 * The checks before any code is looked at: the IP limit, the site-wide
+	 * cap, then one try counted on the pending login, so parallel requests
+	 * can't check more than MAX_ATTEMPTS codes.
+	 *
+	 * @param int $pending_id Pending login id.
+	 * @return int|\WP_Error Checks counted, this one included, or 0 when the
+	 *                       pending login is gone. A lock error is made safe for the screen.
+	 */
+	public static function gate( $pending_id ) {
+		$wait = self::ip_wait();
+		if ( $wait > 0 ) {
+			return self::screen_error( self::locked_error( $wait ) );
+		}
+		$wait = self::site_wait();
+		if ( $wait > 0 ) {
+			self::site_lock_alert( $wait );
+			return self::screen_error( self::locked_error( $wait ) );
+		}
+		return self::count_check( $pending_id );
+	}
+
+	/**
+	 * Uses up the pending login and logs the user in. The setup step calls
+	 * this once setup is done, or when the user puts it off.
+	 *
+	 * @param \WP_User $user    The user.
+	 * @param array    $pending Pending login row.
+	 * @param array    $carry   Carried values, with method.
+	 * @param bool     $passed  Whether a second step passed, which is logged.
+	 * @return array
+	 */
+	public static function finish( \WP_User $user, array $pending, array $carry, $passed = true ) {
+		if ( ! self::consume( $pending['id'] ) ) {
+			return self::back_to_login( 'expired', $carry );
+		}
+		return self::succeed( $user, $pending, $carry, $passed );
 	}
 
 	/**
@@ -884,15 +977,18 @@ final class Challenge {
 	 * @param \WP_User $user    The user.
 	 * @param array    $pending Pending login row, used up.
 	 * @param array    $carry   Carried values, with method.
+	 * @param bool     $passed  Whether a second step passed. False when setup was put off.
 	 * @return array
 	 */
-	private static function succeed( \WP_User $user, array $pending, array $carry ) {
+	private static function succeed( \WP_User $user, array $pending, array $carry, $passed = true ) {
 		RateLimiter::clear( self::CODE_ACTION, 'ip', RateLimiter::ip_subject() );
 		self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
 		if ( 'backup' === $carry['method'] ) {
 			self::remember_backup_notice( $user->ID );
 		}
-		UserState::log_passed( $user->ID, $carry['method'] );
+		if ( $passed ) {
+			UserState::log_passed( $user->ID, $carry['method'] );
+		}
 
 		wp_set_auth_cookie( $user->ID, ! empty( $carry['rememberme'] ) );
 		self::clear_reset_key( $user );
@@ -992,6 +1088,27 @@ final class Challenge {
 			static function () use ( $name, $left ) {
 				set_transient( $name, $left, DAY_IN_SECONDS );
 			}
+		);
+	}
+
+	/**
+	 * The open pending login of the browser, with its user.
+	 *
+	 * @param array $cookies Unslashed $_COOKIE.
+	 * @return array|null pending (see find_pending()), user, and hash: the
+	 *                    stored hash of the cookie key, which names this login.
+	 */
+	public static function pending_login( array $cookies ) {
+		$key     = self::pending_key( $cookies );
+		$pending = self::find_pending( $key );
+		$user    = null === $pending ? false : get_userdata( $pending['user_id'] );
+		if ( ! $user instanceof \WP_User ) {
+			return null;
+		}
+		return array(
+			'pending' => $pending,
+			'user'    => $user,
+			'hash'    => Codes::hash_key( $key ),
 		);
 	}
 
@@ -1122,6 +1239,15 @@ final class Challenge {
 	}
 
 	/**
+	 * The screen while the schema is updating.
+	 *
+	 * @return array
+	 */
+	public static function unavailable() {
+		return self::login_screen( '', new \WP_Error( 'updating', esc_html( self::updating_error()->get_error_message() ) ) );
+	}
+
+	/**
 	 * A login-styled screen with only a notice, for when the step can't run.
 	 *
 	 * @param string    $body   Body markup.
@@ -1144,7 +1270,7 @@ final class Challenge {
 	 * @param array $carry Carried values.
 	 * @return string
 	 */
-	private static function carry_fields( array $carry ) {
+	public static function carry_fields( array $carry ) {
 		$html = '';
 		if ( ! empty( $carry['redirect_to'] ) ) {
 			$html .= '<input type="hidden" name="redirect_to" value="' . esc_attr( $carry['redirect_to'] ) . '" />';
@@ -1161,45 +1287,61 @@ final class Challenge {
 	}
 
 	/**
-	 * Links to the other methods the user has. Asking for an email code is a
-	 * small POST form with a button drawn as a link, because it sends mail.
+	 * Links to the other methods the user has, in one nav container. Asking
+	 * for an email code sends mail, so it is a POST: a button drawn as a
+	 * link, tied by its form attribute to a hidden form after the container.
 	 *
 	 * @param string[] $allowed Methods offered.
 	 * @param array    $carry   Carried values, with method.
 	 * @return string
 	 */
 	private static function method_links( array $allowed, array $carry ) {
-		$base = $carry;
+		$base  = $carry;
+		$links = array();
+		$form  = '';
 		unset( $base['sent'] );
-		$html = '';
 
 		if ( 'app' !== $carry['method'] && in_array( 'app', $allowed, true ) ) {
-			$html .= self::switch_link( self::step_url( array_merge( $base, array( 'method' => 'app' ) ) ), __( 'Use your authenticator app', 'happyaccess' ) );
+			$links[] = '<a href="' . esc_url( self::step_url( array_merge( $base, array( 'method' => 'app' ) ) ) ) . '">' . esc_html__( 'Use your authenticator app', 'happyaccess' ) . '</a>';
 		}
 		if ( in_array( 'email', $allowed, true ) ) {
-			$label = 'email' === $carry['method'] ? __( 'Send a new code', 'happyaccess' ) : __( 'Email me a code instead', 'happyaccess' );
-			$html .= '<form method="post" action="' . esc_url( Router::url( self::STEP ) ) . '" class="happyaccess-ts-send">';
-			$html .= '<p id="nav" class="happyaccess-ts-switch"><button type="submit" class="button-link">' . esc_html( $label ) . '</button></p>';
-			$html .= '<input type="hidden" name="method" value="email" /><input type="hidden" name="send" value="1" />';
-			$html .= self::carry_fields( $base );
-			$html .= wp_nonce_field( 'happyaccess_twostep_send', '_wpnonce', false, false );
-			$html .= '</form>';
+			$label   = 'email' === $carry['method'] ? __( 'Send a new code', 'happyaccess' ) : __( 'Email me a code instead', 'happyaccess' );
+			$links[] = '<button type="submit" form="happyaccess-ts-send" class="button-link">' . esc_html( $label ) . '</button>';
+			$form   .= '<form id="happyaccess-ts-send" method="post" action="' . esc_url( Router::url( self::STEP ) ) . '" hidden>';
+			$form   .= '<input type="hidden" name="method" value="email" /><input type="hidden" name="send" value="1" />';
+			$form   .= self::carry_fields( $base );
+			$form   .= self::nonce_input( 'happyaccess_twostep_send' );
+			$form   .= '</form>';
 		}
 		if ( 'backup' !== $carry['method'] && in_array( 'backup', $allowed, true ) ) {
-			$html .= self::switch_link( self::step_url( array_merge( $base, array( 'method' => 'backup' ) ) ), __( 'Use a backup code', 'happyaccess' ) );
+			$links[] = '<a href="' . esc_url( self::step_url( array_merge( $base, array( 'method' => 'backup' ) ) ) ) . '">' . esc_html__( 'Use a backup code', 'happyaccess' ) . '</a>';
 		}
-		return $html;
+		return self::nav( $links ) . $form;
 	}
 
 	/**
-	 * One link to another method.
+	 * A nonce field without an id. wp_nonce_field() gives every form the
+	 * same id, and the screen has more than one form.
 	 *
-	 * @param string $url   Step URL.
-	 * @param string $label Link text.
+	 * @param string $action Nonce action.
 	 * @return string
 	 */
-	private static function switch_link( $url, $label ) {
-		return '<p id="nav" class="happyaccess-ts-switch"><a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a></p>';
+	public static function nonce_input( $action ) {
+		return '<input type="hidden" name="_wpnonce" value="' . esc_attr( wp_create_nonce( $action ) ) . '" />';
+	}
+
+	/**
+	 * The one nav container under a two-step form: each link on its own line.
+	 * The setup step uses it too.
+	 *
+	 * @param string[] $links Link or button markup, already escaped.
+	 * @return string
+	 */
+	public static function nav( array $links ) {
+		if ( array() === $links ) {
+			return '';
+		}
+		return '<p id="nav" class="happyaccess-ts-methods">' . implode( '<br />', $links ) . '</p>';
 	}
 
 	/**
@@ -1350,7 +1492,7 @@ final class Challenge {
 	 *
 	 * @return bool
 	 */
-	private static function db_ready() {
+	public static function db_ready() {
 		return get_option( 'happyaccess_db_version' ) === Installer::DB_VERSION;
 	}
 

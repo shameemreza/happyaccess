@@ -505,8 +505,8 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->mails = array();
 
 		$screen = Challenge::handle( 'GET', array(), array(), array( Challenge::COOKIE => $cookie ) );
-		$this->assertSame( 1, preg_match( '#<form[^>]*method="post"[^>]*>(?:(?!</form>).)*Email me a code instead(?:(?!</form>).)*</form>#s', $screen['body'], $form ) );
-		$this->assertStringContainsString( '<button type="submit" class="button-link">', $form[0] );
+		$this->assertStringContainsString( '<button type="submit" form="happyaccess-ts-send" class="button-link">Email me a code instead</button>', $screen['body'] );
+		$this->assertSame( 1, preg_match( '#<form id="happyaccess-ts-send" method="post"[^>]*>(?:(?!</form>).)*</form>#s', $screen['body'], $form ) );
 		$this->assertStringContainsString( 'name="send" value="1"', $form[0] );
 		$this->assertStringNotContainsString( 'send=1', $screen['body'], 'No link sends a code.' );
 

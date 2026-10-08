@@ -90,6 +90,7 @@ final class EventLabels {
 			'twostep_reset'              => __( 'Two-step login reset', 'happyaccess' ),
 			'twostep_backup_used'        => __( 'Backup code used', 'happyaccess' ),
 			'twostep_backup_regenerated' => __( 'Backup codes renewed', 'happyaccess' ),
+			'twostep_skipped'            => __( 'Two-step login setup put off', 'happyaccess' ),
 		);
 	}
 }
