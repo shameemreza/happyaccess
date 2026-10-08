@@ -16,8 +16,9 @@ const jsxInJs = {
 export default defineConfig( {
 	plugins: [ jsxInJs ],
 	resolve: {
-		// These two are WordPress scripts the editor loads, so they are not installed. Webpack leaves them external.
+		// These are WordPress scripts the editor loads, so they are not installed. Webpack leaves them external.
 		alias: {
+			'@wordpress/blocks': path.resolve( 'admin-app/test-stubs/blocks.js' ),
 			'@wordpress/block-editor': path.resolve(
 				'admin-app/test-stubs/block-editor.js'
 			),

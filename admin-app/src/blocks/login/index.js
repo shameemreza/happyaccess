@@ -3,8 +3,8 @@ import { registerBlockType } from '@wordpress/blocks';
 import metadata from '../../../../blocks/login/block.json';
 import Edit from './edit';
 
+// The rest comes from the server, which translates the title, description and keywords.
 registerBlockType( metadata.name, {
-	...metadata,
 	edit: Edit,
 	save: () => null,
 } );
