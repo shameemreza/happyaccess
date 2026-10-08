@@ -57,6 +57,10 @@ final class Requests {
 			return new \WP_Error( 'happyaccess_no_site_key', __( 'Login codes could not be made. Try again later.', 'happyaccess' ) );
 		}
 
+		if ( ! self::allowed( $user ) ) {
+			return new \WP_Error( 'happyaccess_not_allowed', __( 'Login codes could not be made. Try again later.', 'happyaccess' ) );
+		}
+
 		$table = Installer::table( 'challenges' );
 		$now   = Clock::now();
 
@@ -123,20 +127,21 @@ final class Requests {
 
 		$id = (int) $row['id'];
 		if ( is_string( $code ) && self::CODE_DIGITS === strlen( Codes::normalize_code( $code ) ) && Codes::verify_code( $code, (string) $row['code_hash'] ) ) {
-			if ( ! self::consume( $id, true ) ) {
+			if ( ! self::consume( $id ) ) {
 				return self::invalid_code();
 			}
-			return self::user_for( (int) $row['user_id'] );
+			return self::user_for( (int) $row['user_id'], false );
 		}
 
+		// One statement: MySQL applies the assignments left to right, so the lockout sees the raised count.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$counted = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1 WHERE id = %d AND used_at IS NULL AND attempts < %d", $id, self::MAX_ATTEMPTS ) );
+		$counted = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1, used_at = IF( attempts >= %d, %s, used_at ) WHERE id = %d AND used_at IS NULL AND attempts < %d", self::MAX_ATTEMPTS, $now, $id, self::MAX_ATTEMPTS ) );
 		if ( 1 !== $counted ) {
 			return self::invalid_code();
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$cancelled = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = %s WHERE id = %d AND used_at IS NULL AND attempts >= %d", $now, $id, self::MAX_ATTEMPTS ) );
-		if ( 1 === $cancelled ) {
+		$attempts = (int) $wpdb->get_var( $wpdb->prepare( "SELECT attempts FROM {$table} WHERE id = %d", $id ) );
+		if ( $attempts >= self::MAX_ATTEMPTS ) {
 			return new \WP_Error( 'happyaccess_code_locked', __( 'Too many wrong codes. Ask for a new code.', 'happyaccess' ) );
 		}
 		return self::invalid_code();
@@ -179,10 +184,10 @@ final class Requests {
 	 */
 	public static function consume_link( $link_key ) {
 		$row = self::find_by_link( $link_key );
-		if ( null === $row || ! self::consume( $row['id'], false ) ) {
-			return new \WP_Error( 'happyaccess_invalid_link', __( 'This login link is not valid or has expired. Ask for a new one.', 'happyaccess' ) );
+		if ( null === $row || ! self::consume( $row['id'] ) ) {
+			return self::invalid_link();
 		}
-		return self::user_for( $row['user_id'] );
+		return self::user_for( $row['user_id'], true );
 	}
 
 	/**
@@ -214,11 +219,23 @@ final class Requests {
 			return null;
 		}
 
+		return self::allowed( $user ) ? $user : null;
+	}
+
+	/**
+	 * Whether a found user may use passwordless login. Checked when a request
+	 * is made and again when a code or link is used, because a user can become
+	 * a support user or be filtered out in between.
+	 *
+	 * @param \WP_User $user The user.
+	 * @return bool
+	 */
+	private static function allowed( $user ) {
 		if ( Capabilities::is_temp_user( $user->ID ) ) {
-			return null;
+			return false;
 		}
 		if ( is_multisite() && ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) ) {
-			return null;
+			return false;
 		}
 		/**
 		 * Filters whether a user may log in without a password.
@@ -226,39 +243,36 @@ final class Requests {
 		 * @param bool     $allowed Whether the user may. Default true.
 		 * @param \WP_User $user    The user.
 		 */
-		if ( ! apply_filters( 'happyaccess_passwordless_allowed', true, $user ) ) {
-			return null;
-		}
-		return $user;
+		return (bool) apply_filters( 'happyaccess_passwordless_allowed', true, $user );
 	}
 
 	/**
 	 * Marks one request used. Only the call that changes the row wins.
 	 *
-	 * @param int  $id        Row id.
-	 * @param bool $check_try Also require that the request still has tries left.
+	 * @param int $id Row id.
 	 * @return bool Whether this call used it up.
 	 */
-	private static function consume( $id, $check_try ) {
+	private static function consume( $id ) {
 		global $wpdb;
 
 		$table = Installer::table( 'challenges' );
 		$now   = Clock::mysql();
-		$tries = $check_try ? $wpdb->prepare( ' AND attempts < %d', self::MAX_ATTEMPTS ) : '';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table; $tries is a prepared fragment.
-		return 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = %s WHERE id = %d AND used_at IS NULL AND expires_at > %s{$tries}", $now, (int) $id, $now ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		return 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = %s WHERE id = %d AND used_at IS NULL AND expires_at > %s AND attempts < %d", $now, (int) $id, $now, self::MAX_ATTEMPTS ) );
 	}
 
 	/**
-	 * The user of a consumed request.
+	 * The user of a consumed request. The request stays used up when this
+	 * returns an error.
 	 *
-	 * @param int $user_id User id.
+	 * @param int  $user_id  User id.
+	 * @param bool $for_link Whether the request was used through its link.
 	 * @return \WP_User|\WP_Error
 	 */
-	private static function user_for( $user_id ) {
+	private static function user_for( $user_id, $for_link ) {
 		$user = get_userdata( (int) $user_id );
-		if ( ! $user instanceof \WP_User ) {
-			return self::invalid_code();
+		if ( ! $user instanceof \WP_User || ! self::allowed( $user ) ) {
+			return $for_link ? self::invalid_link() : self::invalid_code();
 		}
 		return $user;
 	}
@@ -271,5 +285,14 @@ final class Requests {
 	 */
 	private static function invalid_code() {
 		return new \WP_Error( 'happyaccess_invalid_code', __( 'That code is not right or has expired.', 'happyaccess' ) );
+	}
+
+	/**
+	 * The error for a link that is wrong, expired or already used.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function invalid_link() {
+		return new \WP_Error( 'happyaccess_invalid_link', __( 'This login link is not valid or has expired. Ask for a new one.', 'happyaccess' ) );
 	}
 }

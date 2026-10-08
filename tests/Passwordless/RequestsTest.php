@@ -313,8 +313,69 @@ class RequestsTest extends WP_UnitTestCase {
 		$wpdb->delete( $wpdb->users, array( 'ID' => $gone->ID ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		clean_user_cache( $gone->ID );
 
+		$link = Requests::consume_link( $made['link_key'] );
+		$this->assertWPError( $link );
+		$this->assertSame( 'happyaccess_invalid_link', $link->get_error_code() );
+
+		$code = Requests::verify_code( 'key-gone', $made['code'] );
+		$this->assertWPError( $code );
+		$this->assertSame( 'happyaccess_invalid_code', $code->get_error_code() );
+	}
+
+	public function test_create_refuses_a_temp_support_user() {
+		$temp = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		update_user_meta( $temp->ID, 'happyaccess_temp_user', 1 );
+
+		$this->assertWPError( Requests::create( $temp, self::KEY ) );
+		$this->assertSame( array(), $this->rows() );
+	}
+
+	public function test_create_refuses_a_user_the_filter_refuses_and_leaves_the_earlier_request_alone() {
+		$made = $this->make();
+
+		add_filter( 'happyaccess_passwordless_allowed', '__return_false' );
+		$this->assertWPError( Requests::create( $this->user, 'key-two' ) );
+		remove_filter( 'happyaccess_passwordless_allowed', '__return_false' );
+
+		$this->assertCount( 1, $this->rows() );
+		$this->assertInstanceOf( WP_User::class, Requests::verify_code( self::KEY, $made['code'] ) );
+	}
+
+	public function test_a_user_the_filter_refuses_after_create_cannot_use_the_code() {
+		$made = $this->make();
+
+		add_filter( 'happyaccess_passwordless_allowed', '__return_false' );
+		$result = Requests::verify_code( self::KEY, $made['code'] );
+		remove_filter( 'happyaccess_passwordless_allowed', '__return_false' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_invalid_code', $result->get_error_code() );
+		$this->assertNotNull( $this->rows()[0]['used_at'] );
+		$this->assertWPError( Requests::verify_code( self::KEY, $made['code'] ) );
+	}
+
+	public function test_a_user_the_filter_refuses_after_create_cannot_use_the_link() {
+		$made = $this->make();
+
+		add_filter( 'happyaccess_passwordless_allowed', '__return_false' );
+		$result = Requests::consume_link( $made['link_key'] );
+		remove_filter( 'happyaccess_passwordless_allowed', '__return_false' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_invalid_link', $result->get_error_code() );
+		$this->assertNotNull( $this->rows()[0]['used_at'] );
 		$this->assertWPError( Requests::consume_link( $made['link_key'] ) );
-		$this->assertWPError( Requests::verify_code( 'key-gone', $made['code'] ) );
+	}
+
+	public function test_a_user_who_became_a_temp_support_user_after_create_cannot_use_the_code_or_link() {
+		$made  = $this->make();
+		$other = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$two   = $this->make( $other, 'key-two' );
+		update_user_meta( $this->user->ID, 'happyaccess_temp_user', 1 );
+		update_user_meta( $other->ID, 'happyaccess_temp_user', 1 );
+
+		$this->assertWPError( Requests::verify_code( self::KEY, $made['code'] ) );
+		$this->assertWPError( Requests::consume_link( $two['link_key'] ) );
 	}
 
 	public function test_eligible_takes_an_email_or_a_username() {
