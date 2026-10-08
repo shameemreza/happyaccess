@@ -295,7 +295,8 @@ final class Installer {
 		if ( self::close_legacy_expired() ) {
 			$result['failed'] = true;
 		}
-		if ( self::migrate_options( $is_upgrade ) ) {
+		$options = self::migrate_options( $is_upgrade );
+		if ( $options['failed'] ) {
 			$result['failed'] = true;
 		}
 		self::backfill_blog_ids();
@@ -317,7 +318,7 @@ final class Installer {
 					'feature' => 'core',
 					'user_id' => 0,
 					'summary' => sprintf( 'Upgraded from %1$s to %2$s', $previous, self::DB_VERSION ),
-					'meta'    => array( 'codes_hashed' => $result['hashed'] ),
+					'meta'    => array_merge( array( 'codes_hashed' => $result['hashed'] ), $options['changed'] ),
 				)
 			);
 		}
@@ -706,7 +707,7 @@ final class Installer {
 	 * deleted only once the new settings are stored.
 	 *
 	 * @param bool $is_upgrade Whether this site ran 1.0.x before.
-	 * @return bool Whether the settings write failed.
+	 * @return array{failed:bool,changed:array} Whether the settings write failed, and the 1.0.x values that had to change, by setting.
 	 */
 	private static function migrate_options( $is_upgrade ) {
 		$map = array(
@@ -721,10 +722,24 @@ final class Installer {
 		);
 
 		$changes = array();
+		$changed = array();
 		foreach ( $map as $option => $path ) {
 			$value = get_option( $option, null );
 			if ( null !== $value ) {
 				$changes[ $path[0] ][ $path[1] ] = $value;
+			}
+		}
+
+		// 1.0.x read 0 as "never purge" and stored any number of days. 1.1.0 has no "never", so both get the longest it allows instead of a purge.
+		if ( isset( $changes['privacy']['retention_days'] ) ) {
+			$days    = (int) $changes['privacy']['retention_days'];
+			$longest = Settings::RANGES['privacy.retention_days'][1];
+			if ( $days < 1 || $days > $longest ) {
+				$changes['privacy']['retention_days'] = $longest;
+				$changed['retention_days']            = array(
+					'from' => $days,
+					'to'   => $longest,
+				);
 			}
 		}
 
@@ -745,7 +760,10 @@ final class Installer {
 			Settings::flush_cache();
 			// update_option() also returns false for an unchanged value, so compare what is stored with what was meant to be.
 			if ( Settings::all() !== $expected ) {
-				return true;
+				return array(
+					'failed'  => true,
+					'changed' => $changed,
+				);
 			}
 		}
 
@@ -763,7 +781,10 @@ final class Installer {
 		foreach ( self::LEGACY_OPTIONS as $option ) {
 			delete_option( $option );
 		}
-		return false;
+		return array(
+			'failed'  => false,
+			'changed' => $changed,
+		);
 	}
 
 	/**

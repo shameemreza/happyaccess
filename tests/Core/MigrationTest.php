@@ -914,4 +914,40 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( 14, Settings::get( 'privacy.retention_days' ) );
 		$this->assertFalse( get_option( 'happyaccess_max_attempts' ) );
 	}
+
+	public function retention_outside_the_range() {
+		return array(
+			'never purge' => array( 0 ),
+			'two years'   => array( 730 ),
+		);
+	}
+
+	/**
+	 * @dataProvider retention_outside_the_range
+	 *
+	 * @param int $days 1.0.6 retention.
+	 */
+	public function test_a_106_retention_outside_the_range_becomes_the_longest_and_is_logged( $days ) {
+		update_option( 'happyaccess_cleanup_days', $days );
+
+		Installer::migrate();
+
+		$this->assertSame( 365, Settings::get( 'privacy.retention_days' ) );
+		$entry = AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['items'][0];
+		$this->assertSame(
+			array(
+				'from' => $days,
+				'to'   => 365,
+			),
+			$entry['meta']['retention_days']
+		);
+	}
+
+	public function test_a_106_retention_inside_the_range_is_kept_and_not_logged() {
+		Installer::migrate();
+
+		$this->assertSame( 14, Settings::get( 'privacy.retention_days' ) );
+		$entry = AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['items'][0];
+		$this->assertArrayNotHasKey( 'retention_days', $entry['meta'] );
+	}
 }
