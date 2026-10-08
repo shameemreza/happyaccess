@@ -32,7 +32,15 @@ final class SettingsController {
 	/**
 	 * Setting groups a request may change.
 	 */
-	const GROUPS = array( 'features', 'security', 'privacy', 'support' );
+	const GROUPS = array( 'features', 'security', 'privacy', 'support', 'passwordless' );
+
+	/**
+	 * Keys inside a group that hold a flat map of plain values, such as
+	 * show_on and role_policy. Nowhere else may a value be an object.
+	 */
+	const MAP_KEYS = array(
+		'passwordless' => array( 'show_on', 'role_policy' ),
+	);
 
 	/**
 	 * Consent is recorded by POST /setup only, so a settings save can't fake it.
@@ -137,7 +145,8 @@ final class SettingsController {
 	/**
 	 * Checks a settings group: an object whose values are all plain text,
 	 * numbers or booleans. A list, or a value that is itself a list or an
-	 * object, is refused instead of being cast to something else.
+	 * object, is refused instead of being cast to something else. The one
+	 * exception is a key listed in MAP_KEYS, which may hold a flat object.
 	 *
 	 * @param mixed            $value   Param value.
 	 * @param \WP_REST_Request $request Request.
@@ -154,10 +163,35 @@ final class SettingsController {
 			/* translators: %s: setting group name. */
 			return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s must be an object.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
 		}
-		foreach ( $value as $item ) {
+		foreach ( $value as $key => $item ) {
+			if ( isset( self::MAP_KEYS[ $param ] ) && in_array( $key, self::MAP_KEYS[ $param ], true ) ) {
+				if ( is_array( $item ) && self::is_flat_map( $item ) ) {
+					continue;
+				}
+				/* translators: %s: setting group name. */
+				return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s has a value that must be an object of plain values.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
+			}
 			if ( ! is_scalar( $item ) ) {
 				/* translators: %s: setting group name. */
 				return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s can only hold text, numbers and true or false.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a value is an object of plain values: no list, nothing nested.
+	 *
+	 * @param array $map Value.
+	 * @return bool
+	 */
+	private static function is_flat_map( array $map ) {
+		if ( array() !== $map && array_keys( $map ) === range( 0, count( $map ) - 1 ) ) {
+			return false;
+		}
+		foreach ( $map as $item ) {
+			if ( ! is_scalar( $item ) ) {
+				return false;
 			}
 		}
 		return true;

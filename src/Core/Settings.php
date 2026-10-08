@@ -28,13 +28,15 @@ final class Settings {
 		'security.recaptcha_threshold' => array( 0, 1 ),
 		'privacy.retention_days'       => array( 1, 365 ),
 		'support.default_duration'     => array( 3600, 2592000 ),
+		'passwordless.code_lifetime'   => array( 300, 1800 ),
 	);
 
 	/**
 	 * Allowed values for string settings by dotted path.
 	 */
 	const CHOICES = array(
-		'security.proxy_header' => array( '', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP' ),
+		'security.proxy_header'    => array( '', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP' ),
+		'passwordless.role_policy' => array( 'either', 'email_only' ),
 	);
 
 	/**
@@ -51,12 +53,12 @@ final class Settings {
 	 */
 	public static function defaults() {
 		return array(
-			'features' => array(
+			'features'     => array(
 				'support_access' => true,
 				'passwordless'   => false,
 				'two_step'       => false,
 			),
-			'security' => array(
+			'security'     => array(
 				'max_attempts'        => 5,
 				'attempt_window'      => 900,
 				'lockout_duration'    => 1800,
@@ -66,16 +68,25 @@ final class Settings {
 				'recaptcha_site_key'  => '',
 				'recaptcha_threshold' => 0.5,
 			),
-			'privacy'  => array(
+			'privacy'      => array(
 				'logging'             => true,
 				'retention_days'      => 30,
 				'anonymize_ip'        => false,
 				'delete_on_uninstall' => false,
 			),
-			'support'  => array(
+			'support'      => array(
 				'default_duration' => 259200,
 				'consent_given_at' => '',
 				'consent_user_id'  => 0,
+			),
+			'passwordless' => array(
+				'code_lifetime' => 600,
+				'show_on'       => array(
+					'wp_login'     => true,
+					'woo_account'  => true,
+					'woo_checkout' => true,
+				),
+				'role_policy'   => array(),
 			),
 		);
 	}
@@ -181,11 +192,40 @@ final class Settings {
 		foreach ( $defaults as $key => $default_value ) {
 			$path = '' === $prefix ? $key : $prefix . '.' . $key;
 			$has  = array_key_exists( $key, $values );
+			if ( 'passwordless.role_policy' === $path ) {
+				$out[ $key ] = self::clean_role_policy( $has ? $values[ $key ] : array() );
+				continue;
+			}
 			if ( is_array( $default_value ) ) {
 				$out[ $key ] = self::clean( $default_value, $has && is_array( $values[ $key ] ) ? $values[ $key ] : array(), $path );
 				continue;
 			}
 			$out[ $key ] = $has ? self::cast( $path, $default_value, $values[ $key ] ) : $default_value;
+		}
+		return $out;
+	}
+
+	/**
+	 * Cleans the role policy, a map of role slug to a choice. Its keys are
+	 * not known ahead, so the defaults walk can't handle it. Slugs that are
+	 * not roles of this site, and values that are not a choice, are dropped.
+	 *
+	 * @param mixed $policy Incoming value.
+	 * @return array
+	 */
+	private static function clean_role_policy( $policy ) {
+		if ( ! is_array( $policy ) || array() === $policy ) {
+			return array();
+		}
+		$roles = wp_roles()->roles;
+		$out   = array();
+		foreach ( $policy as $slug => $choice ) {
+			if ( ! is_string( $slug ) || ! is_string( $choice ) || ! array_key_exists( $slug, $roles ) ) {
+				continue;
+			}
+			if ( in_array( $choice, self::CHOICES['passwordless.role_policy'], true ) ) {
+				$out[ $slug ] = $choice;
+			}
 		}
 		return $out;
 	}

@@ -479,6 +479,55 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( array(), $this->settings_rows() );
 	}
 
+	public function test_save_takes_the_passwordless_group_with_its_two_maps() {
+		$response = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'passwordless' => array(
+					'code_lifetime' => 120,
+					'show_on'       => array( 'woo_checkout' => false ),
+					'role_policy'   => array(
+						'administrator' => 'email_only',
+						'not_a_role'    => 'email_only',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 300, Settings::get( 'passwordless.code_lifetime' ) );
+		$this->assertFalse( Settings::get( 'passwordless.show_on.woo_checkout' ) );
+		$this->assertTrue( Settings::get( 'passwordless.show_on.wp_login' ) );
+		$this->assertSame( array( 'administrator' => 'email_only' ), Settings::get( 'passwordless.role_policy' ) );
+		$data = $response->get_data();
+		$this->assertSame( array( 'administrator' => 'email_only' ), $data['passwordless']['role_policy'] );
+		$this->assertSame( 300, $data['passwordless']['code_lifetime'] );
+	}
+
+	public function provide_bad_passwordless_groups() {
+		return array(
+			'a list for role policy'     => array( array( 'passwordless' => array( 'role_policy' => array( 'email_only' ) ) ) ),
+			'a deep role policy'         => array( array( 'passwordless' => array( 'role_policy' => array( 'editor' => array( 'x' => 'email_only' ) ) ) ) ),
+			'a deep show on'             => array( array( 'passwordless' => array( 'show_on' => array( 'wp_login' => array( 'x' => true ) ) ) ) ),
+			'a map for the lifetime'     => array( array( 'passwordless' => array( 'code_lifetime' => array( 'x' => 600 ) ) ) ),
+			'a string for show on'       => array( array( 'passwordless' => array( 'show_on' => 'yes' ) ) ),
+			'a map in another group key' => array( array( 'security' => array( 'show_on' => array( 'wp_login' => true ) ) ) ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_bad_passwordless_groups
+	 */
+	public function test_save_refuses_malformed_passwordless_values( $params ) {
+		$response = $this->request( 'POST', '/settings', $params );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 600, Settings::get( 'passwordless.code_lifetime' ) );
+		$this->assertSame( array(), Settings::get( 'passwordless.role_policy' ) );
+		$this->assertSame( array(), $this->settings_rows() );
+	}
+
 	public function test_save_still_takes_plain_values_of_each_type() {
 		$response = $this->request(
 			'POST',

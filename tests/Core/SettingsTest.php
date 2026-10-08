@@ -132,4 +132,71 @@ class SettingsTest extends WP_UnitTestCase {
 		$this->assertSame( 30, Settings::get( 'privacy.retention_days' ) );
 		remove_filter( 'option_' . Settings::OPTION, $count );
 	}
+
+	public function test_passwordless_defaults() {
+		$this->assertSame( 600, Settings::get( 'passwordless.code_lifetime' ) );
+		$this->assertTrue( Settings::get( 'passwordless.show_on.wp_login' ) );
+		$this->assertTrue( Settings::get( 'passwordless.show_on.woo_account' ) );
+		$this->assertTrue( Settings::get( 'passwordless.show_on.woo_checkout' ) );
+		$this->assertSame( array(), Settings::get( 'passwordless.role_policy' ) );
+	}
+
+	public function test_code_lifetime_is_clamped_to_300_to_1800() {
+		Settings::update( array( 'passwordless' => array( 'code_lifetime' => 10 ) ) );
+		$this->assertSame( 300, Settings::get( 'passwordless.code_lifetime' ) );
+
+		Settings::update( array( 'passwordless' => array( 'code_lifetime' => '99999' ) ) );
+		$this->assertSame( 1800, Settings::get( 'passwordless.code_lifetime' ) );
+
+		Settings::update( array( 'passwordless' => array( 'code_lifetime' => 900 ) ) );
+		$this->assertSame( 900, Settings::get( 'passwordless.code_lifetime' ) );
+	}
+
+	public function test_show_on_values_are_cast_to_booleans() {
+		Settings::update( array( 'passwordless' => array( 'show_on' => array( 'woo_checkout' => 'false', 'wp_login' => '0', 'elsewhere' => true ) ) ) );
+		$this->assertFalse( Settings::get( 'passwordless.show_on.woo_checkout' ) );
+		$this->assertFalse( Settings::get( 'passwordless.show_on.wp_login' ) );
+		$this->assertTrue( Settings::get( 'passwordless.show_on.woo_account' ) );
+		$this->assertNull( Settings::get( 'passwordless.show_on.elsewhere' ) );
+	}
+
+	public function test_role_policy_keeps_email_only_and_either_for_known_roles() {
+		Settings::update( array( 'passwordless' => array( 'role_policy' => array( 'administrator' => 'email_only', 'editor' => 'either' ) ) ) );
+		$this->assertSame(
+			array(
+				'administrator' => 'email_only',
+				'editor'        => 'either',
+			),
+			Settings::get( 'passwordless.role_policy' )
+		);
+	}
+
+	public function test_role_policy_drops_unknown_roles_and_refuses_other_values() {
+		Settings::update(
+			array(
+				'passwordless' => array(
+					'role_policy' => array(
+						'administrator' => 'email_only',
+						'not_a_role'    => 'email_only',
+						'editor'        => 'code_only',
+						'author'        => array( 'email_only' ),
+						'subscriber'    => true,
+						'shop_manager'  => '',
+					),
+				),
+			)
+		);
+		$policy = Settings::get( 'passwordless.role_policy' );
+		$this->assertSame( array( 'administrator' => 'email_only' ), $policy );
+	}
+
+	public function test_role_policy_that_is_not_a_map_is_ignored() {
+		update_option( Settings::OPTION, array( 'passwordless' => array( 'role_policy' => 'email_only' ) ) );
+		Settings::flush_cache();
+		$this->assertSame( array(), Settings::get( 'passwordless.role_policy' ) );
+
+		update_option( Settings::OPTION, array( 'passwordless' => array( 'role_policy' => array( 'email_only', 'either' ) ) ) );
+		Settings::flush_cache();
+		$this->assertSame( array(), Settings::get( 'passwordless.role_policy' ) );
+	}
 }

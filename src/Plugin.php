@@ -13,6 +13,7 @@ use HappyAccess\Core\Cron;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Privacy;
 use HappyAccess\Core\Uninstaller;
+use HappyAccess\Features\Passwordless\Feature as PasswordlessFeature;
 use HappyAccess\Features\SupportAccess\Feature;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Login\Router;
@@ -56,6 +57,7 @@ final class Plugin {
 		// Hooked whether or not Support Access is on: with no steps added, the dispatcher sends visitors to the normal login.
 		Router::register();
 		Feature::register();
+		PasswordlessFeature::register();
 		Routes::register();
 		Page::register();
 	}
