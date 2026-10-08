@@ -398,6 +398,7 @@ final class LoginSteps {
 		}
 
 		wp_set_auth_cookie( $user->ID, $remember );
+		self::clear_reset_key( $user );
 		wp_set_current_user( $user->ID );
 
 		self::forget_request( $method );
@@ -407,6 +408,24 @@ final class LoginSteps {
 		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
 
 		return self::destination( $user, $redirect );
+	}
+
+	/**
+	 * Clears a pending password reset after a login, as wp_signon() does,
+	 * so an old reset link stops working once the user is back in.
+	 *
+	 * @param \WP_User $user The user who logged in.
+	 * @return void
+	 */
+	private static function clear_reset_key( \WP_User $user ) {
+		global $wpdb;
+
+		if ( empty( $user->user_activation_key ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Same write as wp_signon().
+		$wpdb->update( $wpdb->users, array( 'user_activation_key' => '' ), array( 'ID' => $user->ID ) );
+		$user->user_activation_key = '';
 	}
 
 	/**

@@ -10,6 +10,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\LoginSteps;
 use HappyAccess\Features\TwoStep\BackupCodes;
@@ -73,6 +74,20 @@ class ChallengeTest extends WP_UnitTestCase {
 	 * @var array
 	 */
 	private $mails = array();
+
+	/**
+	 * The user a late authenticate filter returns, or whose backup code a parallel request takes.
+	 *
+	 * @var WP_User|null
+	 */
+	private $late_user = null;
+
+	/**
+	 * Pending login that parallel checks fill up, once.
+	 *
+	 * @var int
+	 */
+	private $race_row = 0;
 
 	public function set_up() {
 		parent::set_up();
@@ -466,6 +481,36 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Email me a code instead', $screen['body'] );
 
 		$res = Challenge::handle(
+			'POST',
+			array(),
+			array(
+				'method'   => 'email',
+				'send'     => '1',
+				'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
+			),
+			array( Challenge::COOKIE => $cookie )
+		);
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 'email', $this->query( $res['url'] )['method'] );
+		EmailMethod::flush_queue();
+		$this->assertCount( 1, $this->mails );
+	}
+
+	public function test_the_email_link_is_a_post_form_and_a_get_sends_nothing() {
+		$made = $this->app_user();
+		UserState::enable_email( $made['user']->ID );
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		EmailMethod::flush_queue();
+		$this->mails = array();
+
+		$screen = Challenge::handle( 'GET', array(), array(), array( Challenge::COOKIE => $cookie ) );
+		$this->assertSame( 1, preg_match( '#<form[^>]*method="post"[^>]*>(?:(?!</form>).)*Email me a code instead(?:(?!</form>).)*</form>#s', $screen['body'], $form ) );
+		$this->assertStringContainsString( '<button type="submit" class="button-link">', $form[0] );
+		$this->assertStringContainsString( 'name="send" value="1"', $form[0] );
+		$this->assertStringNotContainsString( 'send=1', $screen['body'], 'No link sends a code.' );
+
+		$res = Challenge::handle(
 			'GET',
 			array(
 				'method'   => 'email',
@@ -475,10 +520,236 @@ class ChallengeTest extends WP_UnitTestCase {
 			array(),
 			array( Challenge::COOKIE => $cookie )
 		);
-		$this->assertSame( 'redirect', $res['type'] );
-		$this->assertSame( 'email', $this->query( $res['url'] )['method'] );
+		$this->assertSame( 'render', $res['type'] );
 		EmailMethod::flush_queue();
-		$this->assertCount( 1, $this->mails );
+		$this->assertSame( array(), $this->mails, 'A GET never sends a code.' );
+
+		$res = Challenge::handle(
+			'POST',
+			array(),
+			array(
+				'method'   => 'email',
+				'send'     => '1',
+				'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
+			),
+			array()
+		);
+		$this->assertSame( 'expired', $this->query( $res['url'] )['happyaccess_ts'] );
+		EmailMethod::flush_queue();
+		$this->assertSame( array(), $this->mails, 'The send needs the pending-login cookie.' );
+	}
+
+	public function test_an_email_first_login_past_the_send_limit_says_codes_were_sent() {
+		$user = $this->email_user();
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->password_login( $user );
+		}
+		$res    = $this->password_login( $user );
+		$args   = $this->query( $res['url'] );
+		$screen = Challenge::handle( 'GET', $args, array(), array( Challenge::COOKIE => $this->pending_cookie() ) );
+
+		$this->assertStringContainsString( esc_html( 'We already sent several codes. Check your email, or wait a few minutes and try again.' ), $screen['message'] );
+		$this->assertStringNotContainsString( 'We sent a code to your email address.', $screen['message'] );
+	}
+
+	public function test_a_later_authenticator_cannot_skip_the_step_outside_the_browser() {
+		$made            = $this->app_user();
+		$this->late_user = $made['user'];
+		add_filter( 'authenticate', array( $this, 'return_late_user' ), 60, 1 );
+
+		Challenge::set_context( 'xmlrpc' );
+		$result = wp_authenticate( $made['user']->user_login, 'not the password' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_twostep_xmlrpc', $result->get_error_code() );
+
+		Challenge::set_context( 'api' );
+		$result = wp_authenticate( $made['user']->user_login, 'not the password' );
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_twostep_required', $result->get_error_code() );
+
+		remove_filter( 'authenticate', array( $this, 'return_late_user' ), 60 );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	public function test_a_login_through_the_step_clears_a_pending_password_reset() {
+		$made = $this->app_user();
+		$this->assertIsString( get_password_reset_key( $made['user'] ) );
+		$this->assertNotSame( '', $this->activation_key( $made['user']->ID ) );
+
+		$this->password_login( $made['user'] );
+		$this->assertNotSame( '', $this->activation_key( $made['user']->ID ), 'The password alone is not a login.' );
+
+		$this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( '', $this->activation_key( $made['user']->ID ) );
+	}
+
+	public function test_a_check_past_the_limit_is_refused_without_checking_the_code() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		$before = UserState::last_step( $made['user']->ID );
+
+		// Five checks from parallel requests are counted after this request found the pending login.
+		$this->race_row = (int) $this->pending_rows()[0]['id'];
+		add_filter( 'query', array( $this, 'count_five_parallel_checks' ) );
+		$res = $this->post_code( $cookie, $this->app_code( $made['secret'] ) );
+		remove_filter( 'query', array( $this, 'count_five_parallel_checks' ) );
+
+		$this->assertSame( 0, $this->race_row, 'The parallel checks ran.' );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( $before, UserState::last_step( $made['user']->ID ), 'The app code was never checked, so its time step is still unused.' );
+	}
+
+	public function test_every_check_counts_on_the_pending_login() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$this->post_code( $this->pending_cookie(), '000000' );
+		$this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 2, (int) $this->pending_rows()[0]['attempts'] );
+		$this->assertNotNull( $this->pending_rows()[0]['used_at'] );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_a_right_code_on_the_fifth_check_still_logs_in() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		for ( $i = 0; $i < 4; $i++ ) {
+			$_SERVER['REMOTE_ADDR'] = '198.51.100.' . ( 30 + $i );
+			$this->post_code( $cookie, '000000' );
+		}
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.40';
+		$res                    = $this->post_code( $cookie, $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( admin_url(), $res['url'] );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_a_backup_code_is_kept_when_the_pending_login_runs_out_during_the_check() {
+		$made  = $this->app_user();
+		$codes = BackupCodes::generate( $made['user']->ID );
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+
+		// The pending login expires while the backup code hashes are checked.
+		add_filter( 'check_password', array( $this, 'expire_during_check' ), 10, 1 );
+		$res = $this->post_code( $cookie, $codes[0], 'backup' );
+		remove_filter( 'check_password', array( $this, 'expire_during_check' ), 10 );
+		Clock::freeze( 1790000000 );
+
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 'expired', $this->query( $res['url'] )['happyaccess_ts'] );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( 10, BackupCodes::remaining( $made['user']->ID ), 'The backup code was not used up.' );
+
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $codes[0], 'backup' );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( 9, BackupCodes::remaining( $made['user']->ID ) );
+	}
+
+	public function test_a_backup_code_taken_by_a_parallel_request_does_not_log_in() {
+		$made            = $this->app_user();
+		$codes           = BackupCodes::generate( $made['user']->ID );
+		$this->late_user = $made['user'];
+		$this->password_login( $made['user'] );
+
+		add_filter( 'check_password', array( $this, 'take_code_during_check' ), 10, 3 );
+		$res = $this->post_code( $this->pending_cookie(), $codes[0], 'backup' );
+		remove_filter( 'check_password', array( $this, 'take_code_during_check' ), 10 );
+
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( array(), $this->auth );
+		$this->assertSame( 9, BackupCodes::remaining( $made['user']->ID ) );
+		$this->assertSame( 'redirect', $res['type'] );
+	}
+
+	public function test_a_cancelled_login_does_not_lock_the_ip_out_of_the_next_one() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		for ( $i = 0; $i < 5; $i++ ) {
+			$res = $this->post_code( $cookie, '000000' );
+		}
+		$this->assertSame( 'locked', $this->query( $res['url'] )['happyaccess_ts'] );
+
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( admin_url(), $res['url'] );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_a_cancel_clears_only_its_own_tries_from_the_ip_limit() {
+		Settings::update( array( 'security' => array( 'max_attempts' => 10 ) ) );
+		$other = $this->app_user();
+		$this->password_login( $other['user'] );
+		$cookie = $this->pending_cookie();
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->post_code( $cookie, '000000' );
+		}
+
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		for ( $i = 0; $i < 5; $i++ ) {
+			$res = $this->post_code( $cookie, '000000' );
+		}
+		$this->assertSame( 'locked', $this->query( $res['url'] )['happyaccess_ts'] );
+		$this->assertSame( 3, RateLimiter::count( Challenge::CODE_ACTION, 'ip', RateLimiter::ip_subject(), 900 ), 'The other login keeps its tries.' );
+	}
+
+	public function test_the_ip_limit_still_holds_across_logins_that_are_not_cancelled() {
+		$made = $this->app_user();
+		for ( $i = 0; $i < 5; $i++ ) {
+			$this->password_login( $made['user'] );
+			$this->post_code( $this->pending_cookie(), '000000' );
+		}
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( 'locked', $res['errors']->get_error_code() );
+		$this->assertSame( 0, $this->wp_login_count );
+	}
+
+	public function return_late_user( $result ) {
+		unset( $result );
+		return $this->late_user;
+	}
+
+	public function count_five_parallel_checks( $sql ) {
+		global $wpdb;
+		if ( $this->race_row > 0 && false !== strpos( $sql, Installer::table( 'attempts' ) ) ) {
+			$id             = $this->race_row;
+			$this->race_row = 0;
+			$table          = Installer::table( 'challenges' );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = %d WHERE id = %d", Challenge::MAX_ATTEMPTS, $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		}
+		return $sql;
+	}
+
+	public function expire_during_check( $check ) {
+		Clock::freeze( 1790000000 + Challenge::LIFETIME + 1 );
+		return $check;
+	}
+
+	public function take_code_during_check( $check, $password, $hash ) {
+		unset( $password );
+		if ( $check ) {
+			remove_filter( 'check_password', array( $this, 'take_code_during_check' ), 10 );
+			$stored = get_user_meta( $this->late_user->ID, UserState::META_BACKUP, true );
+			update_user_meta( $this->late_user->ID, UserState::META_BACKUP, array_values( array_diff( $stored, array( $hash ) ) ) );
+		}
+		return $check;
+	}
+
+	private function activation_key( $user_id ) {
+		global $wpdb;
+		return (string) $wpdb->get_var( $wpdb->prepare( "SELECT user_activation_key FROM {$wpdb->users} WHERE ID = %d", $user_id ) );
 	}
 
 	public function test_the_screen_offers_the_methods_the_user_has() {

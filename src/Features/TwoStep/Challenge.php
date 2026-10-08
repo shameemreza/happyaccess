@@ -211,18 +211,7 @@ final class Challenge {
 		if ( ! self::is_first_factor( $user, $password ) || ! self::applies( $user ) ) {
 			return $user;
 		}
-
-		$context = self::context();
-		if ( 'xmlrpc' === $context ) {
-			if ( ! Settings::get( 'two_step.block_xmlrpc' ) ) {
-				return $user;
-			}
-			return new \WP_Error( 'happyaccess_twostep_xmlrpc', esc_html__( "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead.", 'happyaccess' ) );
-		}
-		if ( 'browser' !== $context ) {
-			return new \WP_Error( 'happyaccess_twostep_required', esc_html__( 'This account uses two-step login. Log in on the login page.', 'happyaccess' ) );
-		}
-		return $user;
+		return 'browser' === self::context() ? $user : self::outside_browser( $user );
 	}
 
 	/**
@@ -238,8 +227,12 @@ final class Challenge {
 	 */
 	public static function finish_authenticate( $user, $username = '', $password = '' ) {
 		unset( $username );
-		if ( ! self::is_first_factor( $user, $password ) || 'browser' !== self::context() || ! self::applies( $user ) ) {
+		if ( ! self::is_first_factor( $user, $password ) || ! self::applies( $user ) ) {
 			return $user;
+		}
+		// Asked again here, so a user that a later authenticate filter returned can't skip the step.
+		if ( 'browser' !== self::context() ) {
+			return self::outside_browser( $user );
 		}
 
 		$url = self::begin( $user, self::PURPOSE, self::carry_from_login() );
@@ -282,7 +275,7 @@ final class Challenge {
 	 * @return void
 	 */
 	public static function run_step() {
-		// phpcs:ignore WordPress.Security.NonceVerification -- handle() verifies the nonce on POST and on the email link.
+		// phpcs:ignore WordPress.Security.NonceVerification -- handle() verifies the nonce on every POST, the code and the email send.
 		$response = self::handle( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ), wp_unslash( $_COOKIE ) );
 
 		// wp-login.php sets this global after the login_form_ action, so the step sets it for the login layout.
@@ -334,11 +327,13 @@ final class Challenge {
 		$carry['method'] = in_array( $chosen, $allowed, true ) ? $chosen : $allowed[0];
 
 		if ( ! $is_post ) {
-			if ( 'email' === $carry['method'] && '1' === self::text( $get, 'send' ) ) {
-				return self::handle_send( $user, $pending, $allowed, $carry, $get );
-			}
-			$sent = 'email' === $carry['method'] && '1' === self::text( $get, 'sent' );
+			$sent = 'email' === $carry['method'] ? self::text( $get, 'sent' ) : '';
 			return self::code_screen( $allowed, $carry, null, $sent );
+		}
+
+		// A POST, so the send needs the pending-login cookie, which a cross-site form doesn't carry.
+		if ( '1' === self::text( $post, 'send' ) ) {
+			return self::handle_send( $user, $pending, $allowed, $carry, $post );
 		}
 
 		if ( ! self::nonce_ok( $post, 'happyaccess_twostep' ) ) {
@@ -355,11 +350,46 @@ final class Challenge {
 			return self::code_screen( $allowed, $carry, self::screen_error( self::locked_error( $wait ) ) );
 		}
 
-		if ( ! self::check_code( $user, $carry['method'], self::text( $post, 'pwd' ) ) ) {
-			return self::fail( $user, $pending, $allowed, $carry );
+		// The try counts on the pending login before any code is checked, so parallel requests can't check more than MAX_ATTEMPTS codes.
+		$attempts = self::count_check( $pending['id'] );
+		if ( $attempts < 1 ) {
+			return self::back_to_login( 'expired', $carry );
+		}
+
+		$code = self::text( $post, 'pwd' );
+		if ( 'backup' === $carry['method'] ) {
+			return self::finish_backup( $user, $pending, $allowed, $carry, $code, $attempts );
+		}
+		if ( ! self::check_code( $user, $carry['method'], $code ) ) {
+			return self::fail( $user, $pending, $allowed, $carry, $attempts );
 		}
 
 		if ( ! self::consume( $pending['id'] ) ) {
+			return self::back_to_login( 'expired', $carry );
+		}
+		return self::succeed( $user, $pending, $carry );
+	}
+
+	/**
+	 * Checks a backup code and logs in. The pending login is used up after
+	 * the code matched but before the code is, so a login that can't finish
+	 * never costs a backup code. If a parallel request used the same code
+	 * first, the login stops there.
+	 *
+	 * @param \WP_User $user     The user.
+	 * @param array    $pending  Pending login row.
+	 * @param string[] $allowed  Methods offered.
+	 * @param array    $carry    Carried values, with method.
+	 * @param string   $code     Typed code.
+	 * @param int      $attempts Checks counted on the pending login.
+	 * @return array
+	 */
+	private static function finish_backup( \WP_User $user, array $pending, array $allowed, array $carry, $code, $attempts ) {
+		$hash = '' === $code ? '' : BackupCodes::match_code( $user->ID, $code );
+		if ( '' === $hash ) {
+			return self::fail( $user, $pending, $allowed, $carry, $attempts );
+		}
+		if ( ! self::consume( $pending['id'] ) || ! BackupCodes::remove_code( $user->ID, $hash ) ) {
 			return self::back_to_login( 'expired', $carry );
 		}
 		return self::succeed( $user, $pending, $carry );
@@ -489,6 +519,24 @@ final class Challenge {
 	}
 
 	/**
+	 * The result for a two-step user logging in where no second step can be
+	 * shown: XML-RPC passes only while the setting allows it, and AJAX, REST
+	 * and WP-CLI logins are refused.
+	 *
+	 * @param \WP_User $user The user.
+	 * @return \WP_User|\WP_Error
+	 */
+	private static function outside_browser( \WP_User $user ) {
+		if ( 'xmlrpc' === self::context() ) {
+			if ( ! Settings::get( 'two_step.block_xmlrpc' ) ) {
+				return $user;
+			}
+			return new \WP_Error( 'happyaccess_twostep_xmlrpc', esc_html__( "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead.", 'happyaccess' ) );
+		}
+		return new \WP_Error( 'happyaccess_twostep_required', esc_html__( 'This account uses two-step login. Log in on the login page.', 'happyaccess' ) );
+	}
+
+	/**
 	 * What kind of request is logging in.
 	 *
 	 * @return string browser, xmlrpc or api.
@@ -523,8 +571,14 @@ final class Challenge {
 
 		$allowed         = self::allowed_methods( $user, $purpose );
 		$carry['method'] = array() === $allowed ? '' : $allowed[0];
-		if ( 'email' === $carry['method'] && true === self::send_email( $user, $pending_id ) ) {
-			$carry['sent'] = 1;
+		if ( 'email' === $carry['method'] ) {
+			$sent = self::send_email( $user, $pending_id );
+			if ( true === $sent ) {
+				$carry['sent'] = 1;
+			} elseif ( is_wp_error( $sent ) && 'locked' === $sent->get_error_code() ) {
+				// The send limit is hit, but the codes sent before still work.
+				$carry['sent'] = 'limit';
+			}
 		}
 		return self::step_url( $carry );
 	}
@@ -681,7 +735,7 @@ final class Challenge {
 	 */
 	private static function step_url( array $carry ) {
 		$args = array();
-		foreach ( array( 'method', 'send', 'sent', '_wpnonce', 'redirect_to', 'rememberme', 'interim-login', 'from' ) as $key ) {
+		foreach ( array( 'method', 'sent', 'redirect_to', 'rememberme', 'interim-login', 'from' ) as $key ) {
 			if ( isset( $carry[ $key ] ) && is_scalar( $carry[ $key ] ) && '' !== (string) $carry[ $key ] ) {
 				$args[ $key ] = (string) $carry[ $key ];
 			}
@@ -720,17 +774,20 @@ final class Challenge {
 	}
 
 	/**
-	 * The email link: sends a code, then shows the email form.
+	 * The "Email me a code" button: sends a code, then shows the email form.
 	 *
 	 * @param \WP_User $user    The user.
 	 * @param array    $pending Pending login row.
 	 * @param string[] $allowed Methods offered.
 	 * @param array    $carry   Carried values, with method.
-	 * @param array    $get     Unslashed $_GET.
+	 * @param array    $post    Unslashed $_POST.
 	 * @return array
 	 */
-	private static function handle_send( \WP_User $user, array $pending, array $allowed, array $carry, array $get ) {
-		if ( ! self::nonce_ok( $get, 'happyaccess_twostep_send' ) ) {
+	private static function handle_send( \WP_User $user, array $pending, array $allowed, array $carry, array $post ) {
+		if ( 'email' !== $carry['method'] ) {
+			return self::code_screen( $allowed, $carry );
+		}
+		if ( ! self::nonce_ok( $post, 'happyaccess_twostep_send' ) ) {
 			return self::code_screen( $allowed, $carry, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 		$sent = self::send_email( $user, $pending['id'] );
@@ -760,11 +817,12 @@ final class Challenge {
 	}
 
 	/**
-	 * Checks a typed code with one method. An app code uses up its time
-	 * step, so the same code can't log in twice.
+	 * Checks a typed app or email code. An app code uses up its time step,
+	 * so the same code can't log in twice. Backup codes go through
+	 * finish_backup().
 	 *
 	 * @param \WP_User $user   The user.
-	 * @param string   $method app, email or backup.
+	 * @param string   $method app or email.
 	 * @param string   $code   Typed code.
 	 * @return bool
 	 */
@@ -783,23 +841,21 @@ final class Challenge {
 		if ( 'email' === $method ) {
 			return true === EmailMethod::verify( $user->ID, $code );
 		}
-		if ( 'backup' === $method ) {
-			return BackupCodes::use_code( $user->ID, $code );
-		}
 		return false;
 	}
 
 	/**
-	 * A wrong code: counts it on the site cap and on the pending login. The
-	 * fifth one cancels the pending login.
+	 * A wrong code: counts it on the site cap. The try is already counted on
+	 * the pending login, and the fifth one cancels it.
 	 *
-	 * @param \WP_User $user    The user.
-	 * @param array    $pending Pending login row.
-	 * @param string[] $allowed Methods offered.
-	 * @param array    $carry   Carried values, with method.
+	 * @param \WP_User $user     The user.
+	 * @param array    $pending  Pending login row.
+	 * @param string[] $allowed  Methods offered.
+	 * @param array    $carry    Carried values, with method.
+	 * @param int      $attempts Checks counted on the pending login.
 	 * @return array
 	 */
-	private static function fail( \WP_User $user, array $pending, array $allowed, array $carry ) {
+	private static function fail( \WP_User $user, array $pending, array $allowed, array $carry, $attempts ) {
 		// Only a wrong code counts on the site scope, and it is never cleared.
 		RateLimiter::hit( self::CODE_ACTION, 'site', 'site' );
 		$wait = self::site_wait();
@@ -807,7 +863,10 @@ final class Challenge {
 			self::site_lock_alert( $wait );
 		}
 
-		if ( self::count_failure( $pending['id'] ) >= self::MAX_ATTEMPTS ) {
+		if ( $attempts >= self::MAX_ATTEMPTS ) {
+			self::cancel( $pending['id'] );
+			// The user starts again from the password, so this login's tries no longer hold the IP back. Other tries stay.
+			RateLimiter::forget( self::CODE_ACTION, 'ip', RateLimiter::ip_subject(), self::MAX_ATTEMPTS, $pending['created_at'] );
 			UserState::log_locked( $user->ID, $carry['method'] );
 			self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
 			return self::back_to_login( 'locked', $carry );
@@ -836,6 +895,7 @@ final class Challenge {
 		UserState::log_passed( $user->ID, $carry['method'] );
 
 		wp_set_auth_cookie( $user->ID, ! empty( $carry['rememberme'] ) );
+		self::clear_reset_key( $user );
 		wp_set_current_user( $user->ID );
 		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
 
@@ -856,6 +916,24 @@ final class Challenge {
 			'type' => 'redirect',
 			'url'  => self::destination( $user, $pending['purpose'], $carry, $woo ),
 		);
+	}
+
+	/**
+	 * Clears a pending password reset after a login, as wp_signon() does,
+	 * so an old reset link stops working once the user is back in.
+	 *
+	 * @param \WP_User $user The user who logged in.
+	 * @return void
+	 */
+	private static function clear_reset_key( \WP_User $user ) {
+		global $wpdb;
+
+		if ( empty( $user->user_activation_key ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Same write as wp_signon().
+		$wpdb->update( $wpdb->users, array( 'user_activation_key' => '' ), array( 'ID' => $user->ID ) );
+		$user->user_activation_key = '';
 	}
 
 	/**
@@ -921,7 +999,7 @@ final class Challenge {
 	 * The open pending login for a cookie key, or null.
 	 *
 	 * @param string $key Key from the cookie.
-	 * @return array|null id, user_id and purpose.
+	 * @return array|null id, user_id, purpose and created_at (Unix time).
 	 */
 	private static function find_pending( $key ) {
 		global $wpdb;
@@ -931,19 +1009,22 @@ final class Challenge {
 		}
 		$table = Installer::table( 'challenges' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, user_id, purpose FROM {$table} WHERE link_hash = %s AND purpose IN ( %s, %s ) AND used_at IS NULL AND expires_at > %s AND attempts < %d LIMIT 1", Codes::hash_key( $key ), self::PURPOSE, self::PURPOSE_AFTER_PASSWORDLESS, Clock::mysql(), self::MAX_ATTEMPTS ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, user_id, purpose, created_at FROM {$table} WHERE link_hash = %s AND purpose IN ( %s, %s ) AND used_at IS NULL AND expires_at > %s AND attempts < %d LIMIT 1", Codes::hash_key( $key ), self::PURPOSE, self::PURPOSE_AFTER_PASSWORDLESS, Clock::mysql(), self::MAX_ATTEMPTS ), ARRAY_A );
 		if ( ! is_array( $row ) ) {
 			return null;
 		}
 		return array(
-			'id'      => (int) $row['id'],
-			'user_id' => (int) $row['user_id'],
-			'purpose' => (string) $row['purpose'],
+			'id'         => (int) $row['id'],
+			'user_id'    => (int) $row['user_id'],
+			'purpose'    => (string) $row['purpose'],
+			'created_at' => Clock::from_mysql( $row['created_at'] ),
 		);
 	}
 
 	/**
-	 * Uses up a pending login. Only the call that changes the row wins.
+	 * Uses up a pending login. Only the call that changes the row wins. The
+	 * check that led here is already counted, so the count may be at the
+	 * limit.
 	 *
 	 * @param int $id Row id.
 	 * @return bool
@@ -954,28 +1035,41 @@ final class Challenge {
 		$table = Installer::table( 'challenges' );
 		$now   = Clock::mysql();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		return 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = %s WHERE id = %d AND used_at IS NULL AND expires_at > %s AND attempts < %d", $now, (int) $id, $now, self::MAX_ATTEMPTS ) );
+		return 1 === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = %s WHERE id = %d AND used_at IS NULL AND expires_at > %s AND attempts <= %d", $now, (int) $id, $now, self::MAX_ATTEMPTS ) );
 	}
 
 	/**
-	 * Counts a wrong code on the pending login and cancels it at the limit.
+	 * Counts one check on the pending login, before the code is checked.
+	 * Only a live row under the limit takes the count.
 	 *
 	 * @param int $id Row id.
-	 * @return int Wrong codes so far. MAX_ATTEMPTS when the row is already closed.
+	 * @return int Checks so far, this one included. 0 when the row took no count.
 	 */
-	private static function count_failure( $id ) {
+	private static function count_check( $id ) {
 		global $wpdb;
 
 		$table = Installer::table( 'challenges' );
-		$now   = Clock::mysql();
-		// One statement: MySQL applies the assignments left to right, so the cancel sees the raised count.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$counted = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1, used_at = IF( attempts >= %d, %s, used_at ) WHERE id = %d AND used_at IS NULL AND attempts < %d", self::MAX_ATTEMPTS, $now, (int) $id, self::MAX_ATTEMPTS ) );
+		$counted = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1 WHERE id = %d AND used_at IS NULL AND expires_at > %s AND attempts < %d", (int) $id, Clock::mysql(), self::MAX_ATTEMPTS ) );
 		if ( 1 !== $counted ) {
-			return self::MAX_ATTEMPTS;
+			return 0;
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT attempts FROM {$table} WHERE id = %d", (int) $id ) );
+		return max( 1, (int) $wpdb->get_var( $wpdb->prepare( "SELECT attempts FROM {$table} WHERE id = %d", (int) $id ) ) );
+	}
+
+	/**
+	 * Cancels a pending login after too many wrong codes.
+	 *
+	 * @param int $id Row id.
+	 * @return void
+	 */
+	private static function cancel( $id ) {
+		global $wpdb;
+
+		$table = Installer::table( 'challenges' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = %s WHERE id = %d AND used_at IS NULL", Clock::mysql(), (int) $id ) );
 	}
 
 	/**
@@ -984,10 +1078,10 @@ final class Challenge {
 	 * @param string[]       $allowed Methods offered.
 	 * @param array          $carry   Carried values, with method.
 	 * @param \WP_Error|null $errors  Errors to show.
-	 * @param bool           $sent    Whether an email code was just sent.
+	 * @param string         $sent    1 when an email code was just sent, limit when the send limit stopped one.
 	 * @return array
 	 */
-	private static function code_screen( array $allowed, array $carry, $errors = null, $sent = false ) {
+	private static function code_screen( array $allowed, array $carry, $errors = null, $sent = '' ) {
 		$method = $carry['method'];
 		$labels = array(
 			'app'    => __( 'Authenticator app code', 'happyaccess' ),
@@ -1010,8 +1104,10 @@ final class Challenge {
 		$body .= self::method_links( $allowed, $carry );
 
 		$message = '';
-		if ( $sent ) {
+		if ( '1' === (string) $sent ) {
 			$message = '<p class="message">' . esc_html__( 'We sent a code to your email address.', 'happyaccess' ) . '</p>';
+		} elseif ( 'limit' === $sent ) {
+			$message = '<p class="message">' . esc_html__( 'We already sent several codes. Check your email, or wait a few minutes and try again.', 'happyaccess' ) . '</p>';
 		} elseif ( null === $errors && 'app' === $method ) {
 			$message = '<p class="message">' . esc_html__( 'Enter the code from your authenticator app.', 'happyaccess' ) . '</p>';
 		}
@@ -1065,40 +1161,45 @@ final class Challenge {
 	}
 
 	/**
-	 * Links to the other methods the user has.
+	 * Links to the other methods the user has. Asking for an email code is a
+	 * small POST form with a button drawn as a link, because it sends mail.
 	 *
 	 * @param string[] $allowed Methods offered.
 	 * @param array    $carry   Carried values, with method.
 	 * @return string
 	 */
 	private static function method_links( array $allowed, array $carry ) {
-		$links = array();
-		$base  = $carry;
+		$base = $carry;
 		unset( $base['sent'] );
+		$html = '';
 
 		if ( 'app' !== $carry['method'] && in_array( 'app', $allowed, true ) ) {
-			$links[] = array( self::step_url( array_merge( $base, array( 'method' => 'app' ) ) ), __( 'Use your authenticator app', 'happyaccess' ) );
+			$html .= self::switch_link( self::step_url( array_merge( $base, array( 'method' => 'app' ) ) ), __( 'Use your authenticator app', 'happyaccess' ) );
 		}
 		if ( in_array( 'email', $allowed, true ) ) {
-			$send    = array_merge(
-				$base,
-				array(
-					'method'   => 'email',
-					'send'     => '1',
-					'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
-				)
-			);
-			$links[] = array( self::step_url( $send ), 'email' === $carry['method'] ? __( 'Send a new code', 'happyaccess' ) : __( 'Email me a code instead', 'happyaccess' ) );
+			$label = 'email' === $carry['method'] ? __( 'Send a new code', 'happyaccess' ) : __( 'Email me a code instead', 'happyaccess' );
+			$html .= '<form method="post" action="' . esc_url( Router::url( self::STEP ) ) . '" class="happyaccess-ts-send">';
+			$html .= '<p id="nav" class="happyaccess-ts-switch"><button type="submit" class="button-link">' . esc_html( $label ) . '</button></p>';
+			$html .= '<input type="hidden" name="method" value="email" /><input type="hidden" name="send" value="1" />';
+			$html .= self::carry_fields( $base );
+			$html .= wp_nonce_field( 'happyaccess_twostep_send', '_wpnonce', false, false );
+			$html .= '</form>';
 		}
 		if ( 'backup' !== $carry['method'] && in_array( 'backup', $allowed, true ) ) {
-			$links[] = array( self::step_url( array_merge( $base, array( 'method' => 'backup' ) ) ), __( 'Use a backup code', 'happyaccess' ) );
-		}
-
-		$html = '';
-		foreach ( $links as $link ) {
-			$html .= '<p id="nav" class="happyaccess-ts-switch"><a href="' . esc_url( $link[0] ) . '">' . esc_html( $link[1] ) . '</a></p>';
+			$html .= self::switch_link( self::step_url( array_merge( $base, array( 'method' => 'backup' ) ) ), __( 'Use a backup code', 'happyaccess' ) );
 		}
 		return $html;
+	}
+
+	/**
+	 * One link to another method.
+	 *
+	 * @param string $url   Step URL.
+	 * @param string $label Link text.
+	 * @return string
+	 */
+	private static function switch_link( $url, $label ) {
+		return '<p id="nav" class="happyaccess-ts-switch"><a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a></p>';
 	}
 
 	/**

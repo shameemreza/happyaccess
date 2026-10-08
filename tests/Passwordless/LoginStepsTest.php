@@ -74,11 +74,15 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		LoginSteps::flush_queue();
-		$_COOKIE  = array();
-		$_REQUEST = array();
-		unset( $_SERVER['HTTPS'] );
-		parent::tear_down();
+		// The parent always runs, so a failed reset can't leave the test transaction open.
+		try {
+			LoginSteps::flush_queue();
+			$_COOKIE  = array();
+			$_REQUEST = array();
+			unset( $_SERVER['HTTPS'] );
+		} finally {
+			parent::tear_down();
+		}
 	}
 
 	public function catch_mail( $null, $atts ) {
@@ -404,6 +408,17 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 'render', $again['type'] );
 		$this->assertSame( 0, get_current_user_id() );
 		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_a_code_login_clears_a_pending_password_reset() {
+		global $wpdb;
+		$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$this->assertIsString( get_password_reset_key( $user ) );
+		$made = $this->request_as( $user );
+
+		$this->post_code( $made['code'], $made['cookie'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( '', (string) $wpdb->get_var( $wpdb->prepare( "SELECT user_activation_key FROM {$wpdb->users} WHERE ID = %d", $user->ID ) ) );
 	}
 
 	public function test_remember_me_keeps_the_session() {

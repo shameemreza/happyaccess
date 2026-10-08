@@ -63,45 +63,78 @@ final class BackupCodes {
 	 * @return bool True once per code.
 	 */
 	public static function use_code( $user_id, $input ) {
-		$user_id = (int) $user_id;
+		$hash = self::match_code( $user_id, $input );
+		return '' !== $hash && self::remove_code( $user_id, $hash );
+	}
+
+	/**
+	 * Finds the stored hash a typed code matches, without using the code up.
+	 * Case, spaces and dashes in the input are ignored.
+	 *
+	 * @param int    $user_id User id.
+	 * @param string $input   Typed code.
+	 * @return string The matching hash, or an empty string.
+	 */
+	public static function match_code( $user_id, $input ) {
 		if ( ! is_string( $input ) ) {
-			return false;
+			return '';
 		}
 		$code = strtoupper( (string) preg_replace( '/[^A-Za-z0-9]/', '', $input ) );
 		if ( 10 !== strlen( $code ) ) {
-			return false;
+			return '';
 		}
 
-		$row = UserState::read_raw( $user_id, UserState::META_BACKUP );
-		if ( null === $row ) {
-			return false;
-		}
-		$hashes = maybe_unserialize( $row['raw'] );
+		$row    = UserState::read_raw( (int) $user_id, UserState::META_BACKUP );
+		$hashes = null === $row ? null : maybe_unserialize( $row['raw'] );
 		if ( ! is_array( $hashes ) ) {
-			return false;
+			return '';
 		}
 
-		$matched = null;
-		foreach ( $hashes as $index => $hash ) {
-			if ( is_string( $hash ) && wp_check_password( $code, $hash ) && null === $matched ) {
-				$matched = $index;
+		$matched = '';
+		foreach ( $hashes as $hash ) {
+			if ( is_string( $hash ) && wp_check_password( $code, $hash ) && '' === $matched ) {
+				$matched = $hash;
 			}
 		}
-		if ( null === $matched ) {
+		return $matched;
+	}
+
+	/**
+	 * Uses up the code with this stored hash. Only a request that still finds
+	 * the hash in the list it writes over removes it, so a code can't be used
+	 * twice.
+	 *
+	 * @param int    $user_id User id.
+	 * @param string $hash    Hash from match_code().
+	 * @return bool True when this call removed the hash.
+	 */
+	public static function remove_code( $user_id, $hash ) {
+		$user_id = (int) $user_id;
+		if ( ! is_string( $hash ) || '' === $hash ) {
 			return false;
 		}
 
-		unset( $hashes[ $matched ] );
-		// Only the request that still sees the old list removes the hash, so a code can't be used twice.
-		if ( ! UserState::swap_raw( $user_id, $row, array_values( $hashes ) ) ) {
-			return false;
+		// A write of another code between the read and the swap makes the swap miss, so it reads again.
+		for ( $try = 0; $try < 3; $try++ ) {
+			$row    = UserState::read_raw( $user_id, UserState::META_BACKUP );
+			$hashes = null === $row ? null : maybe_unserialize( $row['raw'] );
+			if ( ! is_array( $hashes ) ) {
+				return false;
+			}
+			$index = array_search( $hash, $hashes, true );
+			if ( false === $index ) {
+				return false;
+			}
+			unset( $hashes[ $index ] );
+			if ( UserState::swap_raw( $user_id, $row, array_values( $hashes ) ) ) {
+				AuditLog::add(
+					'twostep_backup_used',
+					self::log_args( $user_id, __( 'Backup code used', 'happyaccess' ) )
+				);
+				return true;
+			}
 		}
-
-		AuditLog::add(
-			'twostep_backup_used',
-			self::log_args( $user_id, __( 'Backup code used', 'happyaccess' ) )
-		);
-		return true;
+		return false;
 	}
 
 	/**

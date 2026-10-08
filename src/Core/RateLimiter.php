@@ -178,6 +178,37 @@ final class RateLimiter {
 	}
 
 	/**
+	 * Removes the newest tries of one subject made since a time, for example
+	 * the tries of one login that was cancelled, while older tries stay.
+	 *
+	 * @param string $action  Action key.
+	 * @param string $scope   Scope.
+	 * @param string $subject Subject.
+	 * @param int    $count   Most tries to remove.
+	 * @param int    $since   Unix time of the oldest try that may go.
+	 * @return void
+	 * @throws \InvalidArgumentException For an unknown scope.
+	 */
+	public static function forget( $action, $scope, $subject, $count, $since ) {
+		global $wpdb;
+		self::check_scope( $scope );
+		if ( (int) $count < 1 ) {
+			return;
+		}
+		$table = Installer::table( 'attempts' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE identifier = %s AND scope = %s AND attempted_at >= %s ORDER BY attempted_at DESC, id DESC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+				self::identifier( $action, $subject ),
+				$scope,
+				Clock::mysql( (int) $since ),
+				(int) $count
+			)
+		);
+	}
+
+	/**
 	 * Deletes rows older than a number of seconds.
 	 *
 	 * @param int $older_than Seconds.

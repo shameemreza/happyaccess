@@ -21,8 +21,12 @@ class RateLimiterTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		Clock::freeze( null );
-		parent::tear_down();
+		// The parent always runs, so a failed reset can't leave the test transaction open.
+		try {
+			Clock::freeze( null );
+		} finally {
+			parent::tear_down();
+		}
 	}
 
 	private function hits( $count, $subject = '203.0.113.9' ) {
@@ -63,6 +67,21 @@ class RateLimiterTest extends WP_UnitTestCase {
 
 		RateLimiter::clear( 'support_code', 'ip', '203.0.113.9' );
 		$this->assertSame( 0, RateLimiter::count( 'support_code', 'ip', '203.0.113.9', 900 ) );
+	}
+
+	public function test_forget_removes_only_the_newest_tries_since_a_time() {
+		Clock::freeze( 1790000000 - 60 );
+		$this->hits( 2 );
+		Clock::freeze( 1790000000 );
+		$this->hits( 4 );
+		$this->hits( 3, '198.51.100.1' );
+
+		RateLimiter::forget( 'support_code', 'ip', '203.0.113.9', 3, 1790000000 );
+		$this->assertSame( 3, RateLimiter::count( 'support_code', 'ip', '203.0.113.9', 900 ) );
+		$this->assertSame( 3, RateLimiter::count( 'support_code', 'ip', '198.51.100.1', 900 ), 'Other subjects keep their tries.' );
+
+		RateLimiter::forget( 'support_code', 'ip', '203.0.113.9', 5, 1790000000 );
+		$this->assertSame( 2, RateLimiter::count( 'support_code', 'ip', '203.0.113.9', 900 ), 'Tries before the time stay.' );
 	}
 
 	public function test_ip_subject_groups_ipv6_by_64() {
