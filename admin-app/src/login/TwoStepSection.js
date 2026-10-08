@@ -19,24 +19,34 @@ const GRACE_KEYS = [ 'grace_type', 'grace_logins', 'grace_days' ];
 
 /**
  * How to get a locked-out person back in. The command and the wp-config
- * line stay out of the translated text.
+ * line stay out of the translated text. The line sits on its own, so it
+ * never breaks inside, and scrolls sideways when the screen is too narrow.
  *
  * @return {Element} The note.
  */
-function recoveryNote() {
-	return createInterpolateElement(
-		__(
-			'If someone is locked out, turn it off on their profile, run <cli />, or add <define /> to wp-config.php.',
-			'happyaccess'
-		),
-		{
-			cli: <code>{ 'wp happyaccess twostep reset <user>' }</code>,
-			define: (
-				<code>
-					{ "define( 'HAPPYACCESS_DISABLE_TWOSTEP', true );" }
-				</code>
-			),
-		}
+function RecoveryNote() {
+	return (
+		<div className="ha-login__recovery">
+			<p className="ha-help">
+				{ createInterpolateElement(
+					__(
+						'If someone is locked out, turn it off on their profile, run <cli />, or add this line to wp-config.php:',
+						'happyaccess'
+					),
+					{
+						cli: (
+							<code>
+								{ 'wp happyaccess twostep reset <user>' }
+							</code>
+						),
+					}
+				) }
+			</p>
+			{ /* It can scroll, so the keyboard needs to reach it. */ }
+			<code className="ha-login__line" tabIndex={ 0 }>
+				{ "define( 'HAPPYACCESS_DISABLE_TWOSTEP', true );" }
+			</code>
+		</div>
 	);
 }
 
@@ -85,7 +95,7 @@ function RoleRow( { role, value, onChange } ) {
  */
 export default function TwoStepSection( { boot } ) {
 	const announce = useAnnounce();
-	const { settings, saving, save } = useSettings();
+	const { settings, save } = useSettings();
 	const ids = useId();
 
 	// Changed fields: the grace keys and `block_xmlrpc`.
@@ -94,6 +104,8 @@ export default function TwoStepSection( { boot } ) {
 	const [ roleEdits, setRoleEdits ] = useState( {} );
 	const [ saveError, setSaveError ] = useState( null );
 	const [ justSaved, setJustSaved ] = useState( false );
+	// Its own, so a save in the passwordless form doesn't show here.
+	const [ saving, setSaving ] = useState( false );
 
 	if ( ! settings ) {
 		return null;
@@ -173,6 +185,7 @@ export default function TwoStepSection( { boot } ) {
 		if ( Object.keys( roleEdits ).length > 0 ) {
 			group.role_policy = { ...roleEdits };
 		}
+		setSaving( true );
 		try {
 			await save( { two_step: group } );
 			setEdits( {} );
@@ -181,6 +194,8 @@ export default function TwoStepSection( { boot } ) {
 			announce( __( 'Settings saved', 'happyaccess' ) );
 		} catch ( e ) {
 			setSaveError( e );
+		} finally {
+			setSaving( false );
 		}
 	};
 
@@ -286,7 +301,7 @@ export default function TwoStepSection( { boot } ) {
 					/>
 				</div>
 
-				<p className="ha-help ha-login__recovery">{ recoveryNote() }</p>
+				<RecoveryNote />
 
 				{ saveError && (
 					<Notice status="error" isDismissible={ false }>

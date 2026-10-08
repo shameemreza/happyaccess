@@ -57,10 +57,31 @@
 		padding-block: 0;
 	}
 
-	.ha-login__recovery code {
-		padding: 1px 4px;
-		font-size: 12px;
-		overflow-wrap: anywhere;
+	.ha-login__recovery {
+		min-width: 0;
+
+		.ha-help {
+			margin-block-end: 4px;
+		}
+
+		code {
+			padding: 1px 4px;
+			font-size: 12px;
+			overflow-wrap: anywhere;
+		}
+
+		// The wp-config line on its own line, never broken. On a narrow
+		// screen it scrolls inside its box, not the page.
+		.ha-login__line {
+			display: block;
+			max-inline-size: 100%;
+			box-sizing: border-box;
+			padding: 8px 10px;
+			overflow-x: auto;
+			white-space: pre;
+			overflow-wrap: normal;
+			direction: ltr;
+		}
 	}
 
 	// A warning under the select makes the row taller, so the name stays

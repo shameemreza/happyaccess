@@ -370,6 +370,90 @@ describe( 'Login tab', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( 'shows only the two-step section while passwordless login is off', async () => {
+		const { container } = render(
+			<AnnounceProvider>
+				<DataProvider>
+					<LoginTab
+						boot={ boot( {
+							features: {
+								support_access: true,
+								passwordless: false,
+								two_step: true,
+							},
+						} ) }
+					/>
+				</DataProvider>
+			</AnnounceProvider>
+		);
+		await screen.findByRole( 'heading', { name: 'Two-step login' } );
+
+		expect(
+			[ ...container.querySelectorAll( 'h2' ) ].map(
+				( heading ) => heading.textContent
+			)
+		).toEqual( [ 'Two-step login' ] );
+		expect(
+			screen.queryByText( 'Passwordless login is off.' )
+		).not.toBeInTheDocument();
+		expect(
+			screen.getAllByRole( 'button', { name: 'Save changes' } )
+		).toHaveLength( 1 );
+	} );
+
+	it( 'keeps the two-step save button still while passwordless login saves', async () => {
+		const user = userEvent.setup();
+		await renderTab(
+			boot( {
+				features: {
+					support_access: true,
+					passwordless: true,
+					two_step: true,
+				},
+			} )
+		);
+		const passwordlessCard = screen.getByRole( 'region', {
+			name: 'Passwordless login',
+		} );
+		const twoStepCard = screen.getByRole( 'region', {
+			name: 'Two-step login',
+		} );
+		const saveIn = ( card ) =>
+			within( card ).getByRole( 'button', { name: 'Save changes' } );
+
+		await user.selectOptions(
+			within( passwordlessCard ).getByLabelText( 'Code lifetime' ),
+			'900'
+		);
+		await user.selectOptions(
+			within( twoStepCard ).getByLabelText(
+				'Grace period for required roles'
+			),
+			screen.getByRole( 'option', { name: '5 logins' } )
+		);
+		const answer = apiFetch.getMockImplementation();
+		let release;
+		apiFetch.mockImplementation( ( request ) =>
+			'POST' === request.method
+				? new Promise( ( resolve ) => {
+						release = () => resolve( answer( request ) );
+					} )
+				: answer( request )
+		);
+
+		await user.click( saveIn( passwordlessCard ) );
+		await waitFor( () => expect( release ).toBeDefined() );
+
+		expect( saveIn( passwordlessCard ) ).toHaveClass( 'is-busy' );
+		expect( saveIn( twoStepCard ) ).not.toHaveClass( 'is-busy' );
+		expect( saveIn( twoStepCard ) ).not.toHaveAttribute(
+			'aria-disabled',
+			'true'
+		);
+		release();
+		await waitFor( () => expect( liveText() ).toBe( 'Settings saved' ) );
+	} );
+
 	it( 'shows the two-step section below passwordless login when it is on', async () => {
 		const { container } = await renderTab(
 			boot( {

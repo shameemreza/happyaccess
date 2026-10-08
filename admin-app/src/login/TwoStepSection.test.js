@@ -70,7 +70,8 @@ const liveText = () =>
 		.textContent.trim();
 
 const RECOVERY =
-	"If someone is locked out, turn it off on their profile, run wp happyaccess twostep reset <user>, or add define( 'HAPPYACCESS_DISABLE_TWOSTEP', true ); to wp-config.php.";
+	'If someone is locked out, turn it off on their profile, run wp happyaccess twostep reset <user>, or add this line to wp-config.php:';
+const DISABLE_LINE = "define( 'HAPPYACCESS_DISABLE_TWOSTEP', true );";
 const REQUIRED_NOTE =
 	'People in these roles set up two-step login the next time they log in.';
 
@@ -256,10 +257,19 @@ describe( 'Two-step section', () => {
 			within( note )
 				.getAllByRole( 'code' )
 				.map( ( code ) => code.textContent )
-		).toEqual( [
-			'wp happyaccess twostep reset <user>',
-			"define( 'HAPPYACCESS_DISABLE_TWOSTEP', true );",
-		] );
+		).toEqual( [ 'wp happyaccess twostep reset <user>' ] );
+	} );
+
+	it( 'puts the wp-config line on its own line, where it can scroll', async () => {
+		await renderSection();
+
+		const note = screen.getByText( /If someone is locked out/ );
+		const line = note.nextElementSibling;
+		expect( line.tagName ).toBe( 'CODE' );
+		expect( line ).toHaveClass( 'ha-login__line' );
+		expect( line.textContent ).toBe( DISABLE_LINE );
+		// It scrolls sideways on a narrow screen, so the keyboard can reach it.
+		expect( line ).toHaveAttribute( 'tabindex', '0' );
 	} );
 
 	it( 'names another two-step plugin when one is active', async () => {

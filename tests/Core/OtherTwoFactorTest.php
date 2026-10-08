@@ -109,6 +109,8 @@ class OtherTwoFactorTest extends WP_UnitTestCase {
 	 */
 	public function test_kadence_security_users_have_2fa() {
 		require dirname( __DIR__ ) . '/Support/Stubs/kadence-two-factor.php';
+		require dirname( __DIR__ ) . '/Support/Stubs/kadence-modules.php';
+		ITSEC_Modules::$active = array( 'two-factor' => true );
 		$with    = self::factory()->user->create_and_get();
 		$without = self::factory()->user->create_and_get();
 		ITSEC_Two_Factor::$users = array( $with->ID );
@@ -118,6 +120,121 @@ class OtherTwoFactorTest extends WP_UnitTestCase {
 		$this->assertSame( array( 'Kadence Security' ), OtherTwoFactor::active_plugins() );
 		$this->assertTrue( OtherTwoFactor::user_has_2fa( $with ) );
 		$this->assertFalse( OtherTwoFactor::user_has_2fa( $without ), 'The user asked about, not the one logged in.' );
+	}
+
+	/**
+	 * Kadence Security loads its two-factor classes only while the module is
+	 * on, but its class map can load them at any time. So the module has to
+	 * be on too.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_kadence_security_counts_only_while_its_two_factor_module_is_on() {
+		require dirname( __DIR__ ) . '/Support/Stubs/kadence-two-factor.php';
+		require dirname( __DIR__ ) . '/Support/Stubs/kadence-modules.php';
+		$user                    = self::factory()->user->create_and_get();
+		ITSEC_Two_Factor::$users = array( $user->ID );
+
+		ITSEC_Modules::$active = array( 'two-factor' => false );
+		$this->assertSame( array(), OtherTwoFactor::active_plugins(), 'Module off.' );
+		$this->assertFalse( OtherTwoFactor::user_has_2fa( $user ), 'Module off.' );
+
+		ITSEC_Modules::$active = array( 'two-factor' => true );
+		$this->assertSame( array( 'Kadence Security' ), OtherTwoFactor::active_plugins(), 'Module on.' );
+		$this->assertTrue( OtherTwoFactor::user_has_2fa( $user ), 'Module on.' );
+	}
+
+	/**
+	 * Without the module list there is no way to tell the module is on.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_kadence_security_without_its_module_list_is_ignored() {
+		require dirname( __DIR__ ) . '/Support/Stubs/kadence-two-factor.php';
+		$user                    = self::factory()->user->create_and_get();
+		ITSEC_Two_Factor::$users = array( $user->ID );
+
+		$this->assertSame( array(), OtherTwoFactor::active_plugins() );
+		$this->assertFalse( OtherTwoFactor::user_has_2fa( $user ) );
+	}
+
+	/**
+	 * A plugin's class map can load a class whose plugin part is off, so a
+	 * class only an autoloader can reach doesn't count.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_classes_only_an_autoloader_can_reach_are_not_detected() {
+		$user  = self::factory()->user->create_and_get();
+		$asked = $this->autoload(
+			array(
+				'Two_Factor_Core'                 => 'two-factor-core.php',
+				'WordfenceLS\Controller_Users'   => 'wordfence-ls-users.php',
+				'WP2FA\WP2FA'                    => 'wp-2fa.php',
+				'WP2FA\Admin\Helpers\User_Helper' => 'wp-2fa.php',
+			),
+			$user->ID
+		);
+
+		$this->assertSame( array(), OtherTwoFactor::active_plugins() );
+		$this->assertFalse( OtherTwoFactor::user_has_2fa( $user ) );
+		$this->assertSame( array(), $asked->classes, 'No class is autoloaded.' );
+	}
+
+	/**
+	 * Kadence's class map has ITSEC_Two_Factor and its Two_Factor_Core.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_kadence_classes_only_an_autoloader_can_reach_are_not_detected() {
+		$user  = self::factory()->user->create_and_get();
+		$asked = $this->autoload(
+			array(
+				'ITSEC_Two_Factor' => 'kadence-two-factor.php',
+				'Two_Factor_Core'  => 'kadence-two-factor.php',
+				'ITSEC_Modules'    => 'kadence-modules.php',
+			),
+			$user->ID
+		);
+
+		$this->assertSame( array(), OtherTwoFactor::active_plugins() );
+		$this->assertFalse( OtherTwoFactor::user_has_2fa( $user ) );
+		$this->assertSame( array(), $asked->classes, 'No class is autoloaded.' );
+	}
+
+	/**
+	 * Registers an autoloader that loads the stubs, marks the user as having
+	 * two-step login in each, and turns Kadence's module on.
+	 *
+	 * @param array $map     Class name to stub file.
+	 * @param int   $user_id User the stubs say has two-step login.
+	 * @return object Its `classes` lists the classes it was asked for.
+	 */
+	private function autoload( array $map, $user_id ) {
+		$asked          = new stdClass();
+		$asked->classes = array();
+		spl_autoload_register(
+			static function ( $class_name ) use ( $map, $user_id, $asked ) {
+				if ( ! isset( $map[ $class_name ] ) ) {
+					return;
+				}
+				$asked->classes[] = $class_name;
+				require_once dirname( __DIR__ ) . '/Support/Stubs/' . $map[ $class_name ];
+				foreach ( array( 'Two_Factor_Core', 'ITSEC_Two_Factor', 'WordfenceLS\Controller_Users', 'WP2FA\Admin\Helpers\User_Helper' ) as $stub ) {
+					if ( class_exists( $stub, false ) && property_exists( $stub, 'users' ) ) {
+						$stub::$users = array( (int) $user_id );
+					}
+				}
+				if ( class_exists( 'ITSEC_Modules', false ) ) {
+					ITSEC_Modules::$active = array( 'two-factor' => true );
+				}
+			}
+		);
+		return $asked;
 	}
 
 	/**

@@ -236,6 +236,8 @@ class PageTest extends WP_UnitTestCase {
 	public function test_boot_data_names_wp_2fa_and_kadence_security() {
 		require dirname( __DIR__ ) . '/Support/Stubs/wp-2fa.php';
 		require dirname( __DIR__ ) . '/Support/Stubs/kadence-two-factor.php';
+		require dirname( __DIR__ ) . '/Support/Stubs/kadence-modules.php';
+		ITSEC_Modules::$active = array( 'two-factor' => true );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
 		$data = Page::boot_data();

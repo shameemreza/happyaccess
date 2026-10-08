@@ -74,8 +74,9 @@ function places( woocommerce ) {
 }
 
 /**
- * The Login tab: the passwordless login settings, and below them the
- * two-step login settings while that feature is on.
+ * The Login tab: the passwordless login settings and the two-step login
+ * settings, each while its feature is on. The tab itself shows only while
+ * one of them is.
  *
  * Nothing saves until "Save changes", which sends only the keys that
  * changed, inside the `passwordless` group. The two-step section has its
@@ -199,178 +200,147 @@ export default function LoginTab( { boot } ) {
 
 	return (
 		<div className="ha-login">
-			<section className="ha-card" aria-labelledby={ `${ ids }-title` }>
-				<form
-					className="ha-card__body ha-settings__form"
-					onSubmit={ submit }
-					noValidate
+			{ passwordlessOn && (
+				<section
+					className="ha-card"
+					aria-labelledby={ `${ ids }-title` }
 				>
-					<h2 id={ `${ ids }-title` }>
-						{ __( 'Passwordless login', 'happyaccess' ) }
-					</h2>
-					{ ! passwordlessOn ? (
-						<p className="ha-help">
-							{ __(
-								'Passwordless login is off.',
-								'happyaccess'
-							) }
-						</p>
-					) : (
-						<>
-							<div className="ha-settings__grid">
-								<SelectControl
-									className="ha-field"
-									label={ __(
-										'Code lifetime',
-										'happyaccess'
-									) }
-									value={ String( lifetime ) }
-									options={ lifetimeOptions(
-										Number( saved( 'code_lifetime' ) )
-									) }
-									onChange={ ( value ) =>
-										setValue(
-											'code_lifetime',
-											Number( value )
-										)
-									}
-									__nextHasNoMarginBottom
-									__next40pxDefaultSize
-								/>
-								<SelectControl
-									className="ha-field"
-									label={ __(
-										'Button style',
-										'happyaccess'
-									) }
-									help={ __(
-										"How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block.",
-										'happyaccess'
-									) }
-									value={ val( 'toggle_style' ) }
-									options={ styleOptions() }
-									onChange={ ( value ) =>
-										setValue( 'toggle_style', value )
-									}
-									__nextHasNoMarginBottom
-									__next40pxDefaultSize
-								/>
-							</div>
-
-							<div
-								className="ha-login__group"
-								role="group"
-								aria-labelledby={ `${ ids }-places` }
-							>
-								<h3
-									id={ `${ ids }-places` }
-									className="ha-login__heading"
-								>
-									{ __(
-										'Show the email code option on',
-										'happyaccess'
-									) }
-								</h3>
-								<ul className="ha-login__places">
-									{ places( !! boot?.woocommerce ).map(
-										( place ) => {
-											const key = `show_on.${ place.key }`;
-											const labelId = `${ ids }-${ place.key }`;
-											return (
-												<li
-													key={ place.key }
-													className="ha-login__place"
-												>
-													<span id={ labelId }>
-														{ place.label }
-													</span>
-													<Switch
-														checked={
-															!! val( key )
-														}
-														onChange={ ( next ) =>
-															setValue(
-																key,
-																next
-															)
-														}
-														aria-labelledby={
-															labelId
-														}
-													/>
-												</li>
-											);
-										}
-									) }
-								</ul>
-							</div>
-
-							<div
-								className="ha-login__group"
-								role="group"
-								aria-labelledby={ `${ ids }-roles` }
-							>
-								<h3
-									id={ `${ ids }-roles` }
-									className="ha-login__heading"
-								>
-									{ __(
-										'How each role logs in',
-										'happyaccess'
-									) }
-								</h3>
-								{ boot?.otherTwoFactor && (
-									<Notice
-										status="info"
-										isDismissible={ false }
-									>
-										{ __(
-											"Accounts that use two-step login from another plugin can't use email codes. They log in with their password and that plugin's check.",
-											'happyaccess'
-										) }
-									</Notice>
+					<form
+						className="ha-card__body ha-settings__form"
+						onSubmit={ submit }
+						noValidate
+					>
+						<h2 id={ `${ ids }-title` }>
+							{ __( 'Passwordless login', 'happyaccess' ) }
+						</h2>
+						<div className="ha-settings__grid">
+							<SelectControl
+								className="ha-field"
+								label={ __( 'Code lifetime', 'happyaccess' ) }
+								value={ String( lifetime ) }
+								options={ lifetimeOptions(
+									Number( saved( 'code_lifetime' ) )
 								) }
-								<RolePolicyTable
-									roles={ boot?.loginRoles || [] }
-									policy={ policy }
-									onChange={ setRole }
-								/>
-							</div>
+								onChange={ ( value ) =>
+									setValue( 'code_lifetime', Number( value ) )
+								}
+								__nextHasNoMarginBottom
+								__next40pxDefaultSize
+							/>
+							<SelectControl
+								className="ha-field"
+								label={ __( 'Button style', 'happyaccess' ) }
+								help={ __(
+									"How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block.",
+									'happyaccess'
+								) }
+								value={ val( 'toggle_style' ) }
+								options={ styleOptions() }
+								onChange={ ( value ) =>
+									setValue( 'toggle_style', value )
+								}
+								__nextHasNoMarginBottom
+								__next40pxDefaultSize
+							/>
+						</div>
 
-							{ saveError && (
-								<Notice status="error" isDismissible={ false }>
-									{ saveError.message }
+						<div
+							className="ha-login__group"
+							role="group"
+							aria-labelledby={ `${ ids }-places` }
+						>
+							<h3
+								id={ `${ ids }-places` }
+								className="ha-login__heading"
+							>
+								{ __(
+									'Show the email code option on',
+									'happyaccess'
+								) }
+							</h3>
+							<ul className="ha-login__places">
+								{ places( !! boot?.woocommerce ).map(
+									( place ) => {
+										const key = `show_on.${ place.key }`;
+										const labelId = `${ ids }-${ place.key }`;
+										return (
+											<li
+												key={ place.key }
+												className="ha-login__place"
+											>
+												<span id={ labelId }>
+													{ place.label }
+												</span>
+												<Switch
+													checked={ !! val( key ) }
+													onChange={ ( next ) =>
+														setValue( key, next )
+													}
+													aria-labelledby={ labelId }
+												/>
+											</li>
+										);
+									}
+								) }
+							</ul>
+						</div>
+
+						<div
+							className="ha-login__group"
+							role="group"
+							aria-labelledby={ `${ ids }-roles` }
+						>
+							<h3
+								id={ `${ ids }-roles` }
+								className="ha-login__heading"
+							>
+								{ __( 'How each role logs in', 'happyaccess' ) }
+							</h3>
+							{ boot?.otherTwoFactor && (
+								<Notice status="info" isDismissible={ false }>
+									{ __(
+										"Accounts that use two-step login from another plugin can't use email codes. They log in with their password and that plugin's check.",
+										'happyaccess'
+									) }
 								</Notice>
 							) }
+							<RolePolicyTable
+								roles={ boot?.loginRoles || [] }
+								policy={ policy }
+								onChange={ setRole }
+							/>
+						</div>
 
-							<div className="ha-settings__actions">
-								<Button
-									type="submit"
-									variant="primary"
-									isBusy={ saving }
-									accessibleWhenDisabled
-									disabled={ ! dirty || saving }
-								>
-									{ __( 'Save changes', 'happyaccess' ) }
-								</Button>
-								{ dirty && (
-									<span className="ha-settings__dirty">
-										{ __(
-											'Unsaved changes',
-											'happyaccess'
-										) }
-									</span>
-								) }
-								{ ! dirty && justSaved && (
-									<span className="ha-settings__saved">
-										{ __( 'Saved', 'happyaccess' ) }
-									</span>
-								) }
-							</div>
-						</>
-					) }
-				</form>
-			</section>
+						{ saveError && (
+							<Notice status="error" isDismissible={ false }>
+								{ saveError.message }
+							</Notice>
+						) }
+
+						<div className="ha-settings__actions">
+							<Button
+								type="submit"
+								variant="primary"
+								isBusy={ saving }
+								accessibleWhenDisabled
+								disabled={ ! dirty || saving }
+							>
+								{ __( 'Save changes', 'happyaccess' ) }
+							</Button>
+							{ dirty && (
+								<span className="ha-settings__dirty">
+									{ __( 'Unsaved changes', 'happyaccess' ) }
+								</span>
+							) }
+							{ ! dirty && justSaved && (
+								<span className="ha-settings__saved">
+									{ __( 'Saved', 'happyaccess' ) }
+								</span>
+							) }
+						</div>
+					</form>
+				</section>
+			) }
 			{ !! boot?.features?.two_step && <TwoStepSection boot={ boot } /> }
 		</div>
 	);

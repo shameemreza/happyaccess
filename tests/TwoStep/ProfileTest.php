@@ -295,7 +295,7 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$this->assertFalse( wp_script_is( Profile::HANDLE, 'enqueued' ) );
 	}
 
-	public function test_a_reset_with_only_a_recheck_left_still_logs_and_emails() {
+	public function test_a_reset_with_only_a_recheck_left_logs_but_emails_nothing() {
 		$admin = $this->admin();
 		$user  = $this->user( 'editor', array( 'user_email' => 'sam@example.org' ) );
 		update_user_meta( $user->ID, UserState::META_RECHECK, array( 'session' => time() ) );
@@ -304,8 +304,49 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$this->assertTrue( Profile::reset_user( $user->ID, wp_create_nonce( Profile::NONCE . '_' . $user->ID ) ) );
 
 		$this->assertCount( 1, $this->log_rows( 'twostep_reset' ) );
-		$this->assertCount( 1, $this->mails, 'The user hears about it.' );
+		$this->assertCount( 0, $this->mails, 'Nothing they use was turned off.' );
 		$this->assertFalse( metadata_exists( 'user', $user->ID, UserState::META_RECHECK ) );
+	}
+
+	public function test_a_reset_with_only_grace_counters_logs_but_emails_nothing() {
+		$admin = $this->admin();
+		$user  = $this->user( 'editor', array( 'user_email' => 'sam@example.org' ) );
+		UserState::start_grace( $user->ID );
+		UserState::count_grace_login( $user->ID );
+		wp_set_current_user( $admin->ID );
+
+		$this->assertTrue( Profile::reset_user( $user->ID, wp_create_nonce( Profile::NONCE . '_' . $user->ID ) ) );
+
+		$this->assertCount( 1, $this->log_rows( 'twostep_reset' ) );
+		$this->assertCount( 0, $this->mails );
+		$this->assertFalse( metadata_exists( 'user', $user->ID, UserState::META_STATE ) );
+	}
+
+	public function test_a_reset_with_only_an_empty_lock_row_logs_but_emails_nothing() {
+		$admin = $this->admin();
+		$user  = $this->user( 'editor', array( 'user_email' => 'sam@example.org' ) );
+		UserState::locked( $user->ID, '__return_true' );
+		$this->assertTrue( metadata_exists( 'user', $user->ID, UserState::META_STATE ), 'The lock leaves its row.' );
+		wp_set_current_user( $admin->ID );
+
+		$this->assertTrue( Profile::reset_user( $user->ID, wp_create_nonce( Profile::NONCE . '_' . $user->ID ) ) );
+
+		$this->assertCount( 1, $this->log_rows( 'twostep_reset' ) );
+		$this->assertCount( 0, $this->mails );
+	}
+
+	public function test_a_reset_of_email_codes_or_backup_codes_alone_emails_the_user() {
+		$admin  = $this->admin();
+		$emails = $this->user( 'editor', array( 'user_email' => 'em@example.org' ) );
+		$codes  = $this->user( 'editor', array( 'user_email' => 'bc@example.org' ) );
+		UserState::enable_email( $emails->ID );
+		BackupCodes::generate( $codes->ID );
+		wp_set_current_user( $admin->ID );
+
+		$this->assertTrue( Profile::reset_user( $emails->ID, wp_create_nonce( Profile::NONCE . '_' . $emails->ID ) ) );
+		$this->assertTrue( Profile::reset_user( $codes->ID, wp_create_nonce( Profile::NONCE . '_' . $codes->ID ) ) );
+
+		$this->assertSame( array( 'em@example.org', 'bc@example.org' ), wp_list_pluck( $this->mails, 'to' ) );
 	}
 
 	public function test_a_reset_with_nothing_stored_logs_and_emails_nothing() {

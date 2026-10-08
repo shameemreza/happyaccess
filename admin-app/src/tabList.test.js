@@ -18,6 +18,28 @@ describe( 'resolveCurrentTab', () => {
 		expect( resolveCurrentTab( tabs, 'login' ) ).toBe( 'settings' );
 	} );
 
+	it( 'shows the Login tab while either login feature is on, and hides it when both are off', () => {
+		const slugs = ( features ) =>
+			getVisibleTabs( { features, loginReady: true } ).map(
+				( tab ) => tab.slug
+			);
+
+		expect(
+			slugs( {
+				support_access: true,
+				passwordless: false,
+				two_step: true,
+			} )
+		).toContain( 'login' );
+		expect(
+			slugs( {
+				support_access: true,
+				passwordless: false,
+				two_step: false,
+			} )
+		).not.toContain( 'login' );
+	} );
+
 	it( 'falls back to the first tab for any other tab that is gone', () => {
 		const tabs = getVisibleTabs( {
 			features: { support_access: false },

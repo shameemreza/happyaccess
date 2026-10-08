@@ -130,7 +130,9 @@ final class Profile {
 	}
 
 	/**
-	 * Turns off another user's two-step login, logs it and emails them.
+	 * Turns off another user's two-step login and logs it. The user gets an
+	 * email only when they had a method or backup codes, not when the reset
+	 * only cleared a re-check, grace counters or a lock.
 	 *
 	 * @param int    $user_id User whose two-step login goes.
 	 * @param string $nonce   Nonce from the reset form.
@@ -149,14 +151,15 @@ final class Profile {
 		}
 
 		$admin = wp_get_current_user();
-		$had   = UserState::reset(
+		$used  = UserState::is_enabled( $user->ID ) || BackupCodes::remaining( $user->ID ) > 0;
+		UserState::reset(
 			$user->ID,
 			array(
 				'source'  => 'admin',
 				'user_id' => (int) $admin->ID,
 			)
 		);
-		if ( $had ) {
+		if ( $used ) {
 			Mailer::send(
 				$user->user_email,
 				__( 'Two-step login was turned off', 'happyaccess' ),
