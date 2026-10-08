@@ -6,6 +6,9 @@
  * as text, and the "I saved these codes" check that enables Continue.
  * Without this script the setup key and the codes still show as text, and
  * the checkbox is required by the browser.
+ *
+ * The profile section reuses drawQr() and setUpCodes() through
+ * window.happyaccessTwoStep, after it fills the boxes from the REST routes.
  */
 ( function () {
 	'use strict';
@@ -108,6 +111,11 @@
 	}
 
 	function setUpCodes( form ) {
+		if ( form.getAttribute( 'data-happyaccess-ready' ) ) {
+			return;
+		}
+		form.setAttribute( 'data-happyaccess-ready', '1' );
+
 		var list = form.querySelector( '.happyaccess-ts-codes' );
 		var tools = form.querySelector( '.happyaccess-ts-tools' );
 		var status = form.querySelector( '.happyaccess-ts-status' );
@@ -163,6 +171,11 @@
 
 		tools.hidden = false;
 	}
+
+	window.happyaccessTwoStep = {
+		drawQr: drawQr,
+		setUpCodes: setUpCodes,
+	};
 
 	function init() {
 		var boxes = document.querySelectorAll( '.happyaccess-ts-qr[data-happyaccess-uri]' );

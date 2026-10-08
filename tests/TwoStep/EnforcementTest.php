@@ -237,4 +237,41 @@ class EnforcementTest extends WP_UnitTestCase {
 			revoke_super_admin( $admin->ID );
 		}
 	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_a_super_admins_policy_switches_site_once_per_request() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$this->set_policy( array( 'administrator' => 'required' ) );
+		$admin = self::factory()->user->create_and_get();
+		grant_super_admin( $admin->ID );
+		$switches = 0;
+		$count    = static function () use ( &$switches ) {
+			++$switches;
+		};
+		add_action( 'switch_blog', $count );
+		try {
+			for ( $i = 0; $i < 3; $i++ ) {
+				$this->assertSame( 'required', Enforcement::policy( get_userdata( $admin->ID ) ) );
+			}
+			$this->assertSame( 2, $switches, 'One switch to the main site and one back.' );
+
+			$this->set_policy( array( 'administrator' => 'optional' ) );
+			$this->assertSame( 'optional', Enforcement::policy( get_userdata( $admin->ID ) ), 'A settings change is seen.' );
+		} finally {
+			remove_action( 'switch_blog', $count );
+			revoke_super_admin( $admin->ID );
+		}
+	}
+
+	public function test_the_policy_follows_a_role_change_in_the_same_request() {
+		$this->set_policy( array( 'editor' => 'required' ) );
+		$user = $this->user_with( array( 'editor' ) );
+		$this->assertSame( 'required', Enforcement::policy( $user ) );
+		$user->set_role( 'author' );
+		$this->assertSame( 'off', Enforcement::policy( get_userdata( $user->ID ) ) );
+	}
 }

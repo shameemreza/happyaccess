@@ -27,10 +27,14 @@ class UninstallerTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
-		remove_role( 'happyaccess_merchant' );
-		wp_clear_scheduled_hook( Cron::HOOK );
-		wp_clear_scheduled_hook( Installer::NETWORK_HOOK );
-		parent::tear_down();
+		// The parent always runs, so a failed reset can't leave the test transaction open.
+		try {
+			remove_role( 'happyaccess_merchant' );
+			wp_clear_scheduled_hook( Cron::HOOK );
+			wp_clear_scheduled_hook( Installer::NETWORK_HOOK );
+		} finally {
+			parent::tear_down();
+		}
 	}
 
 	/**
@@ -501,5 +505,45 @@ class UninstallerTest extends WP_UnitTestCase {
 
 		$this->assertSame( 1, $calls, 'the sweep went on after the first failure' );
 		$this->assertSame( 0, $network );
+	}
+
+	/**
+	 * Gives a user every two-step meta key.
+	 *
+	 * @param int $user_id User id.
+	 * @return string[] The keys.
+	 */
+	private function two_step_meta( $user_id ) {
+		$keys = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck' );
+		foreach ( $keys as $key ) {
+			update_user_meta( $user_id, $key, array( 'x' => 1 ) );
+		}
+		update_user_meta( $user_id, '_other_plugin_note', 'y' );
+		return $keys;
+	}
+
+	public function test_with_delete_on_the_two_step_meta_goes() {
+		$this->delete_data( true );
+		$user_id = self::factory()->user->create();
+		$keys    = $this->two_step_meta( $user_id );
+
+		Uninstaller::run();
+
+		foreach ( $keys as $key ) {
+			$this->assertFalse( metadata_exists( 'user', $user_id, $key ), $key . ' is still there' );
+		}
+		$this->assertSame( 'y', get_user_meta( $user_id, '_other_plugin_note', true ) );
+	}
+
+	public function test_with_delete_off_the_two_step_meta_stays() {
+		$this->delete_data( false );
+		$user_id = self::factory()->user->create();
+		$keys    = $this->two_step_meta( $user_id );
+
+		Uninstaller::run();
+
+		foreach ( $keys as $key ) {
+			$this->assertTrue( metadata_exists( 'user', $user_id, $key ), $key . ' was deleted' );
+		}
 	}
 }

@@ -183,6 +183,20 @@ final class Challenge {
 	}
 
 	/**
+	 * At a login while the user's role doesn't require two-step login, drops
+	 * any grace period left from when it did, so a role that becomes
+	 * required again later starts a fresh one.
+	 *
+	 * @param \WP_User $user The user logging in.
+	 * @return void
+	 */
+	private static function forget_stale_grace( \WP_User $user ) {
+		if ( Enforcement::REQUIRED !== Enforcement::policy( $user ) ) {
+			UserState::clear_grace( $user->ID );
+		}
+	}
+
+	/**
 	 * Remembers a user that an application password authenticated. Those
 	 * logins can't show a second step and were made on purpose.
 	 *
@@ -228,7 +242,11 @@ final class Challenge {
 	 */
 	public static function finish_authenticate( $user, $username = '', $password = '' ) {
 		unset( $username );
-		if ( ! self::is_first_factor( $user, $password ) || ! self::applies( $user ) ) {
+		if ( ! self::is_first_factor( $user, $password ) ) {
+			return $user;
+		}
+		self::forget_stale_grace( $user );
+		if ( ! self::applies( $user ) ) {
 			return $user;
 		}
 		// Asked again here, so a user that a later authenticate filter returned can't skip the step.
@@ -259,6 +277,7 @@ final class Challenge {
 	 * @return string|null The step URL, or null to log in now.
 	 */
 	public static function after_passwordless( \WP_User $user, $remember, $redirect ) {
+		self::forget_stale_grace( $user );
 		if ( ! self::applies( $user ) ) {
 			return null;
 		}
@@ -547,6 +566,9 @@ final class Challenge {
 				return $user;
 			}
 			return new \WP_Error( 'happyaccess_twostep_xmlrpc', esc_html__( "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead.", 'happyaccess' ) );
+		}
+		if ( self::needs_setup( $user ) ) {
+			return new \WP_Error( 'happyaccess_twostep_required', esc_html__( 'Your role needs two-step login. Log in on the login page to set it up.', 'happyaccess' ) );
 		}
 		return new \WP_Error( 'happyaccess_twostep_required', esc_html__( 'This account uses two-step login. Log in on the login page.', 'happyaccess' ) );
 	}
@@ -1206,12 +1228,14 @@ final class Challenge {
 			'backup' => __( 'Backup code', 'happyaccess' ),
 		);
 
+		// After an error the field points at it and takes focus, as core's login field does.
+		$after = null === $errors ? '' : ' aria-describedby="login_error" autofocus';
 		$body  = '<form name="happyaccess-twostep" method="post" action="' . esc_url( Router::url( self::STEP ) ) . '">';
 		$body .= '<p><label for="happyaccess-ts-code">' . esc_html( isset( $labels[ $method ] ) ? $labels[ $method ] : $labels['app'] ) . '</label>';
 		if ( 'backup' === $method ) {
-			$body .= '<input type="text" name="pwd" id="happyaccess-ts-code" class="input" value="" size="20" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" /></p>';
+			$body .= '<input type="text" name="pwd" id="happyaccess-ts-code" class="input" value="" size="20" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"' . $after . ' /></p>';
 		} else {
-			$body .= '<input type="text" name="pwd" id="happyaccess-ts-code" class="input" value="" size="20" maxlength="12" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" /></p>';
+			$body .= '<input type="text" name="pwd" id="happyaccess-ts-code" class="input" value="" size="20" maxlength="12" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false"' . $after . ' /></p>';
 		}
 		$body .= '<input type="hidden" name="method" value="' . esc_attr( $method ) . '" />';
 		$body .= self::carry_fields( $carry );

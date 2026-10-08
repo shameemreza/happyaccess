@@ -31,6 +31,12 @@ final class Uninstaller {
 	const IDENTITY_META = array( 'happyaccess_temp_user', 'happyaccess_token_id', 'happyaccess_blog_id' );
 
 	/**
+	 * User meta of two-step login. Named here so the uninstaller doesn't
+	 * load the feature's classes.
+	 */
+	const TWOSTEP_META = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck' );
+
+	/**
 	 * Accounts that could not be deleted and were stripped instead, by user id.
 	 * A stripped account no longer belongs to any site, so a later sweep must
 	 * not take it for an account of a deleted site.
@@ -358,10 +364,21 @@ final class Uninstaller {
 	 * user marker, because it could not be deleted, keeps its marker and links
 	 * so it never turns into a normal account.
 	 *
+	 * The two-step meta belongs to the person, not to one site, and its app
+	 * secret is sealed with the main site's key. So on a network it follows
+	 * the main site's choice, the same as the network options.
+	 *
 	 * @return void
 	 */
 	private static function delete_user_meta() {
 		global $wpdb;
+
+		if ( ! is_multisite() || get_current_blog_id() === (int) get_main_site_id() ) {
+			foreach ( self::TWOSTEP_META as $key ) {
+				delete_metadata( 'user', 0, $key, '', true );
+			}
+		}
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall sweep.
 		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT user_id, meta_key FROM {$wpdb->usermeta} WHERE meta_key LIKE %s", $wpdb->esc_like( 'happyaccess_' ) . '%' ), ARRAY_A );
 

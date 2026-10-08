@@ -22,14 +22,18 @@ defined( 'ABSPATH' ) || exit;
  *   belongs to the person, so the secret uses the network key.
  * - _happyaccess_backup_codes: the hashes of the unused backup codes.
  *
+ * - _happyaccess_twostep_recheck: Unix time the user last proved it was
+ *   them on the profile, before changing a method.
+ *
  * The app is on when a secret is stored. Backup codes alone never turn
  * two-step login on.
  */
 final class UserState {
 
-	const META_STATE  = '_happyaccess_twostep';
-	const META_TOTP   = '_happyaccess_totp';
-	const META_BACKUP = '_happyaccess_backup_codes';
+	const META_STATE   = '_happyaccess_twostep';
+	const META_TOTP    = '_happyaccess_totp';
+	const META_BACKUP  = '_happyaccess_backup_codes';
+	const META_RECHECK = '_happyaccess_twostep_recheck';
 
 	/**
 	 * Tries of a compare-and-swap write to the state meta.
@@ -183,23 +187,48 @@ final class UserState {
 
 	/**
 	 * Clears every two-step meta key of the user, as recovery does. The grace
-	 * period starts over with them.
+	 * period starts over with them. The log entry is written only when there
+	 * was something to clear.
 	 *
-	 * @param int $user_id User id.
+	 * @param int   $user_id User id.
+	 * @param array $meta    Log meta: who reset it and from where. Never a secret.
 	 * @return void
 	 */
-	public static function reset( $user_id ) {
+	public static function reset( $user_id, array $meta = array() ) {
 		$user_id = (int) $user_id;
 		$had     = false;
-		foreach ( array( self::META_STATE, self::META_TOTP, self::META_BACKUP ) as $key ) {
+		foreach ( array( self::META_STATE, self::META_TOTP, self::META_BACKUP, self::META_RECHECK ) as $key ) {
 			if ( metadata_exists( 'user', $user_id, $key ) ) {
 				$had = true;
 				delete_user_meta( $user_id, $key );
 			}
 		}
 		if ( $had ) {
-			AuditLog::add( 'twostep_reset', self::log_args( $user_id, __( 'Two-step login reset', 'happyaccess' ), '' ) );
+			$args         = self::log_args( $user_id, __( 'Two-step login reset', 'happyaccess' ), '' );
+			$args['meta'] = $meta;
+			AuditLog::add( 'twostep_reset', $args );
 		}
+	}
+
+	/**
+	 * Forgets the grace period, so a role that becomes required again later
+	 * gets a fresh one.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	public static function clear_grace( $user_id ) {
+		$state = self::state( $user_id );
+		if ( ! isset( $state['grace_started_at'] ) && ! isset( $state['grace_logins_used'] ) ) {
+			return;
+		}
+		self::change_state(
+			(int) $user_id,
+			static function ( array $state ) {
+				unset( $state['grace_started_at'], $state['grace_logins_used'] );
+				return $state;
+			}
+		);
 	}
 
 	/**

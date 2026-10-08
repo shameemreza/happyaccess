@@ -19,9 +19,10 @@ defined( 'ABSPATH' ) || exit;
 final class Feature {
 
 	/**
-	 * Registers the second step and the setup screen at login while the
-	 * feature is on. Every hook added here must be safe to add twice (same
-	 * callback and priority), so register() needs no run-once flag.
+	 * Registers the second step, the setup screen at login, the profile
+	 * section with its routes, and the CLI reset while the feature is on.
+	 * Every hook added here must be safe to add twice (same callback and
+	 * priority), so register() needs no run-once flag.
 	 *
 	 * @return void
 	 */
@@ -32,5 +33,8 @@ final class Feature {
 
 		Challenge::register();
 		SetupSteps::register();
+		Profile::register();
+		RestController::register();
+		Cli::register();
 	}
 }

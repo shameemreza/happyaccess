@@ -159,10 +159,19 @@ final class SetupSteps {
 		wp_enqueue_style( self::HANDLE, plugins_url( 'assets/twostep-setup.css', HAPPYACCESS_PLUGIN_FILE ), array( 'login' ), self::asset_version( 'assets/twostep-setup.css' ) );
 		$deps = array();
 		if ( ! empty( $assets['qr'] ) ) {
-			wp_register_script( self::QR_HANDLE, plugins_url( 'assets/vendor/qrcode.js', HAPPYACCESS_PLUGIN_FILE ), array(), self::QR_VERSION, true );
+			self::register_qr();
 			$deps[] = self::QR_HANDLE;
 		}
 		wp_enqueue_script( self::HANDLE, plugins_url( 'assets/twostep-setup.js', HAPPYACCESS_PLUGIN_FILE ), $deps, self::asset_version( 'assets/twostep-setup.js' ), true );
+	}
+
+	/**
+	 * Registers the bundled QR library. The profile loads it too.
+	 *
+	 * @return void
+	 */
+	public static function register_qr() {
+		wp_register_script( self::QR_HANDLE, plugins_url( 'assets/vendor/qrcode.js', HAPPYACCESS_PLUGIN_FILE ), array(), self::QR_VERSION, true );
 	}
 
 	/**
@@ -368,7 +377,7 @@ final class SetupSteps {
 		$qr    = false;
 
 		if ( 'email' === $carry['method'] ) {
-			$body = self::email_form( $carry, '' !== (string) $sent );
+			$body = self::email_form( $carry, '' !== (string) $sent, null !== $errors );
 		} else {
 			$secret = self::secret( $state );
 			if ( null === $secret && Secrets::is_network_persisted() ) {
@@ -387,7 +396,7 @@ final class SetupSteps {
 				$errors = new \WP_Error( 'happyaccess_no_site_key', esc_html__( 'The authenticator app could not be set up. Try again later.', 'happyaccess' ) );
 				$body   = '';
 			} else {
-				$body = self::app_form( $user, $secret, $carry );
+				$body = self::app_form( $user, $secret, $carry, null !== $errors );
 				$qr   = true;
 			}
 		}
@@ -438,30 +447,68 @@ final class SetupSteps {
 	}
 
 	/**
-	 * The authenticator app form: the QR code, the key in groups of 4 and
-	 * the field for the first code. The script draws the QR code into the
-	 * empty box; without it the key alone still works.
+	 * The otpauth address an authenticator app reads, for a user and secret.
+	 * The profile setup uses it too.
 	 *
 	 * @param \WP_User $user   The user.
 	 * @param string   $secret Base32 secret.
-	 * @param array    $carry  Carried values.
 	 * @return string
 	 */
-	private static function app_form( \WP_User $user, $secret, array $carry ) {
+	public static function app_uri( \WP_User $user, $secret ) {
 		$issuer = str_replace( ':', ' ', wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) );
 		if ( '' === trim( $issuer ) ) {
 			$issuer = (string) wp_parse_url( home_url(), PHP_URL_HOST );
 		}
-		$uri = Totp::uri( $secret, str_replace( ':', ' ', $user->user_login ), $issuer );
+		return Totp::uri( $secret, str_replace( ':', ' ', $user->user_login ), $issuer );
+	}
 
+	/**
+	 * The box the script draws the QR code into, and the setup key in
+	 * groups of 4 below it. The profile prints it empty and fills it in.
+	 *
+	 * @param string $uri    otpauth address, or empty for the script to set.
+	 * @param string $secret Base32 secret, or empty for the script to set.
+	 * @return string
+	 */
+	public static function qr_and_key( $uri, $secret ) {
+		$html  = '<div class="happyaccess-ts-qr" role="img" aria-label="' . esc_attr__( 'QR code that adds this account to your authenticator app. The setup key below does the same.', 'happyaccess' ) . '"' . ( '' === $uri ? '' : ' data-happyaccess-uri="' . esc_attr( $uri ) . '"' ) . ' hidden></div>';
+		$html .= '<p class="happyaccess-ts-key-label">' . esc_html__( 'Or type this setup key into the app:', 'happyaccess' ) . '</p>';
+		$html .= '<p class="happyaccess-ts-key"><code>' . esc_html( '' === $secret ? '' : implode( ' ', str_split( $secret, 4 ) ) ) . '</code></p>';
+		return $html;
+	}
+
+	/**
+	 * A code field. After an error it points at core's error box and takes
+	 * focus, as core's login field does.
+	 *
+	 * @param string $id        Field id.
+	 * @param string $name      Field name, or empty for a field that is never posted.
+	 * @param bool   $has_error Whether an error is shown.
+	 * @param string $css_class Field class.
+	 * @return string
+	 */
+	public static function code_input( $id, $name, $has_error, $css_class = 'input' ) {
+		return '<input type="text"' . ( '' === $name ? '' : ' name="' . esc_attr( $name ) . '"' ) . ' id="' . esc_attr( $id ) . '" class="' . esc_attr( $css_class ) . '" value="" size="20" maxlength="12" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false"' . ( $has_error ? ' aria-describedby="login_error" autofocus' : '' ) . ' />';
+	}
+
+	/**
+	 * The authenticator app form: the QR code, the key in groups of 4 and
+	 * the field for the first code. The script draws the QR code into the
+	 * empty box; without it the key alone still works.
+	 *
+	 * @param \WP_User $user      The user.
+	 * @param string   $secret    Base32 secret.
+	 * @param array    $carry     Carried values.
+	 * @param bool     $has_error Whether an error is shown.
+	 * @return string
+	 */
+	private static function app_form( \WP_User $user, $secret, array $carry, $has_error = false ) {
 		$body  = self::form_open( 'happyaccess-ts-setup' );
 		$body .= '<h2 class="happyaccess-ts-heading">' . esc_html__( 'Authenticator app', 'happyaccess' ) . '</h2>';
 		$body .= '<p>' . esc_html__( 'Scan this QR code with your authenticator app.', 'happyaccess' ) . '</p>';
-		$body .= '<div class="happyaccess-ts-qr" role="img" aria-label="' . esc_attr__( 'QR code that adds this account to your authenticator app. The setup key below does the same.', 'happyaccess' ) . '" data-happyaccess-uri="' . esc_attr( $uri ) . '" hidden></div>';
-		$body .= '<p class="happyaccess-ts-key-label">' . esc_html__( 'Or type this setup key into the app:', 'happyaccess' ) . '</p>';
-		$body .= '<p class="happyaccess-ts-key"><code>' . esc_html( implode( ' ', str_split( $secret, 4 ) ) ) . '</code></p>';
+		$body .= self::qr_and_key( self::app_uri( $user, $secret ), $secret );
 		$body .= '<p><label for="happyaccess-ts-code">' . esc_html__( 'Code from the app', 'happyaccess' ) . '</label>';
-		$body .= '<input type="text" name="pwd" id="happyaccess-ts-code" class="input" value="" size="20" maxlength="12" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" /></p>';
+		$body .= self::code_input( 'happyaccess-ts-code', 'pwd', $has_error ) . '</p>';
 		$body .= self::hidden( 'app', $carry );
 		$body .= '<p class="submit"><input type="submit" class="button button-primary button-large" value="' . esc_attr__( 'Turn on two-step login', 'happyaccess' ) . '" /></p>';
 		return $body . '</form>';
@@ -470,11 +517,12 @@ final class SetupSteps {
 	/**
 	 * The email codes form: a button that sends a code, then the field for it.
 	 *
-	 * @param array $carry Carried values.
-	 * @param bool  $sent  Whether a code was sent.
+	 * @param array $carry     Carried values.
+	 * @param bool  $sent      Whether a code was sent.
+	 * @param bool  $has_error Whether an error is shown.
 	 * @return string
 	 */
-	private static function email_form( array $carry, $sent ) {
+	private static function email_form( array $carry, $sent, $has_error = false ) {
 		$body  = self::form_open( 'happyaccess-ts-setup' );
 		$body .= '<h2 class="happyaccess-ts-heading">' . esc_html__( 'Email codes', 'happyaccess' ) . '</h2>';
 		if ( ! $sent ) {
@@ -484,7 +532,7 @@ final class SetupSteps {
 			return $body . '</form>';
 		}
 		$body .= '<p><label for="happyaccess-ts-code">' . esc_html__( 'Email code', 'happyaccess' ) . '</label>';
-		$body .= '<input type="text" name="pwd" id="happyaccess-ts-code" class="input" value="" size="20" maxlength="12" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" /></p>';
+		$body .= self::code_input( 'happyaccess-ts-code', 'pwd', $has_error ) . '</p>';
 		$body .= self::hidden( 'email', $carry );
 		$body .= '<p class="submit"><input type="submit" class="button button-primary button-large" value="' . esc_attr__( 'Turn on email codes', 'happyaccess' ) . '" /></p>';
 		return $body . '</form>';
@@ -533,30 +581,8 @@ final class SetupSteps {
 	 * @return array
 	 */
 	private static function codes_screen( array $codes, array $carry ) {
-		$site  = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
-		$host  = (string) wp_parse_url( home_url(), PHP_URL_HOST );
-		$items = '';
-		foreach ( $codes as $code ) {
-			$items .= '<li><code class="happyaccess-ts-backup">' . esc_html( substr( $code, 0, 5 ) . '-' . substr( $code, 5 ) ) . '</code></li>';
-		}
-
 		$body  = self::form_open( 'happyaccess-ts-codes-form' );
-		$body .= '<h2 class="happyaccess-ts-heading">' . esc_html__( 'Save your backup codes', 'happyaccess' ) . '</h2>';
-		$body .= '<p>' . esc_html__( "Each code works once. Use one to log in when you can't get a code from your app or email.", 'happyaccess' ) . '</p>';
-		$body .= '<p><strong>' . esc_html__( "These codes won't be shown again.", 'happyaccess' ) . '</strong></p>';
-		$body .= '<ul class="happyaccess-ts-codes" id="happyaccess-ts-codes">' . $items . '</ul>';
-		$body .= '<p class="happyaccess-ts-tools" hidden>';
-		$body .= '<button type="button" class="button" data-happyaccess-copy>' . esc_html__( 'Copy', 'happyaccess' ) . '</button> ';
-		$body .= '<button type="button" class="button" data-happyaccess-download data-filename="' . esc_attr( 'backup-codes-' . sanitize_file_name( '' !== $host ? $host : 'site' ) . '.txt' ) . '" data-heading="' . esc_attr(
-			sprintf(
-				/* translators: %s: site name. */
-				__( 'Two-step login backup codes for %s', 'happyaccess' ),
-				'' !== trim( $site ) ? $site : $host
-			)
-		) . '">' . esc_html__( 'Download as text', 'happyaccess' ) . '</button>';
-		$body .= '</p>';
-		$body .= '<p class="happyaccess-ts-status" role="status" data-copied="' . esc_attr__( 'Codes copied.', 'happyaccess' ) . '" data-copy-failed="' . esc_attr__( "Copy didn't work. Select the codes and copy them by hand.", 'happyaccess' ) . '"></p>';
-		$body .= '<p class="happyaccess-ts-saved"><label for="happyaccess-ts-saved"><input type="checkbox" name="saved" value="1" id="happyaccess-ts-saved" required /> ' . esc_html__( 'I saved these codes', 'happyaccess' ) . '</label></p>';
+		$body .= self::codes_block( $codes, true );
 		$body .= self::hidden( 'continue', $carry );
 		$body .= '<p class="submit"><input type="submit" id="happyaccess-ts-continue" class="button button-primary button-large" value="' . esc_attr__( 'Continue', 'happyaccess' ) . '" /></p>';
 		$body .= '</form>';
@@ -572,6 +598,46 @@ final class SetupSteps {
 	}
 
 	/**
+	 * The backup codes with Copy, Download and the "I saved these codes"
+	 * check. The script enables the button with id happyaccess-ts-continue
+	 * once the box is checked. The profile prints it with no codes, fills the
+	 * list in and leaves the box optional, because a required box would
+	 * block the profile form around it.
+	 *
+	 * @param string[] $codes    Plain backup codes.
+	 * @param bool     $required Whether the browser requires the check.
+	 * @param string   $heading  Heading element: h2 on the login screen, h3 inside the profile section.
+	 * @return string
+	 */
+	public static function codes_block( array $codes, $required, $heading = 'h2' ) {
+		$heading = 'h3' === $heading ? 'h3' : 'h2';
+		$site    = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+		$host    = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		$items   = '';
+		foreach ( $codes as $code ) {
+			$items .= '<li><code class="happyaccess-ts-backup">' . esc_html( substr( $code, 0, 5 ) . '-' . substr( $code, 5 ) ) . '</code></li>';
+		}
+
+		$body  = '<' . $heading . ' class="happyaccess-ts-heading" tabindex="-1">' . esc_html__( 'Save your backup codes', 'happyaccess' ) . '</' . $heading . '>';
+		$body .= '<p>' . esc_html__( "Each code works once. Use one to log in when you can't get a code from your app or email.", 'happyaccess' ) . '</p>';
+		$body .= '<p><strong>' . esc_html__( "These codes won't be shown again.", 'happyaccess' ) . '</strong></p>';
+		$body .= '<ul class="happyaccess-ts-codes" id="happyaccess-ts-codes">' . $items . '</ul>';
+		$body .= '<p class="happyaccess-ts-tools" hidden>';
+		$body .= '<button type="button" class="button" data-happyaccess-copy>' . esc_html__( 'Copy', 'happyaccess' ) . '</button> ';
+		$body .= '<button type="button" class="button" data-happyaccess-download data-filename="' . esc_attr( 'backup-codes-' . sanitize_file_name( '' !== $host ? $host : 'site' ) . '.txt' ) . '" data-heading="' . esc_attr(
+			sprintf(
+				/* translators: %s: site name. */
+				__( 'Two-step login backup codes for %s', 'happyaccess' ),
+				'' !== trim( $site ) ? $site : $host
+			)
+		) . '">' . esc_html__( 'Download as text', 'happyaccess' ) . '</button>';
+		$body .= '</p>';
+		$body .= '<p class="happyaccess-ts-status" role="status" data-copied="' . esc_attr__( 'Codes copied.', 'happyaccess' ) . '" data-copy-failed="' . esc_attr__( "Copy didn't work. Select the codes and copy them by hand.", 'happyaccess' ) . '"></p>';
+		$body .= '<p class="happyaccess-ts-saved"><label for="happyaccess-ts-saved"><input type="checkbox"' . ( $required ? ' name="saved" value="1"' : '' ) . ' id="happyaccess-ts-saved"' . ( $required ? ' required' : '' ) . ' /> ' . esc_html__( 'I saved these codes', 'happyaccess' ) . '</label></p>';
+		return $body;
+	}
+
+	/**
 	 * The screen after setup when the codes were already shown.
 	 *
 	 * @param array          $carry  Carried values, with method.
@@ -580,7 +646,11 @@ final class SetupSteps {
 	 */
 	private static function done_screen( array $carry, $errors = null ) {
 		$body  = self::form_open( 'happyaccess-ts-codes-form' );
-		$body .= '<p>' . esc_html__( "Your backup codes were shown once. If you didn't save them, make new ones on your profile.", 'happyaccess' ) . '</p>';
+		$body .= '<p>' . sprintf(
+			/* translators: %s: link to the two-step section of the profile. */
+			esc_html__( "Your backup codes were shown once. If you didn't save them, make new ones on %s.", 'happyaccess' ),
+			'<a href="' . esc_url( Profile::url() ) . '">' . esc_html__( 'your profile', 'happyaccess' ) . '</a>'
+		) . '</p>';
 		$body .= self::hidden( 'continue', $carry );
 		$body .= '<p class="submit"><input type="submit" class="button button-primary button-large" value="' . esc_attr__( 'Continue', 'happyaccess' ) . '" /></p>';
 		$body .= '</form>';
@@ -730,11 +800,12 @@ final class SetupSteps {
 
 	/**
 	 * Asset version: the plugin version, plus the file time while debugging.
+	 * The profile uses it too.
 	 *
 	 * @param string $path Path inside the plugin.
 	 * @return string
 	 */
-	private static function asset_version( $path ) {
+	public static function asset_version( $path ) {
 		$file = HAPPYACCESS_PLUGIN_DIR . $path;
 		return HAPPYACCESS_VERSION . ( WP_DEBUG && is_readable( $file ) ? '.' . filemtime( $file ) : '' );
 	}

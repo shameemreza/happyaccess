@@ -31,26 +31,73 @@ final class Enforcement {
 	const REQUIRED = 'required';
 
 	/**
+	 * Policies worked out in this request, by site (or main, for a super
+	 * admin), user and roles.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $policies = array();
+
+	/**
 	 * The policy for a user: required when any of their roles is required,
 	 * else optional when any is optional, else off. A super admin on
 	 * multisite follows the main site's policy, with administrator added to
 	 * their roles there, because they act as one on every site.
 	 *
+	 * The answer is kept for the rest of the request, so one login doesn't
+	 * switch to the main site again on every check. A settings or role
+	 * change clears it.
+	 *
 	 * @param \WP_User $user The user.
 	 * @return string off, optional or required.
 	 */
 	public static function policy( \WP_User $user ) {
-		if ( is_multisite() && is_super_admin( $user->ID ) ) {
+		$super = is_multisite() && is_super_admin( $user->ID );
+		$key   = ( $super ? 'main' : (string) get_current_blog_id() ) . ':' . (int) $user->ID . ':' . implode( ',', (array) $user->roles );
+		if ( isset( self::$policies[ $key ] ) ) {
+			return self::$policies[ $key ];
+		}
+		self::watch();
+
+		if ( $super ) {
 			switch_to_blog( get_main_site_id() );
 			try {
-				$main  = get_userdata( $user->ID );
-				$roles = $main instanceof \WP_User ? (array) $main->roles : array();
-				return self::resolve( Settings::get( 'two_step.role_policy', array() ), array_merge( $roles, array( 'administrator' ) ) );
+				$main   = get_userdata( $user->ID );
+				$roles  = $main instanceof \WP_User ? (array) $main->roles : array();
+				$policy = self::resolve( Settings::get( 'two_step.role_policy', array() ), array_merge( $roles, array( 'administrator' ) ) );
 			} finally {
 				restore_current_blog();
 			}
+		} else {
+			$policy = self::resolve( Settings::get( 'two_step.role_policy', array() ), (array) $user->roles );
 		}
-		return self::resolve( Settings::get( 'two_step.role_policy', array() ), (array) $user->roles );
+
+		self::$policies[ $key ] = $policy;
+		return $policy;
+	}
+
+	/**
+	 * Forgets the policies worked out in this request.
+	 *
+	 * @return void
+	 */
+	public static function flush_cache() {
+		self::$policies = array();
+	}
+
+	/**
+	 * Clears the kept policies when the settings or a user's roles change.
+	 * Adding the same hooks again is harmless.
+	 *
+	 * @return void
+	 */
+	private static function watch() {
+		foreach ( array( 'add_option_', 'update_option_', 'delete_option_' ) as $hook ) {
+			add_action( $hook . Settings::OPTION, array( __CLASS__, 'flush_cache' ) );
+		}
+		foreach ( array( 'set_user_role', 'add_user_role', 'remove_user_role', 'granted_super_admin', 'revoked_super_admin' ) as $hook ) {
+			add_action( $hook, array( __CLASS__, 'flush_cache' ) );
+		}
 	}
 
 	/**

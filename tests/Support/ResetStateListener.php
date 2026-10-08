@@ -40,5 +40,9 @@ class HappyAccess_Test_Reset_State_Listener implements TestListener {
 		if ( class_exists( '\HappyAccess\Features\SupportAccess\AdminWatch' ) ) {
 			\HappyAccess\Features\SupportAccess\AdminWatch::reset();
 		}
+		// Without autoload, so a test that checks which TwoStep classes load is not changed by this.
+		if ( class_exists( '\HappyAccess\Features\TwoStep\Enforcement', false ) ) {
+			\HappyAccess\Features\TwoStep\Enforcement::flush_cache();
+		}
 	}
 }

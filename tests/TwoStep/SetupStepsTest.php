@@ -663,4 +663,35 @@ class SetupStepsTest extends WP_UnitTestCase {
 	public function test_the_setup_step_is_registered_with_the_feature() {
 		$this->assertNotNull( Router::resolve( 'twostep_setup' ) );
 	}
+
+	public function test_after_a_wrong_code_the_setup_field_points_at_the_error_and_takes_focus() {
+		$user   = $this->admin();
+		$cookie = $this->start_setup( $user );
+		$first  = $this->screen( $cookie )['body'];
+		$secret = $this->shown_secret( $first );
+		$this->assertStringNotContainsString( 'aria-describedby="login_error"', $first );
+
+		$wrong = $this->post( $cookie, 'app', array( 'pwd' => '000000' === Totp::code( $secret, Totp::step_for( Clock::now() ) ) ? '111111' : '000000' ) );
+		$this->assertSame( 1, preg_match( '/<input[^>]+id="happyaccess-ts-code"[^>]*>/', $wrong['body'], $field ) );
+		$this->assertStringContainsString( 'aria-describedby="login_error"', $field[0] );
+		$this->assertStringContainsString( 'autofocus', $field[0] );
+
+		$this->post( $cookie, 'send' );
+		EmailMethod::flush_queue();
+		$this->assertSame( 1, preg_match( '/(\d{3}) (\d{3})/', $this->mails[0]['message'], $m ) );
+		$email = $this->post( $cookie, 'email', array( 'pwd' => '000000' === $m[1] . $m[2] ? '111111' : '000000' ) );
+		$this->assertSame( 1, preg_match( '/<input[^>]+id="happyaccess-ts-code"[^>]*>/', $email['body'], $field ) );
+		$this->assertStringContainsString( 'aria-describedby="login_error"', $field[0] );
+		$this->assertStringContainsString( 'autofocus', $field[0] );
+	}
+
+	public function test_the_done_screen_links_to_the_profile_section() {
+		$user   = $this->admin();
+		$cookie = $this->start_setup( $user );
+		$secret = $this->shown_secret( $this->screen( $cookie )['body'] );
+		$this->post( $cookie, 'app', array( 'pwd' => Totp::code( $secret, Totp::step_for( Clock::now() ) ) ) );
+
+		$done = $this->screen( $cookie )['body'];
+		$this->assertStringContainsString( 'href="' . esc_url( admin_url( 'profile.php#happyaccess-twostep' ) ) . '"', $done );
+	}
 }

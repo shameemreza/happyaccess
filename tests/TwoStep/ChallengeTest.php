@@ -1177,4 +1177,61 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( $account, $res['url'] );
 		$this->assertSame( 1, $this->wp_login_count );
 	}
+
+	public function test_an_api_login_of_a_user_who_must_set_up_says_how_and_stays_refused() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$user = self::factory()->user->create_and_get(
+			array(
+				'role'      => 'editor',
+				'user_pass' => self::PASSWORD,
+			)
+		);
+		Challenge::set_context( 'api' );
+
+		$res = $this->password_login( $user );
+		$this->assertWPError( $res['result'] );
+		$this->assertSame( 'happyaccess_twostep_required', $res['result']->get_error_code() );
+		$this->assertSame( esc_html( 'Your role needs two-step login. Log in on the login page to set it up.' ), $res['result']->get_error_message() );
+
+		UserState::start_grace( $user->ID );
+		$this->assertWPError( $this->password_login( $user )['result'], 'Refused during the grace period too.' );
+		$this->assertSame( 0, $this->wp_login_count );
+	}
+
+	public function test_after_a_wrong_code_the_field_points_at_the_error_and_takes_focus() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+
+		$first = Challenge::handle( 'GET', array(), array(), array( Challenge::COOKIE => $cookie ) )['body'];
+		$this->assertStringNotContainsString( 'aria-describedby="login_error"', $first );
+
+		$wrong = $this->post_code( $cookie, '000000' === $this->app_code( $made['secret'] ) ? '111111' : '000000' );
+		$this->assertSame( 1, preg_match( '/<input[^>]+id="happyaccess-ts-code"[^>]*>/', $wrong['body'], $field ) );
+		$this->assertStringContainsString( 'aria-describedby="login_error"', $field[0] );
+		$this->assertStringContainsString( 'autofocus', $field[0] );
+	}
+
+	public function test_a_login_while_the_role_is_not_required_clears_the_grace_state() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$user = self::factory()->user->create_and_get(
+			array(
+				'role'      => 'editor',
+				'user_pass' => self::PASSWORD,
+			)
+		);
+		$this->password_login( $user );
+		$this->password_login( $user );
+		$this->assertSame( 2, UserState::grace_logins_used( $user->ID ) );
+
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'optional' ) ) ) );
+		$res = $this->password_login( $user );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( 0, UserState::grace_started_at( $user->ID ) );
+		$this->assertSame( 0, UserState::grace_logins_used( $user->ID ) );
+
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$this->password_login( $user );
+		$this->assertSame( 1, UserState::grace_logins_used( $user->ID ), 'Required again, the grace period starts fresh.' );
+	}
 }
