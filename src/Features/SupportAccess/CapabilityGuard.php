@@ -1082,7 +1082,8 @@ final class CapabilityGuard {
 			return $result;
 		}
 		$prefix = '/wp/v2/users/';
-		$route  = untrailingslashit( (string) $request->get_route() );
+		// WP_REST_Server matches routes without regard to case, so /wp/v2/USERS/1 reaches the same handler.
+		$route = strtolower( untrailingslashit( (string) $request->get_route() ) );
 		if ( 0 !== strpos( $route, $prefix ) || ! ctype_digit( substr( $route, strlen( $prefix ) ) ) ) {
 			return $result;
 		}

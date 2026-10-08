@@ -218,6 +218,16 @@ class CustomPassUsersTest extends RestTestCase {
 		$this->assertSame( 200, $this->users_get( '/' . $subscriber )->get_status() );
 	}
 
+	public function test_the_single_user_route_hides_the_creator_in_any_letter_case() {
+		$this->custom( array( 'list_users' ) );
+
+		foreach ( array( '/wp/v2/USERS/', '/WP/V2/Users/', '/wp/v2/users/' ) as $prefix ) {
+			$response = rest_do_request( new WP_REST_Request( 'GET', $prefix . $this->owner ) );
+			$this->assertSame( 404, $response->get_status(), $prefix );
+			$this->assertSame( 'rest_user_invalid_id', $response->as_error()->get_error_code(), $prefix );
+		}
+	}
+
 	public function test_an_admin_still_sees_the_creator_on_both_routes() {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$this->custom( array( 'list_users' ) );
