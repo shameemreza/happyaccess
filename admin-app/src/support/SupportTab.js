@@ -134,8 +134,11 @@ export default function SupportTab( {
 	};
 
 	const handleRevokeAll = async () => {
-		await revokeAll();
-		setResult( null );
+		const ended = await revokeAll();
+		// A pass created while the call was out keeps its card.
+		setResult( ( current ) =>
+			current && ended.includes( current.id ) ? null : current
+		);
 		await refresh();
 	};
 

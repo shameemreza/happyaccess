@@ -638,6 +638,52 @@ describe( 'result card and the list', () => {
 	} );
 } );
 
+describe( 'revoke all and a new pass', () => {
+	it( 'keeps a pass created while the call was out, with its card and code', async () => {
+		mockServer( [ grantFixture( { id: 5, label: 'Jordan' } ) ] );
+		const serve = apiFetch.getMockImplementation();
+		let release;
+		apiFetch.mockImplementation( async ( options ) => {
+			if ( '/happyaccess/v1/grants/revoke-all' === options.path ) {
+				// The server ends the passes it knew about when the call began.
+				const known = db.grants.map( ( g ) => g.id );
+				await new Promise( ( resolve ) => ( release = resolve ) );
+				db.grants = db.grants.filter(
+					( g ) => ! known.includes( g.id )
+				);
+				return { count: known.length };
+			}
+			return serve( options );
+		} );
+		const { user } = setup();
+		await screen.findByText( '1 person has access.' );
+
+		await user.click(
+			screen.getByRole( 'button', { name: 'Revoke all' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Revoke all now' } )
+		);
+		await waitFor( () => expect( release ).toBeDefined() );
+		await createPass( user, 'Brand New' );
+
+		await act( async () => {
+			release();
+		} );
+
+		await waitFor( () =>
+			expect( screen.queryByText( 'Jordan' ) ).not.toBeInTheDocument()
+		);
+		expect(
+			screen.getByRole( 'heading', {
+				name: 'Access is ready for Brand New',
+			} )
+		).toBeInTheDocument();
+		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
+		expect( listItem( 'Brand New' ) ).toBeDefined();
+	} );
+} );
+
 describe( 'refresh key', () => {
 	it( 'drops an open result card and leaves the list reload to the app', async () => {
 		mockServer( [] );

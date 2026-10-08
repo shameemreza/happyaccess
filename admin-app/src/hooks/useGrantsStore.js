@@ -32,7 +32,7 @@ function replaceItem( list, grant, insert = false ) {
  * the list state, so they live only where the caller keeps them.
  *
  * @param {boolean} enabled Whether to load. Off until setup is done.
- * @return {Object} { grants, loading, error, refresh, create, act, revokeAll }
+ * @return {Object} { grants, loading, error, refresh, create, act, revokeAll }. revokeAll resolves with the ids it ended.
  */
 export function useGrantsStore( enabled = true ) {
 	const [ grants, setGrants ] = useState( [] );
@@ -41,6 +41,9 @@ export function useGrantsStore( enabled = true ) {
 	const mounted = useRef( true );
 	// Bumped on every local change, so a slower list response can't undo it.
 	const version = useRef( 0 );
+	// The list as last rendered, for the ids Revoke all is about to end.
+	const listed = useRef( grants );
+	listed.current = grants;
 
 	const refresh = useCallback( async () => {
 		const started = version.current;
@@ -140,15 +143,20 @@ export function useGrantsStore( enabled = true ) {
 		return result;
 	}, [] );
 
-	// Ends every pass. The list empties at once and counts as a local change,
-	// so a list reply that was already on its way can't show the passes again.
+	// Ends every pass listed when the call starts, and resolves with their ids.
+	// Those leave the list at once, and the call counts as a local change, so
+	// a list reply already on its way can't show them again. A pass created
+	// while the call was out is not in that set, so it stays.
 	const revokeAll = useCallback( async () => {
-		const result = await api.revokeAll();
+		const ids = listed.current.map( ( item ) => item.id );
+		await api.revokeAll();
 		version.current++;
 		if ( mounted.current ) {
-			setGrants( [] );
+			setGrants( ( list ) =>
+				list.filter( ( item ) => ! ids.includes( item.id ) )
+			);
 		}
-		return result;
+		return ids;
 	}, [] );
 
 	return { grants, loading, error, refresh, create, act, revokeAll };

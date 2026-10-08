@@ -277,3 +277,32 @@ it( 'revoke all clears the list, and a slower list reply cannot bring the passes
 	} );
 	expect( result.current.grants ).toEqual( [] );
 } );
+
+it( 'revoke all keeps a pass that was created while the call was out', async () => {
+	apiFetch.mockResolvedValueOnce( { items: [ grant( 5 ), grant( 6 ) ] } );
+	const { result } = renderHook( () => useGrantsStore() );
+	await waitFor( () => expect( result.current.loading ).toBe( false ) );
+
+	let release;
+	apiFetch.mockImplementationOnce(
+		() => new Promise( ( resolve ) => ( release = resolve ) )
+	);
+	let pending;
+	act( () => {
+		pending = result.current.revokeAll();
+	} );
+
+	apiFetch.mockResolvedValueOnce( grant( 9, { code: 'ABCD-1234' } ) );
+	await act( async () => {
+		await result.current.create( { label: 'Pass 9', level: 'protected' } );
+	} );
+
+	let ended;
+	await act( async () => {
+		release( { count: 2 } );
+		ended = await pending;
+	} );
+
+	expect( result.current.grants.map( ( g ) => g.id ) ).toEqual( [ 9 ] );
+	expect( ended ).toEqual( [ 5, 6 ] );
+} );
