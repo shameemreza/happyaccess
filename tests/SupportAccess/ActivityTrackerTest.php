@@ -121,6 +121,43 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		$this->assertContains( 'Deactivated plugin: happyaccess-missing/missing.php', $this->summaries() );
 	}
 
+	public function test_plugin_summaries_use_the_name_from_the_plugin_list() {
+		wp_set_current_user( $this->temp );
+		wp_cache_set( 'plugins', array( '' => array( 'acme-tools/acme-tools.php' => array( 'Name' => 'Acme Tools' ) ) ), 'plugins' );
+		try {
+			do_action( 'activated_plugin', 'acme-tools/acme-tools.php', false );
+		} finally {
+			wp_cache_delete( 'plugins', 'plugins' );
+		}
+		$this->assertContains( 'Activated plugin: Acme Tools', $this->summaries() );
+	}
+
+	public function test_a_plugin_missing_from_the_cached_list_is_named_from_its_own_folder() {
+		wp_set_current_user( $this->temp );
+		// The full list was read before the install; the new plugin's folder was read after it.
+		wp_cache_set(
+			'plugins',
+			array(
+				''            => array(),
+				'/acme-tools' => array( 'acme-tools.php' => array( 'Name' => 'Acme Tools' ) ),
+			),
+			'plugins'
+		);
+		try {
+			ActivityTracker::upgrader_ran(
+				null,
+				array(
+					'type'   => 'plugin',
+					'action' => 'install',
+					'plugin' => 'acme-tools/acme-tools.php',
+				)
+			);
+		} finally {
+			wp_cache_delete( 'plugins', 'plugins' );
+		}
+		$this->assertContains( 'Installed or updated plugin: Acme Tools', $this->summaries() );
+	}
+
 	public function test_theme_switch_is_tracked() {
 		wp_set_current_user( $this->temp );
 		do_action( 'switch_theme', 'Storefront', null, null );

@@ -773,15 +773,19 @@ final class ActivityTracker {
 	 * @return string
 	 */
 	private static function plugin_name( $plugin ) {
-		$path = WP_PLUGIN_DIR . '/' . $plugin;
-		if ( is_readable( $path ) ) {
-			if ( ! function_exists( 'get_plugin_data' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$plugins = get_plugins();
+		if ( ! isset( $plugins[ $plugin ] ) && false !== strpos( $plugin, '/' ) && 0 === validate_file( $plugin ) ) {
+			// A plugin installed in this request isn't in the cached full list yet, but a read of its own folder is fresh.
+			$plugins = array();
+			foreach ( get_plugins( '/' . dirname( $plugin ) ) as $file => $data ) {
+				$plugins[ dirname( $plugin ) . '/' . $file ] = $data;
 			}
-			$data = get_plugin_data( $path, false, false );
-			if ( ! empty( $data['Name'] ) ) {
-				return self::clip( $data['Name'] );
-			}
+		}
+		if ( ! empty( $plugins[ $plugin ]['Name'] ) ) {
+			return self::clip( $plugins[ $plugin ]['Name'] );
 		}
 		return self::clip( $plugin );
 	}
