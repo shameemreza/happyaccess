@@ -30,9 +30,32 @@ class CronTest extends WP_UnitTestCase {
 		parent::tear_down();
 	}
 
-	public function test_register_schedules_hourly() {
+	public function test_register_schedules_hourly_on_init_not_before() {
+		// Only this test's init callbacks run; the hooks are restored after the test.
+		remove_all_actions( 'init' );
+		$schedules_read = 0;
+		add_filter(
+			'cron_schedules',
+			function ( $schedules ) use ( &$schedules_read ) {
+				++$schedules_read;
+				return $schedules;
+			}
+		);
+
 		Cron::register();
+		$this->assertFalse( wp_next_scheduled( Cron::HOOK ) );
+		$this->assertSame( 0, $schedules_read, 'Nothing reads the cron schedules before init.' );
+
+		do_action( 'init' );
 		$this->assertNotFalse( wp_next_scheduled( Cron::HOOK ) );
+		$this->assertSame( 'hourly', wp_get_schedule( Cron::HOOK ) );
+	}
+
+	public function test_schedule_leaves_an_existing_event_alone() {
+		Cron::schedule();
+		$first = wp_next_scheduled( Cron::HOOK );
+		Cron::schedule();
+		$this->assertSame( $first, wp_next_scheduled( Cron::HOOK ) );
 	}
 
 	public function test_run_ends_expired_grants_and_purges_old_logs() {

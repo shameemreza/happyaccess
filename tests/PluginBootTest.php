@@ -167,7 +167,7 @@ class PluginBootTest extends WP_UnitTestCase {
 	}
 
 	public function test_deactivate_clears_the_cron_event() {
-		Cron::register();
+		Cron::schedule();
 		$this->assertNotFalse( wp_next_scheduled( Cron::HOOK ) );
 
 		Plugin::deactivate();
@@ -205,7 +205,7 @@ class PluginBootTest extends WP_UnitTestCase {
 		wp_set_current_user( $admin );
 		Settings::update( array( 'privacy' => array( 'retention_days' => 90 ) ) );
 		$settings = get_option( Settings::OPTION );
-		Cron::register();
+		Cron::schedule();
 		list( $first, $first_user )   = $this->pass_with_user( 'One' );
 		list( $second, $second_user ) = $this->pass_with_user( 'Two' );
 
@@ -227,7 +227,7 @@ class PluginBootTest extends WP_UnitTestCase {
 
 	public function test_deactivate_as_a_temp_user_changes_nothing() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		Cron::register();
+		Cron::schedule();
 		list( $id, $user_id ) = $this->pass_with_user( 'Acme' );
 		wp_set_current_user( $user_id );
 

@@ -28,14 +28,25 @@ final class Cron {
 	const MAX_BATCHES = 10;
 
 	/**
-	 * Hooks the cleanup and schedules it when it isn't scheduled yet.
+	 * Hooks the cleanup, and its scheduling to init.
 	 *
 	 * @return void
 	 */
 	public static function register() {
 		add_action( self::HOOK, array( self::class, 'run' ) );
 		add_action( 'admin_init', array( self::class, 'maybe_run_fallback' ) );
+		add_action( 'init', array( self::class, 'schedule' ) );
+	}
 
+	/**
+	 * Schedules the cleanup when it isn't scheduled yet. It waits for init
+	 * because wp_schedule_event() runs the cron_schedules filter, and other
+	 * plugins translate their schedule names there, which loads their
+	 * translations too early when it runs on plugins_loaded.
+	 *
+	 * @return void
+	 */
+	public static function schedule() {
 		if ( ! wp_next_scheduled( self::HOOK ) ) {
 			wp_schedule_event( time(), 'hourly', self::HOOK );
 		}
