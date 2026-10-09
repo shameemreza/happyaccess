@@ -10,7 +10,7 @@
 		flex-wrap: wrap;
 		align-items: flex-start;
 		gap: 24px;
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	.ha-settings__main,
@@ -19,7 +19,7 @@
 		flex: 999 1 560px;
 		flex-direction: column;
 		gap: 24px;
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	.ha-settings__loading {
@@ -27,7 +27,7 @@
 	}
 
 	.ha-card {
-		min-width: 0;
+		min-inline-size: 0;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;
 		background: #fff;
@@ -92,7 +92,7 @@
 
 	.ha-feature__text {
 		flex: 1 1 auto;
-		min-width: 0;
+		min-inline-size: 0;
 		color: var(--ha-muted);
 	}
 
@@ -211,7 +211,7 @@
 
 	.ha-loginprev {
 		flex: 1 1 320px;
-		min-width: 0;
+		min-inline-size: 0;
 		padding: 20px;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;

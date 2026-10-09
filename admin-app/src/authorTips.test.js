@@ -189,6 +189,27 @@ describe( 'tipLines', () => {
 		).not.toContain( 'two-step-admins' );
 	} );
 
+	it( 'says every administrator has two-step login when they all do', () => {
+		const text = ( enabled, total ) =>
+			line(
+				{
+					features: { two_step: true },
+					facts: { twoStepAdmins: { enabled, total } },
+				},
+				'two-step-admins'
+			).text;
+		const allSet =
+			'Every administrator here has two-step login set up. Login and security shows how the other roles are doing.';
+
+		expect( text( 1, 1 ) ).toBe( allSet );
+		expect( text( 4, 4 ) ).toBe( allSet );
+		expect( text( 3, 4 ) ).toBe(
+			'3 of 4 administrators have two-step login set up. Login and security shows who still needs it.'
+		);
+		expect( allSet.length ).toBeGreaterThanOrEqual( 90 );
+		expect( allSet.length ).toBeLessThanOrEqual( 130 );
+	} );
+
 	it( 'shows the WooCommerce tip only with passwordless login and WooCommerce', () => {
 		expect(
 			ids( { features: { passwordless: true }, facts: {} } )

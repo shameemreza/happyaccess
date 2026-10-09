@@ -59,6 +59,29 @@ function endedText( count ) {
 }
 
 /**
+ * The error of one feature switch, under that switch's text. The Notice
+ * speaks its text, so the error is announced when it shows.
+ *
+ * @param {Object}      props       Props.
+ * @param {Object|null} props.error The failed save, or nothing.
+ * @return {Element|null} The notice.
+ */
+function SwitchError( { error } ) {
+	if ( ! error ) {
+		return null;
+	}
+	return (
+		<Notice
+			className="ha-feature__note"
+			status="error"
+			isDismissible={ false }
+		>
+			{ error.message }
+		</Notice>
+	);
+}
+
+/**
  * The Settings tab: the feature switch, safety and privacy, and a live
  * login screen preview.
  *
@@ -89,7 +112,8 @@ export default function SettingsTab( {
 	const [ secretInput, setSecretInput ] = useState( '' );
 	const [ confirmOff, setConfirmOff ] = useState( false );
 	const [ confirmTwoStep, setConfirmTwoStep ] = useState( false );
-	const [ featureError, setFeatureError ] = useState( null );
+	// One error per feature switch, so a failed switch keeps its message while another one saves.
+	const [ featureErrors, setFeatureErrors ] = useState( {} );
 	const [ saveError, setSaveError ] = useState( null );
 	const [ justSaved, setJustSaved ] = useState( false );
 	const switchRef = useRef( null );
@@ -159,6 +183,12 @@ export default function SettingsTab( {
 	const tries = Number( val( 'security.max_attempts' ) );
 	const pause = Number( val( 'security.lockout_duration' ) );
 
+	const setFeatureError = ( feature, value ) =>
+		setFeatureErrors( ( previous ) => ( {
+			...previous,
+			[ feature ]: value,
+		} ) );
+
 	const finish = ( result ) => {
 		if ( result?.features ) {
 			onFeaturesChange( result.features );
@@ -166,7 +196,7 @@ export default function SettingsTab( {
 	};
 
 	const switchSupport = async ( next ) => {
-		setFeatureError( null );
+		setFeatureError( 'support_access', null );
 		setConfirmOff( false );
 		setConfirmTwoStep( false );
 		try {
@@ -185,7 +215,7 @@ export default function SettingsTab( {
 				);
 			}
 		} catch ( e ) {
-			setFeatureError( e );
+			setFeatureError( 'support_access', e );
 		}
 		switchRef.current?.focus();
 	};
@@ -197,7 +227,7 @@ export default function SettingsTab( {
 		if ( next ) {
 			switchSupport( true );
 		} else {
-			setFeatureError( null );
+			setFeatureError( 'support_access', null );
 			setConfirmTwoStep( false );
 			setConfirmOff( true );
 		}
@@ -211,7 +241,7 @@ export default function SettingsTab( {
 		}
 		setConfirmOff( false );
 		setConfirmTwoStep( false );
-		setFeatureError( null );
+		setFeatureError( 'passwordless', null );
 		try {
 			const result = await save( {
 				features: { passwordless: next },
@@ -223,7 +253,7 @@ export default function SettingsTab( {
 					: __( 'Passwordless login turned off', 'happyaccess' )
 			);
 		} catch ( e ) {
-			setFeatureError( e );
+			setFeatureError( 'passwordless', e );
 		}
 		passwordlessRef.current?.focus();
 	};
@@ -236,7 +266,7 @@ export default function SettingsTab( {
 		}
 		setConfirmOff( false );
 		setConfirmTwoStep( false );
-		setFeatureError( null );
+		setFeatureError( 'two_step', null );
 		try {
 			const result = await save( {
 				features: { two_step: next },
@@ -248,7 +278,7 @@ export default function SettingsTab( {
 					: __( 'Two-step login turned off', 'happyaccess' )
 			);
 		} catch ( e ) {
-			setFeatureError( e );
+			setFeatureError( 'two_step', e );
 		}
 		twoStepRef.current?.focus();
 	};
@@ -259,7 +289,7 @@ export default function SettingsTab( {
 		}
 		if ( next && otherNames.length > 0 ) {
 			setConfirmOff( false );
-			setFeatureError( null );
+			setFeatureError( 'two_step', null );
 			setConfirmTwoStep( true );
 			return;
 		}
@@ -358,6 +388,9 @@ export default function SettingsTab( {
 										'happyaccess'
 									) }
 								</div>
+								<SwitchError
+									error={ featureErrors.support_access }
+								/>
 							</div>
 							<Switch
 								ref={ switchRef }
@@ -409,6 +442,9 @@ export default function SettingsTab( {
 										'happyaccess'
 									) }
 								</div>
+								<SwitchError
+									error={ featureErrors.passwordless }
+								/>
 							</div>
 							<Switch
 								ref={ passwordlessRef }
@@ -457,6 +493,7 @@ export default function SettingsTab( {
 										'happyaccess'
 									) }
 								</div>
+								<SwitchError error={ featureErrors.two_step } />
 								{ twoStepShared && (
 									<Notice
 										className="ha-feature__note"
@@ -512,13 +549,6 @@ export default function SettingsTab( {
 							>
 								{ otherPluginsQuestion( otherNames ) }
 							</InlineConfirm>
-						</div>
-					) }
-					{ featureError && (
-						<div className="ha-card__confirm">
-							<Notice status="error" isDismissible={ false }>
-								{ featureError.message }
-							</Notice>
 						</div>
 					) }
 				</section>

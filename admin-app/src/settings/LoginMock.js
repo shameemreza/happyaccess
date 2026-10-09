@@ -4,9 +4,11 @@ import { __ } from '@wordpress/i18n';
  * The drawing of a WordPress login form: the logo, the two fields and the
  * button. It is decorative, so it is hidden from screen readers.
  *
+ * @param {Object}  props               Props.
+ * @param {Element} props.afterPassword What plugins print between the password and the button, through the login_form action.
  * @return {Element} The drawing.
  */
-export default function LoginMock() {
+export default function LoginMock( { afterPassword = null } = {} ) {
 	return (
 		<div aria-hidden="true" className="ha-loginprev__mock">
 			<svg
@@ -30,6 +32,7 @@ export default function LoginMock() {
 					{ __( 'Password', 'happyaccess' ) }
 				</div>
 				<div className="ha-loginprev__input" />
+				{ afterPassword }
 				<div className="ha-loginprev__submit">
 					<span>{ __( 'Log in', 'happyaccess' ) }</span>
 				</div>

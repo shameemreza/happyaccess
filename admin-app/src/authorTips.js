@@ -96,19 +96,28 @@ function siteLines( { features, facts, passes, now } ) {
 	const coverage = facts.twoStepAdmins;
 	if ( features.two_step && coverage && Number( coverage.total ) > 0 ) {
 		const total = Number( coverage.total );
+		const enabled = Math.min( total, Number( coverage.enabled ) || 0 );
 		lines.push( {
 			id: 'two-step-admins',
-			text: sprintf(
-				/* translators: 1: administrators with two-step login. 2: all administrators. */
-				_n(
-					'%1$d of %2$d administrator has two-step login set up. Login and security shows who still needs it.',
-					'%1$d of %2$d administrators have two-step login set up. Login and security shows who still needs it.',
-					total,
-					'happyaccess'
-				),
-				Math.min( total, Number( coverage.enabled ) || 0 ),
-				total
-			),
+			// The Login and security panel lists every role with users, so with
+			// every administrator set, it points at the other roles.
+			text:
+				enabled === total
+					? __(
+							'Every administrator here has two-step login set up. Login and security shows how the other roles are doing.',
+							'happyaccess'
+						)
+					: sprintf(
+							/* translators: 1: administrators with two-step login. 2: all administrators. */
+							_n(
+								'%1$d of %2$d administrator has two-step login set up. Login and security shows who still needs it.',
+								'%1$d of %2$d administrators have two-step login set up. Login and security shows who still needs it.',
+								total,
+								'happyaccess'
+							),
+							enabled,
+							total
+						),
 		} );
 	}
 

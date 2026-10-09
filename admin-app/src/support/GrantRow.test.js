@@ -122,6 +122,23 @@ describe( 'GrantRow', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( 'says a session carries on and that a pass may run 30 days at most', async () => {
+		const { user } = setup();
+
+		await user.click( screen.getByRole( 'button', { name: 'Extend' } ) );
+
+		expect(
+			screen.getByText(
+				"Never more than 30 days from now. If they're logged in before it ends, their session carries on."
+			)
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				'If they are not logged in, they use the link or code as before.'
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'puts focus back on Extend after an extension', async () => {
 		const { user } = setup();
 

@@ -75,6 +75,9 @@ function CoverageRow( { row, hideSetup } ) {
  * Who has two-step login, per role with users, the biggest roles first.
  * Shown only while two-step login is on, since the route exists only then.
  *
+ * The counts are kept for 5 minutes on every site, so the note saying so
+ * always shows with them.
+ *
  * The counts read HappyAccess's own settings only. With another two-step
  * plugin active, accounts that use it would show as still setting up, so
  * that figure is left out and a line names the plugin instead.
@@ -151,7 +154,7 @@ export default function TwoStepCoverage( { others = [] } ) {
 					{ __( 'No users yet.', 'happyaccess' ) }
 				</p>
 			) }
-			{ coverage?.large && (
+			{ coverage && (
 				<p className="ha-help ha-coverage__note">
 					{ __(
 						'Counts are updated every 5 minutes.',

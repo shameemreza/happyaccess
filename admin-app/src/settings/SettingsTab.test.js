@@ -621,6 +621,61 @@ describe( 'Settings tab', () => {
 		} );
 	} );
 
+	describe( 'switch errors', () => {
+		it( 'keeps each switch error next to its own switch until that switch is tried again', async () => {
+			const user = userEvent.setup();
+			await renderTab();
+			const row = ( name ) =>
+				screen.getByRole( 'switch', { name } ).closest( 'li' );
+			apiFetch.mockRejectedValueOnce( {
+				code: 'happyaccess_failed',
+				message: 'Could not turn it on.',
+				data: { status: 500 },
+			} );
+
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			);
+			expect(
+				await within( row( 'Passwordless login' ) ).findByText(
+					'Could not turn it on.'
+				)
+			).toBeInTheDocument();
+
+			// Another switch that saves leaves the first error where it is.
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Two-step login' } )
+			);
+			await waitFor( () =>
+				expect(
+					screen.getByRole( 'switch', { name: 'Two-step login' } )
+				).toBeChecked()
+			);
+			expect(
+				within( row( 'Passwordless login' ) ).getByText(
+					'Could not turn it on.'
+				)
+			).toBeInTheDocument();
+			expect(
+				within( row( 'Two-step login' ) ).queryByText(
+					'Could not turn it on.'
+				)
+			).not.toBeInTheDocument();
+
+			// Trying the same switch again clears its error.
+			await user.click(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			);
+			await waitFor( () =>
+				expect(
+					within( row( 'Passwordless login' ) ).queryByText(
+						'Could not turn it on.'
+					)
+				).not.toBeInTheDocument()
+			);
+		} );
+	} );
+
 	describe( 'Two-step login', () => {
 		const CONFIRM =
 			'WP 2FA already adds two-step login. HappyAccess skips accounts that use it, so nobody is asked twice. Turn on HappyAccess two-step login anyway?';

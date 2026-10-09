@@ -220,21 +220,27 @@ describe( 'Login tab', () => {
 
 	it( 'shows the admin warning only for a manage_options role set to email code only', async () => {
 		const user = userEvent.setup();
+		// The warning under the select; the live region holds a plain copy once it is said.
+		const shown = () => document.querySelector( '.ha-roles__warning' );
 		await renderTab();
-		expect( screen.queryByText( /Anyone who can read/ ) ).toBeNull();
+		expect( shown() ).toBeNull();
 
 		await user.selectOptions(
 			screen.getByLabelText( 'Editor' ),
 			'email_only'
 		);
-		expect( screen.queryByText( /Anyone who can read/ ) ).toBeNull();
+		expect( shown() ).toBeNull();
 
 		await user.selectOptions(
 			screen.getByLabelText( 'Administrator' ),
 			'email_only'
 		);
-		const warning = screen.getByText( /Anyone who can read/ );
+		const warning = shown();
 		expect( warning.textContent ).toBe( WARNING );
+		expect( liveText() ).toBe( WARNING );
+		expect( screen.getAllByText( /Anyone who can read/ ) ).toHaveLength(
+			2
+		);
 		expect(
 			within( warning ).getByText(
 				"define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );"
@@ -248,7 +254,7 @@ describe( 'Login tab', () => {
 			screen.getByLabelText( 'Administrator' ),
 			'either'
 		);
-		expect( screen.queryByText( /Anyone who can read/ ) ).toBeNull();
+		expect( shown() ).toBeNull();
 	} );
 
 	it( 'saves the passwordless group with only the changed keys', async () => {
@@ -546,6 +552,47 @@ describe( 'Login and security side panel', () => {
 		expect( posts ).toEqual( [] );
 	} );
 
+	it( 'draws the email code link between the password and the Log in button, like wp-login.php', async () => {
+		await renderTab();
+		const parts = [
+			...drawing().querySelectorAll(
+				'.ha-loginprev__mock .ha-loginprev__form > *, .ha-loginprev__lost'
+			),
+		].map( ( node ) => node.className || node.textContent );
+
+		const link = parts.indexOf( 'ha-seeprev__alt' );
+		expect( link ).toBeGreaterThan(
+			parts.lastIndexOf( 'ha-loginprev__input' )
+		);
+		expect( link ).toBeLessThan( parts.indexOf( 'ha-loginprev__submit' ) );
+		expect( parts.indexOf( 'ha-loginprev__lost' ) ).toBe(
+			parts.length - 1
+		);
+	} );
+
+	it( 'labels the code step Email code when nobody here uses the app', async () => {
+		coverage = { ...COVERAGE, methods: { app: 0, email: 4 } };
+		await renderTab( boot( BOTH_ON ) );
+
+		await waitFor( () =>
+			expect( drawing() ).toHaveTextContent( 'Email code' )
+		);
+		expect( drawing() ).not.toHaveTextContent( 'Authenticator app code' );
+		expect(
+			preview().querySelector( '.screen-reader-text' ).textContent
+		).toBe(
+			'The WordPress login form, with an "Email me a login code" link between the password and the Log in button, then a second step that asks for a code sent by email, with a link to use a backup code.'
+		);
+	} );
+
+	it( 'keeps the app label while someone uses the app, or before the counts load', async () => {
+		coverage = { ...COVERAGE, methods: { app: 1, email: 4 } };
+		await renderTab( boot( BOTH_ON ) );
+		await screen.findByText( 'Editors: 2 of 5' );
+
+		expect( drawing() ).toHaveTextContent( 'Authenticator app code' );
+	} );
+
 	it( 'says what the drawing shows in one sentence, for screen readers', async () => {
 		const user = userEvent.setup();
 		await renderTab();
@@ -554,7 +601,7 @@ describe( 'Login and security side panel', () => {
 
 		expect( drawing() ).toHaveAttribute( 'aria-hidden', 'true' );
 		expect( sentence() ).toBe(
-			'The WordPress login form, with an "Email me a login code" link under it.'
+			'The WordPress login form, with an "Email me a login code" link between the password and the Log in button.'
 		);
 
 		await user.selectOptions(
@@ -562,7 +609,7 @@ describe( 'Login and security side panel', () => {
 			'button'
 		);
 		expect( sentence() ).toBe(
-			'The WordPress login form, with an "Email me a login code" link under it.'
+			'The WordPress login form, with an "Email me a login code" link between the password and the Log in button.'
 		);
 	} );
 
@@ -585,7 +632,7 @@ describe( 'Login and security side panel', () => {
 		expect(
 			preview().querySelector( '.screen-reader-text' ).textContent
 		).toBe(
-			'The WordPress login form, with an "Email me a login code" link under it, then a second step that asks for an authenticator app code, with a link to use a backup code.'
+			'The WordPress login form, with an "Email me a login code" link between the password and the Log in button, then a second step that asks for an authenticator app code, with a link to use a backup code.'
 		);
 
 		const card = await screen.findByRole( 'region', {
@@ -597,8 +644,8 @@ describe( 'Login and security side panel', () => {
 			'Administrators: 2 of 3',
 		] );
 		expect(
-			within( card ).queryByText( 'Counts are updated every 5 minutes.' )
-		).not.toBeInTheDocument();
+			within( card ).getByText( 'Counts are updated every 5 minutes.' )
+		).toBeInTheDocument();
 	} );
 
 	it( "follows the main site's two-step switch on a subsite, with the network note in place of the form", async () => {
@@ -672,8 +719,8 @@ describe( 'Login and security side panel', () => {
 		).toBeInTheDocument();
 	} );
 
-	it( 'says the counts can be 5 minutes old on a big site', async () => {
-		coverage = { ...COVERAGE, large: true };
+	it( 'says the counts can be 5 minutes old on any site', async () => {
+		coverage = { ...COVERAGE, large: false };
 		await renderTab( boot( BOTH_ON ) );
 
 		expect(

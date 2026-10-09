@@ -1,6 +1,7 @@
 import { createInterpolateElement, useId } from '@wordpress/element';
 import { SelectControl } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
+import { useAnnounce } from '../hooks/useAnnounce';
 
 export const EITHER = 'either';
 export const EMAIL_ONLY = 'email_only';
@@ -17,22 +18,40 @@ function choices() {
 
 /**
  * The warning for a role that can manage the site and may log in by email
- * code only. The wp-config line stays out of the translated text.
+ * code only, with the <code> tags still in. The wp-config line stays out
+ * of the translated text.
  *
- * @return {Element} The warning text.
+ * @return {string} The warning.
+ */
+function adminWarningSource() {
+	return sprintf(
+		/* translators: %s: a line of PHP to add to wp-config.php. */
+		__(
+			'Anyone who can read this email inbox can log in as this role. If email stops working, add <code>%s</code> to wp-config.php to get back in.',
+			'happyaccess'
+		),
+		"define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );"
+	);
+}
+
+/**
+ * @return {Element} The warning, with the wp-config line in a code element.
  */
 function adminWarning() {
-	return createInterpolateElement(
-		sprintf(
-			/* translators: %s: a line of PHP to add to wp-config.php. */
-			__(
-				'Anyone who can read this email inbox can log in as this role. If email stops working, add <code>%s</code> to wp-config.php to get back in.',
-				'happyaccess'
-			),
-			"define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );"
-		),
-		{ code: <code /> }
-	);
+	return createInterpolateElement( adminWarningSource(), {
+		code: <code />,
+	} );
+}
+
+/**
+ * @return {string} The warning as plain text, for the live region.
+ */
+function adminWarningText() {
+	return adminWarningSource()
+		.split( '<code>' )
+		.join( '' )
+		.split( '</code>' )
+		.join( '' );
 }
 
 /**
@@ -46,7 +65,17 @@ function adminWarning() {
  */
 function RoleRow( { role, value, onChange } ) {
 	const id = useId();
+	const announce = useAnnounce();
 	const warn = role.isAdmin && EMAIL_ONLY === value;
+
+	// The warning is tied to the select, so it is read on focus. When a
+	// change makes it appear, it is also said once in the live region.
+	const change = ( next ) => {
+		onChange( next );
+		if ( role.isAdmin && EMAIL_ONLY === next && EMAIL_ONLY !== value ) {
+			announce( adminWarningText() );
+		}
+	};
 
 	return (
 		<li className="ha-roles__row">
@@ -58,7 +87,7 @@ function RoleRow( { role, value, onChange } ) {
 				className="ha-roles__control"
 				value={ value }
 				options={ choices() }
-				onChange={ onChange }
+				onChange={ change }
 				help={
 					warn ? (
 						<span className="ha-roles__warning">

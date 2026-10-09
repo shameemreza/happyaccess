@@ -4,7 +4,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 24px;
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	// The panel beside the forms: what people see, and who has two-step login.
@@ -13,7 +13,7 @@
 		flex: 1 1 320px;
 		flex-direction: column;
 		gap: 24px;
-		min-width: 0;
+		min-inline-size: 0;
 
 		.ha-loginprev {
 			flex: none;
@@ -113,7 +113,7 @@
 	}
 
 	.ha-login__group {
-		min-width: 0;
+		min-inline-size: 0;
 		padding-block-start: 16px;
 		border-block-start: 1px solid var(--ha-line-soft);
 	}
@@ -166,7 +166,7 @@
 	}
 
 	.ha-login__recovery {
-		min-width: 0;
+		min-inline-size: 0;
 
 		.ha-help {
 			margin-block-end: 4px;
@@ -204,14 +204,14 @@
 		display: flex;
 		flex: 1 1 12rem;
 		align-items: center;
-		min-width: 0;
+		min-inline-size: 0;
 		color: var(--ha-text);
 		font-weight: 500;
 	}
 
 	.ha-roles__control {
 		flex: 1 1 18rem;
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	.ha-settings__form .ha-roles__control .components-base-control__help {
