@@ -502,7 +502,9 @@ final class SettingsController {
 	}
 
 	/**
-	 * Dotted names of the settings whose values differ. Values never leave this method.
+	 * Dotted names of the settings whose values differ, added or removed.
+	 * A role list counts as one setting: any change to it, a shorter list
+	 * included, gives its own name. Values never leave this method.
 	 *
 	 * @param array  $before Settings before.
 	 * @param array  $after  Settings after.
@@ -514,13 +516,42 @@ final class SettingsController {
 		foreach ( $after as $key => $value ) {
 			$path = '' === $prefix ? (string) $key : $prefix . '.' . $key;
 			$old  = array_key_exists( $key, $before ) ? $before[ $key ] : null;
-			if ( is_array( $value ) ) {
+			if ( in_array( $path, Settings::ROLE_LISTS, true ) ) {
+				if ( self::role_set( $old ) !== self::role_set( $value ) ) {
+					$keys[] = $path;
+				}
+			} elseif ( is_array( $value ) ) {
 				$keys = array_merge( $keys, self::changed_keys( is_array( $old ) ? $old : array(), $value, $path ) );
 			} elseif ( $old !== $value ) {
 				$keys[] = $path;
 			}
 		}
+		// A key that is gone, such as a role taken out of a role policy.
+		foreach ( $before as $key => $old ) {
+			if ( array_key_exists( $key, $after ) ) {
+				continue;
+			}
+			$path = '' === $prefix ? (string) $key : $prefix . '.' . $key;
+			if ( is_array( $old ) && ! in_array( $path, Settings::ROLE_LISTS, true ) ) {
+				$keys = array_merge( $keys, self::changed_keys( $old, array(), $path ) );
+			} else {
+				$keys[] = $path;
+			}
+		}
 		return $keys;
+	}
+
+	/**
+	 * A role list as a sorted set, so only a different set of roles counts
+	 * as a change, not a different order.
+	 *
+	 * @param mixed $value Stored list.
+	 * @return string[]
+	 */
+	private static function role_set( $value ) {
+		$roles = array_values( array_unique( array_map( 'strval', is_array( $value ) ? $value : array() ) ) );
+		sort( $roles );
+		return $roles;
 	}
 
 	/**

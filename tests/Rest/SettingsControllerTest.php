@@ -523,6 +523,74 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( 'Finished setup and turned on Passwordless login', $items[0]['summary'] );
 	}
 
+	/**
+	 * The line the Activity route shows for the newest settings row.
+	 *
+	 * @return string
+	 */
+	private function newest_settings_line() {
+		$read = new WP_REST_Request( 'GET', '/' . \HappyAccess\Rest\Routes::NS . '/activity' );
+		$read->set_query_params( array( 'event' => 'settings_changed' ) );
+		return rest_do_request( $read )->get_data()['items'][0]['summary'];
+	}
+
+	public function test_taking_a_role_out_of_the_passwordless_policy_is_logged() {
+		$this->request(
+			'POST',
+			'/settings',
+			array(
+				'passwordless' => array(
+					'role_policy' => array(
+						'administrator' => 'email_only',
+						'editor'        => 'email_only',
+					),
+				),
+			)
+		);
+		// A value that isn't a choice drops the role from the policy.
+		$this->request( 'POST', '/settings', array( 'passwordless' => array( 'role_policy' => array( 'editor' => '' ) ) ) );
+
+		$this->assertSame( array( 'administrator' => 'email_only' ), Settings::get( 'passwordless.role_policy' ) );
+		$rows = $this->settings_rows();
+		$this->assertCount( 2, $rows );
+		$this->assertSame( array( 'passwordless.role_policy.editor' ), $rows[0]['meta']['keys'] );
+		$this->assertSame( 'Changed settings: Passwordless login by role', $this->newest_settings_line() );
+	}
+
+	public function test_taking_a_role_out_of_the_two_step_policy_is_logged() {
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'role_policy' => array( 'editor' => '' ) ) ) );
+
+		$this->assertSame( array(), Settings::get( 'two_step.role_policy' ) );
+		$rows = $this->settings_rows();
+		$this->assertCount( 2, $rows );
+		$this->assertSame( array( 'two_step.role_policy.editor' ), $rows[0]['meta']['keys'] );
+		$this->assertSame( 'Changed settings: Two-step login by role', $this->newest_settings_line() );
+	}
+
+	public function test_a_shorter_device_alert_list_is_logged_as_one_setting() {
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array( 'administrator', 'editor' ) ) ) );
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array( 'administrator' ) ) ) );
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 2, $rows );
+		$this->assertSame( array( 'two_step.device_alert_roles' ), $rows[0]['meta']['keys'] );
+		$this->assertSame( array( 'two_step.device_alert_roles' ), $rows[1]['meta']['keys'], 'A longer list is one setting too.' );
+		$this->assertSame( 'Changed settings: New device alerts', $this->newest_settings_line() );
+
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array() ) ) );
+		$rows = $this->settings_rows();
+		$this->assertCount( 3, $rows, 'Emptying the list is a change.' );
+		$this->assertSame( array( 'two_step.device_alert_roles' ), $rows[0]['meta']['keys'] );
+	}
+
+	public function test_the_same_device_alert_roles_in_another_order_log_nothing() {
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array( 'administrator', 'editor' ) ) ) );
+		$this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array( 'editor', 'administrator' ) ) ) );
+
+		$this->assertCount( 1, $this->settings_rows() );
+	}
+
 	public function test_a_save_that_changes_nothing_logs_nothing() {
 		$this->request( 'POST', '/settings', array( 'security' => array( 'max_attempts' => Settings::get( 'security.max_attempts' ) ) ) );
 		update_option( SettingsController::SECRET_OPTION, 'same', false );
