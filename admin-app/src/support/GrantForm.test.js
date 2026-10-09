@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
@@ -48,10 +48,17 @@ const created = {
 	link_url: 'https://x.test/?k=1',
 };
 
-function mockApi( { createResult = created, createError = null } = {} ) {
+function mockApi( {
+	createResult = created,
+	createError = null,
+	settings = null,
+} = {} ) {
 	apiFetch.mockImplementation( ( { path, method } ) => {
 		if ( '/happyaccess/v1/catalog' === path ) {
 			return Promise.resolve( catalog );
+		}
+		if ( settings && '/happyaccess/v1/settings' === path ) {
+			return Promise.resolve( settings );
 		}
 		if ( '/happyaccess/v1/grants' === path && 'POST' === method ) {
 			return createError
@@ -421,6 +428,130 @@ describe( 'GrantForm time and preview', () => {
 		await user.click( createButton() );
 		await waitFor( () => expect( grantCalls() ).toHaveLength( 1 ) );
 		expect( lastBody().duration ).toBe( 10 * 86400 );
+	} );
+} );
+
+describe( 'GrantForm default length', () => {
+	const withDefault = ( seconds ) =>
+		mockApi( { settings: { support: { default_duration: seconds } } } );
+	const pressed = ( name ) =>
+		expect( screen.getByRole( 'button', { name } ) ).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+
+	it( 'starts at the preset that matches the Default pass length setting', async () => {
+		withDefault( 7 * 86400 );
+		const { user } = setup();
+
+		await waitFor( () => pressed( '7 days' ) );
+		await fillLabel( user );
+		await user.click( createButton() );
+		await waitFor( () => expect( grantCalls() ).toHaveLength( 1 ) );
+		expect( lastBody().duration ).toBe( 7 * 86400 );
+	} );
+
+	it( 'starts at 1 day when the setting is 1 day', async () => {
+		withDefault( 86400 );
+		setup();
+
+		await waitFor( () =>
+			expect(
+				screen.getByRole( 'button', { name: '1 day' } )
+			).toHaveAttribute( 'aria-pressed', 'true' )
+		);
+	} );
+
+	it( 'starts at Custom with the setting as its end when no preset matches', async () => {
+		vi.useFakeTimers( { toFake: [ 'Date' ] } );
+		vi.setSystemTime( new Date( '2026-10-06T16:40:00Z' ) );
+		browserZone( 'UTC' );
+		withDefault( 10 * 86400 );
+		setup();
+
+		await waitFor( () => pressed( 'Custom' ) );
+		expect( screen.getByTestId( 'ha-ends' ) ).toHaveTextContent(
+			'Ends Fri, Oct 16, 4:40 pm'
+		);
+	} );
+
+	it( 'keeps the length someone already picked when the setting loads late', async () => {
+		let answer;
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( '/happyaccess/v1/settings' === path ) {
+				return new Promise( ( resolve ) => {
+					answer = resolve;
+				} );
+			}
+			return Promise.reject( new Error( 'Unexpected request ' + path ) );
+		} );
+		const { user } = setup();
+
+		await user.click( screen.getByRole( 'button', { name: '1 day' } ) );
+		await waitFor( () => expect( answer ).toBeDefined() );
+		await act( async () => {
+			answer( { support: { default_duration: 7 * 86400 } } );
+		} );
+
+		pressed( '1 day' );
+		expect(
+			screen.getByRole( 'button', { name: '7 days' } )
+		).toHaveAttribute( 'aria-pressed', 'false' );
+	} );
+
+	it( 'stays at 3 days when the settings could not load', () => {
+		setup();
+		expect(
+			screen.getByRole( 'button', { name: '3 days' } )
+		).toHaveAttribute( 'aria-pressed', 'true' );
+	} );
+} );
+
+describe( 'GrantForm login alerts on a full pass', () => {
+	it( 'fixes the alerts to every login for Full admin and sends every', async () => {
+		const { user } = setup();
+		await fillLabel( user );
+		await user.click(
+			screen.getByRole( 'button', { name: 'More options' } )
+		);
+		await user.selectOptions(
+			screen.getByLabelText( 'Login alerts' ),
+			'off'
+		);
+		await pickLevel( user, /Full admin/ );
+
+		const select = screen.getByLabelText( 'Login alerts' );
+		expect( select ).toBeDisabled();
+		expect( select ).toHaveValue( 'every' );
+		expect(
+			screen.getByText(
+				'A full admin pass always alerts you on every login.'
+			)
+		).toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole( 'checkbox', { name: /I trust this person/ } )
+		);
+		await user.click( createButton() );
+		await waitFor( () => expect( grantCalls() ).toHaveLength( 1 ) );
+		expect( lastBody().notify ).toBe( 'every' );
+	} );
+
+	it( 'gives the alert choice back when the level changes from Full admin', async () => {
+		const { user } = setup();
+		await user.click(
+			screen.getByRole( 'button', { name: 'More options' } )
+		);
+		await user.selectOptions(
+			screen.getByLabelText( 'Login alerts' ),
+			'off'
+		);
+		await pickLevel( user, /Full admin/ );
+		await pickLevel( user, /Protected admin/ );
+
+		const select = screen.getByLabelText( 'Login alerts' );
+		expect( select ).toBeEnabled();
+		expect( select ).toHaveValue( 'off' );
 	} );
 } );
 

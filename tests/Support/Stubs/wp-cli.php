@@ -36,4 +36,12 @@ class WP_CLI {
 	public static function error( $message ) {
 		self::$calls[] = array( 'error', $message );
 	}
+
+	public static function warning( $message ) {
+		self::$calls[] = array( 'warning', $message );
+	}
+
+	public static function line( $message = '' ) {
+		self::$calls[] = array( 'line', $message );
+	}
 }

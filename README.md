@@ -1,6 +1,6 @@
 # HappyAccess: temporary login, passwordless login and 2FA for WordPress
 
-HappyAccess is a free WordPress plugin that fixes the three login problems most WordPress and WooCommerce sites run into. It gives a support person temporary admin access without sharing a password, lets customers and users log in without a password using an email code or a login link, and adds two-step login (two-factor authentication, or 2FA) with an authenticator app, email codes or backup codes. On top of that, it emails your administrators when their account logs in from a new device.
+HappyAccess is a free WordPress plugin that fixes the three login problems most WordPress and WooCommerce sites run into. It gives a support person temporary admin access without sharing a password, lets customers and users log in without a password using an email code or a login link, and adds two-step login (two-factor authentication, or 2FA) with an authenticator app, email codes or backup codes. Two-step login also emails your administrators when their account logs in from a new device.
 
 [![WordPress.org plugin version](https://img.shields.io/wordpress/plugin/v/happyaccess)](https://wordpress.org/plugins/happyaccess/)
 [![Tested up to WordPress](https://img.shields.io/wordpress/plugin/tested/happyaccess)](https://wordpress.org/plugins/happyaccess/)
@@ -102,7 +102,7 @@ Two-step login (also called two-factor authentication or 2FA) asks for a second 
 
 ### New device login alerts
 
-When an administrator's account logs in from a browser it hasn't used before, they get an email with the time, the browser, the system and the IP address. The email has a link to change their password if it wasn't them. You can turn alerts on for other roles in Login and security.
+When an administrator's account logs in from a browser it hasn't used before, they get an email with the time, the browser, the system and the IP address. The email has a link to change their password if it wasn't them. You can turn alerts on for other roles in Login and security. New device alerts are part of two-step login, so they run while two-step login is on.
 
 ## For support teams, agencies and developers
 

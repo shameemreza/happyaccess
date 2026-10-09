@@ -8,6 +8,7 @@
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Installer;
 use HappyAccess\Features\SupportAccess\Grants;
+use HappyAccess\Features\SupportAccess\Notifications;
 
 require_once __DIR__ . '/RestTestCase.php';
 
@@ -183,6 +184,27 @@ class GrantsControllerTest extends RestTestCase {
 
 		$this->assertSame( 201, $response->get_status() );
 		$this->assertSame( 'full', $response->get_data()['level'] );
+	}
+
+	public function test_full_create_takes_any_notify_value_and_alerts_on_every_login() {
+		$response = $this->request(
+			'POST',
+			'/grants',
+			array(
+				'label'        => 'Acme',
+				'level'        => 'full',
+				'confirm_full' => true,
+				'notify'       => 'off',
+			)
+		);
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'off', $response->get_data()['notify'] );
+
+		reset_phpmailer_instance();
+		$grant = Grants::get( $response->get_data()['id'] );
+		Notifications::login( $grant, false );
+		$this->assertCount( 1, tests_retrieve_phpmailer_instance()->mock_sent );
 	}
 
 	public function test_custom_create_with_a_trust_cap_needs_confirm() {

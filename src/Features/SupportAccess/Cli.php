@@ -151,14 +151,20 @@ final class Cli {
 			return;
 		}
 
-		if ( 0 === $create['created_by'] ) {
-			\WP_CLI::warning( __( 'No owner is set for this grant, so nobody will get login alerts. Pass --user=<id|login> to set one.', 'happyaccess' ) );
-		}
-
 		$grant = Grants::get( $result['id'] );
 		if ( null === $grant ) {
 			\WP_CLI::error( __( 'The grant was created but could not be read back.', 'happyaccess' ) );
 			return;
+		}
+
+		if ( 0 === $create['created_by'] ) {
+			$owner = get_userdata( Grants::owner_id( $grant ) );
+			if ( $owner ) {
+				/* translators: %s: login of the administrator who gets the alerts and posts. */
+				\WP_CLI::warning( sprintf( __( 'No --user given. Login alerts and any posts they write will go to %s.', 'happyaccess' ), $owner->user_login ) );
+			} else {
+				\WP_CLI::warning( __( 'No --user given and no administrator was found. Login alerts will go to the site email address.', 'happyaccess' ) );
+			}
 		}
 
 		/* translators: %d: grant id. */

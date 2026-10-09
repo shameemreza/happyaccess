@@ -65,6 +65,7 @@ export default function MoreOptions( {
 	roles = NONE,
 } ) {
 	const lookups = useMemo( () => buildMenuLookups( menus ), [ menus ] );
+	const isFull = 'full' === form.level;
 	const closedIcon = isRTL() ? chevronLeft : chevronRight;
 	const roleOptions = [
 		{
@@ -118,7 +119,16 @@ export default function MoreOptions( {
 					<div className="ha-more__pair">
 						<SelectControl
 							label={ __( 'Login alerts', 'happyaccess' ) }
-							value={ form.notify }
+							value={ isFull ? 'every' : form.notify }
+							disabled={ isFull }
+							help={
+								isFull
+									? __(
+											'A full admin pass always alerts you on every login.',
+											'happyaccess'
+										)
+									: undefined
+							}
 							options={ [
 								{
 									value: 'first',

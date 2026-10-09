@@ -40,6 +40,28 @@ class NotificationsTest extends WP_UnitTestCase {
 		$this->assertCount( 0, $this->sent() );
 	}
 
+	public function test_a_full_pass_alerts_on_every_login_whatever_its_notify_value() {
+		foreach ( array( 'first', 'off' ) as $notify ) {
+			reset_phpmailer_instance();
+			$full = Grants::get(
+				Grants::create(
+					array(
+						'label'        => 'Host ' . $notify,
+						'level'        => 'full',
+						'confirm_full' => true,
+						'notify'       => $notify,
+					)
+				)['id']
+			);
+			$this->assertSame( $notify, $full['notify'], 'The stored value stays as given.' );
+
+			Notifications::login( $full, true );
+			Notifications::login( $full, false );
+			Notifications::login( $full, false );
+			$this->assertCount( 3, $this->sent(), "A full pass with notify {$notify} alerts on every login." );
+		}
+	}
+
 	public function test_login_alert_for_a_grant_without_a_creator_goes_to_an_admin() {
 		$grant = Grants::get( Grants::create( array( 'label' => 'Orphan', 'created_by' => 0 ) )['id'] );
 		Notifications::login( $grant, true );

@@ -18,7 +18,7 @@ HappyAccess fixes the three login problems most WordPress and WooCommerce sites 
 * **Passwordless login:** let customers and users log in with a 6-digit code or a login link sent to their email. It works on the WordPress login page, WooCommerce My Account and checkout.
 * **Two-step login (2FA):** ask for a code from an authenticator app, an email code or a backup code after the password, and require it for the roles you pick.
 
-On top of that, **new device alerts** email your administrators when their account logs in from a browser it hasn't seen before.
+Two-step login also brings **new device alerts**: your administrators get an email when their account logs in from a browser it hasn't seen before.
 
 Each feature is a switch in Settings. Turn on only what you need. Anything you leave off adds no code to your pages.
 
@@ -77,7 +77,7 @@ Two-step login (also called two-factor authentication or 2FA) asks for a second 
 
 = New device login alerts =
 
-When an administrator's account logs in from a browser it hasn't used before, they get an email with the time, the browser, the system and the IP address, and a link to change their password if it wasn't them. You can turn alerts on for other roles in Login and security.
+When an administrator's account logs in from a browser it hasn't used before, they get an email with the time, the browser, the system and the IP address, and a link to change their password if it wasn't them. You can turn alerts on for other roles in Login and security. New device alerts are part of two-step login, so they run while two-step login is on.
 
 = Light, private and secure =
 

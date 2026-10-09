@@ -25,7 +25,7 @@ Passes made here are always Protected admin. Use the admin screen for Custom acc
 | `--redirect=<url>` | A URL on this site to open after login, like an admin screen. A URL on another site is dropped with a warning. |
 | `--notify=<mode>` | Login alerts: `first` (default), `every` or `off`. |
 
-Pass the global `--user` option so the pass has an owner, who gets the alerts and the account's posts when it ends. Without it, WP-CLI warns that no owner is set, and HappyAccess falls back to the first administrator account.
+Pass the global `--user` option so the pass has an owner, who gets the alerts and the account's posts when it ends. Without it, HappyAccess falls back to the first administrator account, and WP-CLI warns with that account's login, for example "No --user given. Login alerts and any posts they write will go to admin."
 
 ```
 # Three days of administrator access.

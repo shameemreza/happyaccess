@@ -45,7 +45,8 @@ final class Notifications {
 	}
 
 	/**
-	 * Tells the granting user that someone signed in.
+	 * Tells the granting user that someone signed in. A full admin pass
+	 * alerts on every login, whatever its stored notify value says.
 	 *
 	 * @param array  $grant  Grant.
 	 * @param bool   $first  Whether this was the first login.
@@ -54,6 +55,9 @@ final class Notifications {
 	 */
 	public static function login( array $grant, $first, $method = '' ) {
 		$notify = isset( $grant['notify'] ) ? $grant['notify'] : 'first';
+		if ( isset( $grant['protection'] ) && 'full' === $grant['protection'] ) {
+			$notify = 'every';
+		}
 		if ( 'every' !== $notify && ! ( 'first' === $notify && $first ) ) {
 			return;
 		}

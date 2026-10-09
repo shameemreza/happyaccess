@@ -50,7 +50,7 @@ A few things stay off even here. The plugin and theme file editors and applicati
 
 ## How long it lasts
 
-Pick 1 day, 3 days or 7 days. Custom opens a date and time picker for anything from 1 hour to 30 days ahead. Times use your site's timezone, and the form names the timezone when it differs from your browser's.
+The form starts at your Default pass length setting, 3 days unless you changed it. Pick 1 day, 3 days or 7 days. Custom opens a date and time picker for anything from 1 hour to 30 days ahead. Times use your site's timezone, and the form names the timezone when it differs from your browser's.
 
 30 days is the limit for every pass, including when you extend one later.
 
@@ -60,7 +60,7 @@ Select More options under Access ends after.
 
 - **One-time use:** the link and the code work for one login. That session can carry on until the access ends.
 - **Or give a different role:** Protected admin only. Pick another role instead of administrator.
-- **Login alerts:** First login (the default), Every login or Off. The alert goes to you, with the time, the IP address and whether they used the link or the code.
+- **Login alerts:** First login (the default), Every login or Off. The alert goes to you, with the time, the IP address and whether they used the link or the code. A Full admin pass always alerts on every login, so the choice is fixed there.
 - **Hide admin screens:** pick menu items they shouldn't see. HappyAccess hides them and refuses their URLs.
 - **Only allow these IP addresses:** the link and the code only work from these addresses. Separate several with commas. Leave it empty to allow any address.
 - **After login, open:** a path like `/wp-admin/edit.php`. Leave it empty to open the dashboard.

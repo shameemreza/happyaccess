@@ -116,6 +116,33 @@ class CliTest extends WP_UnitTestCase {
 		}, $values ) );
 	}
 
+	/**
+	 * WP-CLI is stubbed here, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_grant_without_user_names_the_first_administrator_in_its_warning() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wp-cli.php';
+		$first = get_userdata( (int) get_users( array( 'role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1, 'fields' => 'ID' ) )[0] );
+		wp_set_current_user( 0 );
+
+		( new Cli() )->grant( array(), array( 'label' => 'Acme' ) );
+
+		$warnings = array_values(
+			array_filter(
+				WP_CLI::$calls,
+				static function ( $call ) {
+					return 'warning' === $call[0];
+				}
+			)
+		);
+		$this->assertSame(
+			array( array( 'warning', 'No --user given. Login alerts and any posts they write will go to ' . $first->user_login . '.' ) ),
+			$warnings
+		);
+	}
+
 	public function test_list_rows() {
 		Grants::create( array( 'label' => 'Acme' ) );
 		$rows = Cli::list_rows();

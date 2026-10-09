@@ -20,7 +20,7 @@ import {
 } from '@wordpress/date';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { createGrant } from '../api';
-import { useCatalog } from '../data/DataProvider';
+import { useCatalog, useSettings } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import { useNow } from '../hooks/useNow';
 import MoreOptions from './MoreOptions';
@@ -127,6 +127,28 @@ function timezoneNote( timezone ) {
 
 const naive = ( ms ) => siteDate( NAIVE_FORMAT, new Date( ms ) );
 
+/**
+ * The duration fields for the Default pass length setting: the matching
+ * preset, or Custom ending that long from now.
+ *
+ * @param {number} seconds `support.default_duration`.
+ * @param {number} nowMs   Now, in milliseconds.
+ * @param {Array}  presets The duration buttons.
+ * @return {Object|null} { duration, customEnd }, or null when the setting is not a positive number.
+ */
+function durationFromSetting( seconds, nowMs, presets ) {
+	if ( ! Number.isFinite( seconds ) || seconds <= 0 ) {
+		return null;
+	}
+	const match = presets.find(
+		( item ) => item.days > 0 && item.days * 86400 === seconds
+	);
+	if ( match ) {
+		return { duration: match.key, customEnd: '' };
+	}
+	return { duration: 'custom', customEnd: naive( nowMs + seconds * 1000 ) };
+}
+
 // Close to what the server accepts: something@something.tld, no spaces.
 const looksLikeEmail = ( value ) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( value );
 
@@ -226,6 +248,25 @@ export default function GrantForm( {
 	const isCustom = 'custom' === form.level;
 	// Loads on the first visit to Custom and stays for as long as the form does.
 	const { catalog, loading, error: catalogError, retry } = useCatalog();
+	const { settings } = useSettings();
+	const defaultSeconds = Number(
+		settings && settings.support ? settings.support.default_duration : NaN
+	);
+	// The setting loads after the form shows, so it applies until someone picks a length.
+	const durationPicked = useRef( false );
+	useEffect( () => {
+		if ( durationPicked.current ) {
+			return;
+		}
+		const start = durationFromSetting(
+			defaultSeconds,
+			Date.now(),
+			durations
+		);
+		if ( start ) {
+			setForm( ( prev ) => ( { ...prev, ...start } ) );
+		}
+	}, [ defaultSeconds, durations ] );
 
 	const presets = catalog ? catalog.presets : {};
 	const baseKey = presets[ form.base ]
@@ -328,6 +369,7 @@ export default function GrantForm( {
 	};
 
 	const pickDuration = ( key ) => {
+		durationPicked.current = true;
 		const patch = { duration: key };
 		if ( 'custom' === key && ! form.customEnd ) {
 			patch.customEnd = naive( clamp( defaultCustomMs ) );
@@ -337,6 +379,7 @@ export default function GrantForm( {
 
 	const pickDate = ( value ) => {
 		if ( value ) {
+			durationPicked.current = true;
 			set( { customEnd: naive( clamp( getDate( value ).getTime() ) ) } );
 		}
 	};
@@ -368,7 +411,7 @@ export default function GrantForm( {
 					Math.max( 3600, seconds )
 				),
 				oneTime: form.oneTime,
-				notify: form.notify,
+				notify: 'full' === form.level ? 'every' : form.notify,
 				menus: form.menus,
 				ips: form.ips,
 				redirectTo: form.redirectTo,
