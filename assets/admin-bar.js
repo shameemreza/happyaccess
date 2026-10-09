@@ -4,8 +4,10 @@
 	if ( ! s ) {
 		return;
 	}
-	// wp-i18n picks the plural form by the rules of the site language.
-	var _n = window.wp && window.wp.i18n ? window.wp.i18n._n : null;
+	// wp-i18n picks the plural form by the rules of the site language, and its
+	// sprintf fills %d, %s and numbered ones like %1$d the same way.
+	var i18n = window.wp && window.wp.i18n ? window.wp.i18n : null;
+	var _n = i18n ? i18n._n : null;
 	var units = {
 		min: function( n ) {
 			/* translators: %d: number of minutes. */
@@ -22,7 +24,7 @@
 	};
 
 	function unit( n, kind ) {
-		return units[ kind ]( n ).replace( '%d', n );
+		return i18n.sprintf( units[ kind ]( n ), n );
 	}
 
 	// Same rules as AdminBar::time_left(): two units under three days or three
@@ -58,7 +60,7 @@
 			return;
 		}
 		var left = parseInt( el.getAttribute( 'data-expires' ), 10 ) - Math.floor( Date.now() / 1000 );
-		el.textContent = left > 0 ? s.ends.replace( '%s', span( left ) ) : s.ended;
+		el.textContent = left > 0 ? i18n.sprintf( s.ends, span( left ) ) : s.ended;
 	}
 
 	function init() {
