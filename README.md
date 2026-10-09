@@ -219,8 +219,6 @@ I'm Shameem Reza, and I've spent years helping people fix their WordPress sites.
 
 HappyAccess started as my fix for that. You give support a link or a code instead of a password. The access ends when the time is up, and the account goes with it.
 
-In 1.1.0 I rebuilt it from scratch and added fixes for two login problems I kept running into: people who forget passwords, and accounts that need more than a password. HappyAccess is my own, independent project.
-
 ## Links
 
 - [HappyAccess on WordPress.org](https://wordpress.org/plugins/happyaccess/).
