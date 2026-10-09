@@ -1,5 +1,7 @@
 # HappyAccess: temporary login, passwordless login and 2FA for WordPress
 
+![HappyAccess: temporary access, passwordless login, two-step login and new device alerts](.github/assets/banner.gif)
+
 HappyAccess is a free WordPress plugin that fixes the three login problems most WordPress and WooCommerce sites run into. It gives a support person temporary admin access without sharing a password, lets customers and users log in without a password using an email code or a login link, and adds two-step login (two-factor authentication, or 2FA) with an authenticator app, email codes or backup codes. Two-step login also emails your administrators when their account logs in from a new device.
 
 [![WordPress.org plugin version](https://img.shields.io/wordpress/plugin/v/happyaccess)](https://wordpress.org/plugins/happyaccess/)
