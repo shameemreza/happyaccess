@@ -127,6 +127,86 @@ class PageTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Emergency lock ended 2 support passes.', $this->lock_notice() );
 	}
 
+	/**
+	 * The migration notice as printed, with entities read back to text.
+	 *
+	 * @return string
+	 */
+	private function migration_notice() {
+		ob_start();
+		Page::migration_notice();
+		return html_entity_decode( ob_get_clean(), ENT_QUOTES );
+	}
+
+	/**
+	 * Marks this site's migration as failed with a reason, and behind.
+	 *
+	 * @param string $reason Why it stopped.
+	 * @return void
+	 */
+	private function fail_migration( $reason ) {
+		update_option( 'happyaccess_db_version', '1.1.0' );
+		HappyAccess\Core\Internal::run(
+			static function () use ( $reason ) {
+				set_transient( Installer::FAILED_TRANSIENT, $reason, 15 * MINUTE_IN_SECONDS );
+			}
+		);
+	}
+
+	public function test_register_hooks_the_migration_notice() {
+		Page::register();
+		$this->assertNotFalse( has_action( 'admin_notices', array( Page::class, 'migration_notice' ) ) );
+	}
+
+	public function test_a_failing_migration_tells_a_manager_why() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->fail_migration( 'secret_missing' );
+
+		$notice = $this->migration_notice();
+
+		$this->assertStringContainsString( 'notice-error', $notice );
+		$this->assertStringContainsString( "HappyAccess couldn't finish updating.", $notice );
+		$this->assertStringContainsString( "site key couldn't be saved", $notice );
+		$this->assertStringContainsString( 'every 15 minutes', $notice );
+		$this->assertSame( $notice, $this->migration_notice(), 'It stays while the update keeps failing.' );
+	}
+
+	/**
+	 * @dataProvider migration_reasons
+	 *
+	 * @param string $reason Stored reason.
+	 * @param string $text   What the notice says about it.
+	 */
+	public function test_each_migration_reason_is_named( $reason, $text ) {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->fail_migration( $reason );
+		$this->assertStringContainsString( $text, $this->migration_notice() );
+	}
+
+	public function migration_reasons() {
+		return array(
+			'table'   => array( 'missing_table:logs', 'The table wptests_happyaccess_logs is missing.' ),
+			'column'  => array( 'missing_column:tokens.code_hash', 'The column code_hash of the table wptests_happyaccess_tokens is missing.' ),
+			'write'   => array( 'write_failed', 'A database write failed.' ),
+			'legacy'  => array( 'legacy_codes_remain', "The plain codes from version 1.0 couldn't be removed." ),
+			'unknown' => array( 'odd<b>', 'Reason: oddb' ),
+		);
+	}
+
+	public function test_the_migration_notice_stays_quiet_when_nothing_failed_or_for_other_people() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'happyaccess_db_version', '1.1.0' );
+		$this->assertSame( '', $this->migration_notice(), 'Behind but not failed: it is still running.' );
+
+		$this->fail_migration( 'write_failed' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$this->assertSame( '', $this->migration_notice(), 'Only people who manage HappyAccess see it.' );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'happyaccess_db_version', Installer::DB_VERSION );
+		$this->assertSame( '', $this->migration_notice(), 'A finished update says nothing.' );
+	}
+
 	public function test_register_hooks_the_menu_and_the_assets() {
 		Page::register();
 

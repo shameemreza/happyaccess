@@ -37,6 +37,13 @@ final class ActivityTracker {
 	const SKIPPED_PREFIXES = array( '_transient', '_site_transient', 'cron', 'happyaccess_' );
 
 	/**
+	 * Option name prefixes that core writes by itself on a plain front-end
+	 * page view, such as a block theme's theme_mods on the first visit. Only
+	 * these are skipped there; any other write in a page view is logged.
+	 */
+	const PAGE_VIEW_PREFIXES = array( 'theme_mods_' );
+
+	/**
 	 * Longest title or name stored in a summary.
 	 */
 	const MAX_NAME = 150;
@@ -510,10 +517,10 @@ final class ActivityTracker {
 	 * @return void
 	 */
 	public static function collect_option( $option ) {
-		if ( ! self::is_tracking() || self::is_front_end_page_view() ) {
+		if ( ! self::is_tracking() || ! is_string( $option ) || self::is_skipped_option( $option ) ) {
 			return;
 		}
-		if ( ! is_string( $option ) || self::is_skipped_option( $option ) ) {
+		if ( self::is_front_end_page_view() && self::has_prefix( $option, self::PAGE_VIEW_PREFIXES ) ) {
 			return;
 		}
 		$user_id  = get_current_user_id();
@@ -693,10 +700,10 @@ final class ActivityTracker {
 	}
 
 	/**
-	 * Whether this is a plain front-end page view. Core writes options there
-	 * on its own, such as a block theme's theme_mods on the first visit, so
-	 * those writes are not the temp user's. Form posts, the Customizer and
-	 * wp-admin saves are not page views.
+	 * Whether this is a plain front-end page view. Core writes some options
+	 * there on its own (PAGE_VIEW_PREFIXES), so those writes are not the
+	 * temp user's. Form posts, the Customizer and wp-admin saves are not
+	 * page views.
 	 *
 	 * @return bool
 	 */
@@ -723,7 +730,18 @@ final class ActivityTracker {
 		if ( $wpdb->prefix . 'user_roles' === $option ) {
 			return true;
 		}
-		foreach ( self::SKIPPED_PREFIXES as $prefix ) {
+		return self::has_prefix( $option, self::SKIPPED_PREFIXES );
+	}
+
+	/**
+	 * Whether an option name starts with one of the prefixes.
+	 *
+	 * @param string   $option   Option name.
+	 * @param string[] $prefixes Prefixes.
+	 * @return bool
+	 */
+	private static function has_prefix( $option, array $prefixes ) {
+		foreach ( $prefixes as $prefix ) {
 			if ( 0 === strpos( $option, $prefix ) ) {
 				return true;
 			}

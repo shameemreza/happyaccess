@@ -587,6 +587,12 @@ final class CapabilityGuard {
 	 * is activated or updated, and a custom pass may point default_role
 	 * only at a role with no more than read.
 	 *
+	 * Side effect, kept on purpose so the guard fails closed: on a custom
+	 * pass without activate_plugins, every active_plugins write made during
+	 * that pass's requests is dropped, including one another plugin makes on
+	 * its own, such as turning itself off after a failed license or version
+	 * check. That write happens again on the next request by someone else.
+	 *
 	 * @param mixed  $value     New value.
 	 * @param string $option    Option name.
 	 * @param mixed  $old_value Current value.

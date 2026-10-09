@@ -211,6 +211,10 @@ define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );
 
 [Locked out](locked-out.md) has the steps for each.
 
+## Custom passes and the active plugins list
+
+A custom pass without "Turn plugins on and off" can't change which plugins are on. HappyAccess keeps the old list whenever anything writes it during that person's requests, even when the write comes from another plugin and not from them. A plugin that turns itself off on a page load, for example after a failed license check, stays on until someone else loads a page. Give the pass that permission, or use a full pass, if the work needs plugins turned on or off.
+
 ## REST API
 
 HappyAccess registers its routes under the `happyaccess/v1` namespace, for its own screens only:

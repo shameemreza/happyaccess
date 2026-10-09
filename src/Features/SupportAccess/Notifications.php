@@ -254,7 +254,37 @@ final class Notifications {
 			'login'      => $user->user_login,
 			'user_email' => $user->user_email,
 			'changed'    => $labels,
+			'why'        => self::why_admin_level( $user ),
 		);
+	}
+
+	/**
+	 * Why an account that can't manage the site still got the alert, or an
+	 * empty string for a real administrator. Unfiltered HTML is named on its
+	 * own: it lets an editor post scripts, which run for every visitor and
+	 * administrator who opens the page.
+	 *
+	 * @param \WP_User $user The account.
+	 * @return string
+	 */
+	private static function why_admin_level( \WP_User $user ) {
+		if ( user_can( $user, 'manage_options' ) ) {
+			return '';
+		}
+		if ( user_can( $user, 'unfiltered_html' ) ) {
+			return __( "This account isn't an administrator, but it can post unfiltered HTML, which can run scripts.", 'happyaccess' );
+		}
+		$caps = array();
+		foreach ( Catalog::TRUST as $cap ) {
+			if ( ! empty( $user->allcaps[ $cap ] ) || user_can( $user, $cap ) ) {
+				$caps[] = $cap;
+			}
+		}
+		if ( ! $caps ) {
+			return '';
+		}
+		/* translators: %s: comma-separated permission names, like promote_users. */
+		return sprintf( __( "This account isn't an administrator, but it has admin-level permissions: %s.", 'happyaccess' ), implode( ', ', $caps ) );
 	}
 
 	/**
@@ -326,6 +356,7 @@ final class Notifications {
 					'role'       => '',
 					'change'     => '',
 					'caps'       => array(),
+					'why'        => '',
 				),
 				$details,
 				array(

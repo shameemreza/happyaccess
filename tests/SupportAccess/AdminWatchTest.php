@@ -344,6 +344,51 @@ class AdminWatchTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->sent() );
 	}
 
+	public function test_the_email_says_why_an_account_with_unfiltered_html_was_flagged() {
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'unfiltered_html' => true ) );
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'htmlwriter', 'user_pass' => 'x', 'role' => 'happyaccess_promoter' ) );
+
+		$this->assertCount( 1, $this->sent() );
+		// On a network core lets only super admins post unfiltered HTML, so there the email names the role's permission instead.
+		$this->assertStringContainsString(
+			is_multisite() ? 'but it has admin-level permissions: unfiltered_html.' : 'but it can post unfiltered HTML, which can run scripts.',
+			$this->sent()[0]['body']
+		);
+	}
+
+	public function test_the_email_names_the_admin_level_permissions_of_an_account_that_is_not_an_administrator() {
+		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'list_users' => true, 'promote_users' => true ) );
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'promoter', 'user_pass' => 'x', 'role' => 'happyaccess_promoter' ) );
+
+		$this->assertStringContainsString( 'but it has admin-level permissions: promote_users.', $this->sent()[0]['body'] );
+	}
+
+	public function test_an_administrator_alert_needs_no_reason() {
+		wp_set_current_user( $this->temp );
+		wp_insert_user( array( 'user_login' => 'realadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+
+		$this->assertStringNotContainsString( 'admin-level permissions:', $this->sent()[0]['body'] );
+		$this->assertStringNotContainsString( 'unfiltered HTML', $this->sent()[0]['body'] );
+	}
+
+	public function test_a_custom_pass_that_can_make_users_flags_a_new_administrator() {
+		if ( is_multisite() ) {
+			// On a network only a super admin holds create_users, so only they can give it to a pass.
+			grant_super_admin( $this->owner );
+		}
+		$temp = $this->custom_temp( array( 'list_users', 'create_users', 'promote_users' ) );
+		wp_set_current_user( $temp );
+		$id = wp_insert_user( array( 'user_login' => 'customadmin', 'user_pass' => 'x', 'role' => 'administrator' ) );
+
+		$this->assertIsInt( $id );
+		$rows = $this->rows( 'admin_account_created' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( Capabilities::grant_id( $temp ), (int) $rows[0]['token_id'] );
+		$this->assertCount( 1, $this->sent() );
+	}
+
 	public function test_adding_a_role_with_edit_users_is_flagged() {
 		add_role( 'happyaccess_promoter', 'Promoter', array( 'read' => true, 'edit_users' => true ) );
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );

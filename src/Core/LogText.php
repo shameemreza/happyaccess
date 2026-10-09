@@ -329,11 +329,12 @@ final class LogText {
 
 	/**
 	 * A template without its placeholders, such as "%s", "%d" or "%2$s".
+	 * SettingLabels uses it for the words of a settings line too.
 	 *
 	 * @param string $text Template.
 	 * @return string
 	 */
-	private static function words( $text ) {
+	public static function words( $text ) {
 		$out    = '';
 		$length = strlen( $text );
 		for ( $i = 0; $i < $length; $i++ ) {

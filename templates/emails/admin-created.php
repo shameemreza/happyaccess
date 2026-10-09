@@ -14,6 +14,7 @@
  * @var string   $role       Readable role name, for the role variant.
  * @var string   $change     role or default_role, for the role variant.
  * @var string[] $caps       Admin-level permissions involved, for the role variant.
+ * @var string   $why        Why an account that isn't an administrator was flagged, or empty.
  * @var string   $time       Time in the site timezone.
  * @var string   $users_url  Address of the Users screen.
  * @var bool     $more       Whether this is the last email before the cap.
@@ -50,6 +51,9 @@ if ( 'role' === $variant && 'default_role' === $change ) {
 }
 ?>
 </p>
+<?php if ( 'role' !== $variant && ! empty( $why ) ) : ?>
+<p style="margin:0 0 16px;"><?php echo esc_html( $why ); ?></p>
+<?php endif; ?>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
 <?php if ( 'role' === $variant ) : ?>
 <tr>

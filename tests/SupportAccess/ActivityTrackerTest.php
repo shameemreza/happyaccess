@@ -253,6 +253,17 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		$this->assertSame( 0, AuditLog::query( array( 'event' => 'settings_saved' ) )['total'] );
 	}
 
+	public function test_a_front_end_page_view_still_logs_other_option_writes() {
+		wp_set_current_user( $this->temp );
+		$this->assertFalse( is_admin() );
+		update_option( 'blogname', 'Changed from the front end' );
+		update_option( 'theme_mods_x', array( 'custom_css_post_id' => -1 ) );
+		ActivityTracker::flush();
+		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( array( 'blogname' ), $items[0]['meta']['options'] );
+	}
+
 	public function test_the_same_option_write_in_an_admin_request_is_logged() {
 		$this->in_admin();
 		wp_set_current_user( $this->temp );

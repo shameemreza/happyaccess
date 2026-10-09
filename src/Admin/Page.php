@@ -10,6 +10,7 @@ namespace HappyAccess\Admin;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
+use HappyAccess\Core\Installer;
 use HappyAccess\Core\Internal;
 use HappyAccess\Core\OtherTwoFactor;
 use HappyAccess\Core\Settings;
@@ -66,6 +67,7 @@ final class Page {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'lock_notice' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'migration_notice' ) );
 	}
 
 	/**
@@ -126,6 +128,71 @@ final class Page {
 				)
 			)
 		);
+	}
+
+	/**
+	 * Tells people who manage HappyAccess that its update keeps failing on
+	 * this site, and why. Until it finishes, logins with support codes,
+	 * email codes and two-step login say "Login is updating". The failed
+	 * run is noted for 15 minutes, then retried, so the notice shows while
+	 * the update is behind and its last run failed.
+	 *
+	 * @return void
+	 */
+	public static function migration_notice() {
+		if ( ! current_user_can( Capabilities::MANAGE ) ) {
+			return;
+		}
+		if ( Installer::DB_VERSION === get_option( 'happyaccess_db_version' ) ) {
+			return;
+		}
+		// Transient calls can add or delete an option, so they run inside the bypass.
+		$reason = Internal::run(
+			static function () {
+				return get_transient( Installer::FAILED_TRANSIENT );
+			}
+		);
+		if ( ! is_string( $reason ) || '' === $reason ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-error"><p><strong>%1$s</strong> %2$s %3$s</p></div>',
+			esc_html__( "HappyAccess couldn't finish updating.", 'happyaccess' ),
+			esc_html( self::migration_reason( $reason ) ),
+			esc_html__( 'Until it does, logins with support codes, email codes and two-step login wait. It tries again every 15 minutes.', 'happyaccess' )
+		);
+	}
+
+	/**
+	 * The sentence for a reason Installer::run_migration() stopped with.
+	 *
+	 * @param string $reason Stored reason.
+	 * @return string
+	 */
+	private static function migration_reason( $reason ) {
+		$parts = explode( ':', $reason, 2 );
+		$name  = isset( $parts[1] ) ? sanitize_text_field( $parts[1] ) : '';
+		switch ( $parts[0] ) {
+			case 'missing_table':
+				/* translators: %s: database table name. */
+				return sprintf( __( 'The table %s is missing. Check that the database user can create tables.', 'happyaccess' ), Installer::table( $name ) );
+			case 'missing_column':
+				$column = explode( '.', $name, 2 );
+				return sprintf(
+					/* translators: 1: column name, 2: database table name. */
+					__( 'The column %1$s of the table %2$s is missing. Check that the database user can change tables.', 'happyaccess' ),
+					isset( $column[1] ) ? $column[1] : '',
+					Installer::table( $column[0] )
+				);
+			case 'secret_missing':
+				return __( "The HappyAccess site key couldn't be saved in the options table.", 'happyaccess' );
+			case 'write_failed':
+				return __( 'A database write failed.', 'happyaccess' );
+			case 'legacy_codes_remain':
+				return __( "The plain codes from version 1.0 couldn't be removed.", 'happyaccess' );
+		}
+		/* translators: %s: a short reason code. */
+		return sprintf( __( 'Reason: %s', 'happyaccess' ), sanitize_key( $reason ) );
 	}
 
 	/**

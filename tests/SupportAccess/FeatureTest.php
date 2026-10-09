@@ -14,6 +14,7 @@ use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\LoginSteps;
 use HappyAccess\Features\SupportAccess\TempUsers;
 use HappyAccess\Login\Router;
+use HappyAccess\Plugin;
 
 class FeatureTest extends WP_UnitTestCase {
 
@@ -62,7 +63,8 @@ class FeatureTest extends WP_UnitTestCase {
 	public function test_disabled_with_a_live_grant_keeps_the_ended_step_and_the_router_hook() {
 		Grants::create( array( 'label' => 'Acme' ) );
 		Features::set( 'support_access', false );
-		Feature::register();
+		// The router hook comes from Plugin::init(), the only path that registers the feature.
+		Plugin::init();
 		$this->assertNotNull( Router::resolve( 'ended' ) );
 		$this->assertNull( Router::resolve( 'link' ) );
 		$this->assertNotFalse( has_action( 'login_form_happyaccess', array( Router::class, 'dispatch' ) ) );
@@ -98,7 +100,6 @@ class FeatureTest extends WP_UnitTestCase {
 		Feature::register();
 		Feature::register();
 		$this->assertSame( 10, has_action( 'login_form', array( LoginSteps::class, 'print_code_link' ) ) );
-		$this->assertSame( 10, has_action( 'login_form_happyaccess', array( Router::class, 'dispatch' ) ) );
 	}
 
 	public function test_on_disable_revokes_all() {

@@ -356,32 +356,77 @@ final class AuditLog {
 			);
 		}
 
-		$keys = array();
-		foreach ( SettingLabels::entries_matching( $search ) as $entry ) {
-			if ( '.*' === substr( $entry, -2 ) ) {
-				// The group itself, as a whole list, and any key under it.
-				$stem   = substr( $entry, 0, -2 );
-				$keys[] = '"' . $stem . '"';
-				$keys[] = '"' . $stem . '.';
-			} else {
-				$keys[] = '"' . $entry . '"';
-			}
-		}
+		$keys = self::key_patterns( SettingLabels::entries_matching( $search ) );
 		if ( $keys ) {
 			$any[]  = '( event_type = %s AND ( ' . implode( ' OR ', array_fill( 0, count( $keys ), 'metadata LIKE %s' ) ) . ' ) )';
-			$params = array_merge(
-				$params,
-				array( 'settings_changed' ),
-				array_map(
-					static function ( $key ) use ( $wpdb ) {
-						return '%' . $wpdb->esc_like( $key ) . '%';
-					},
-					$keys
-				)
-			);
+			$params = array_merge( $params, array( 'settings_changed' ), $keys );
+		}
+
+		list( $lines, $line_params ) = self::settings_line_clause( SettingLabels::lines_matching( $search ) );
+		if ( '' !== $lines ) {
+			$any[]  = '( event_type = %s AND ' . $lines . ' )';
+			$params = array_merge( $params, array( 'settings_changed' ), $line_params );
 		}
 
 		return array( '( ' . implode( ' OR ', $any ) . ' )', $params );
+	}
+
+	/**
+	 * LIKE patterns that find setting entries in a settings row's keys.
+	 *
+	 * @param string[] $entries Entries of SettingLabels::all().
+	 * @return string[]
+	 */
+	private static function key_patterns( array $entries ) {
+		global $wpdb;
+		$patterns = array();
+		foreach ( $entries as $entry ) {
+			if ( '.*' === substr( $entry, -2 ) ) {
+				// The group itself, as a whole list, and any key under it.
+				$stem       = substr( $entry, 0, -2 );
+				$patterns[] = '%' . $wpdb->esc_like( '"' . $stem . '"' ) . '%';
+				$patterns[] = '%' . $wpdb->esc_like( '"' . $stem . '.' ) . '%';
+			} else {
+				$patterns[] = '%' . $wpdb->esc_like( '"' . $entry . '"' ) . '%';
+			}
+		}
+		return $patterns;
+	}
+
+	/**
+	 * The clause that finds settings rows whose line would show one of the
+	 * matched templates, from what each template needs. A row's meta is
+	 * {"keys":[...],"features":{...}}, with the feature switches last, so a
+	 * true or false after "features" is a switch turned on or off.
+	 *
+	 * @param array<int,string[]> $lines What each matched template needs.
+	 * @return array{0:string,1:array} SQL, empty when nothing matched, and its values.
+	 */
+	private static function settings_line_clause( array $lines ) {
+		global $wpdb;
+		if ( ! $lines ) {
+			return array( '', array() );
+		}
+		$features = '%' . $wpdb->esc_like( '"features":{' ) . '%';
+		$named    = self::key_patterns( SettingLabels::named_entries() );
+		$parts    = array(
+			'on'      => array( 'metadata LIKE %s', array( $features . 'true%' ) ),
+			'off'     => array( 'metadata LIKE %s', array( $features . 'false%' ) ),
+			'setup'   => array( 'metadata LIKE %s', array( '%' . $wpdb->esc_like( '"support.consent_given_at"' ) . '%' ) ),
+			'changed' => array( '( ' . implode( ' OR ', array_fill( 0, count( $named ), 'metadata LIKE %s' ) ) . ' )', $named ),
+		);
+
+		$sql    = array();
+		$params = array();
+		foreach ( $lines as $needs ) {
+			$all = array();
+			foreach ( $needs as $need ) {
+				$all[]  = $parts[ $need ][0];
+				$params = array_merge( $params, $parts[ $need ][1] );
+			}
+			$sql[] = '( ' . implode( ' AND ', $all ) . ' )';
+		}
+		return array( '( ' . implode( ' OR ', $sql ) . ' )', $params );
 	}
 
 	/**

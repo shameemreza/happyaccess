@@ -228,6 +228,64 @@ class AuditLogTest extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * Adds a settings row with feature switches, the way SettingsController writes one.
+	 *
+	 * @param string[] $keys     Changed dotted keys.
+	 * @param array    $features Feature to whether it is now on.
+	 * @return int Row id.
+	 */
+	private function switch_row( array $keys, array $features ) {
+		return AuditLog::add(
+			'settings_changed',
+			array(
+				'feature' => 'core',
+				'summary' => sprintf( 'Changed settings: %s', implode( ', ', $keys ) ),
+				'meta'    => array(
+					'keys'     => $keys,
+					'features' => $features,
+				),
+			)
+		);
+	}
+
+	public function test_search_finds_settings_rows_by_the_words_that_join_their_line() {
+		$on    = $this->switch_row( array( 'features.passwordless' ), array( 'passwordless' => true ) );
+		$off   = $this->switch_row( array( 'features.two_step' ), array( 'two_step' => false ) );
+		$setup = $this->switch_row( array( 'support.consent_given_at', 'support.consent_user_id', 'features.support_access' ), array( 'support_access' => true ) );
+		$plain = $this->settings_row( array( 'privacy.logging' ) );
+
+		$this->assertEqualsCanonicalizing( array( $on, $setup ), $this->found( 'turned on' ) );
+		$this->assertSame( array( $off ), $this->found( 'Turned off' ) );
+		$this->assertSame( array( $setup ), $this->found( 'Finished setup' ) );
+		$this->assertContains( $plain, $this->found( 'Changed settings' ) );
+	}
+
+	public function test_search_matches_the_joining_words_in_the_viewers_language() {
+		$on    = $this->switch_row( array( 'features.passwordless' ), array( 'passwordless' => true ) );
+		$both  = $this->switch_row( array( 'features.two_step', 'privacy.logging' ), array( 'two_step' => false ) );
+		$plain = $this->settings_row( array( 'privacy.retention_days' ) );
+		$words = array(
+			'Turned on %s'              => 'Eingeschaltet: %s',
+			'Turned off %s'             => 'Ausgeschaltet: %s',
+			'Changed settings: %s'      => 'Einstellungen geändert: %s',
+			'Finished setup'            => 'Einrichtung fertig',
+			'Finished setup and turned on %s' => 'Einrichtung fertig, eingeschaltet: %s',
+		);
+		$translate = static function ( $translation, $text, $domain ) use ( $words ) {
+			return 'happyaccess' === $domain && isset( $words[ $text ] ) ? $words[ $text ] : $translation;
+		};
+		add_filter( 'gettext', $translate, 10, 3 );
+		try {
+			$this->assertSame( array( $on ), $this->found( 'eingeschaltet' ) );
+			$this->assertSame( array( $both ), $this->found( 'ausgeschaltet' ) );
+			$this->assertEqualsCanonicalizing( array( $both, $plain ), $this->found( 'Einstellungen geändert' ) );
+			$this->assertSame( array(), $this->found( 'Einrichtung' ) );
+		} finally {
+			remove_filter( 'gettext', $translate, 10 );
+		}
+	}
+
 	public function test_search_is_cut_to_100_characters() {
 		AuditLog::add( 'settings_saved', array( 'summary' => str_repeat( 'a', 100 ) ) );
 		$this->assertSame( 1, AuditLog::query( array( 'search' => str_repeat( 'a', 100 ) . 'zzz' ) )['total'] );

@@ -138,12 +138,15 @@ final class Plugin {
 
 	/**
 	 * Revokes every pass of the current site and clears its scheduled events.
+	 * With the cleanup event gone, it also removes the temp accounts an
+	 * earlier failed delete left behind, the way the cleanup would have.
 	 *
 	 * @return void
 	 */
 	private static function end_passes_and_events() {
 		if ( Installer::table_exists( 'tokens' ) ) {
 			Grants::revoke_all( 'plugin_deactivated' );
+			Grants::retry_orphans();
 		}
 		Cron::unschedule();
 		wp_clear_scheduled_hook( Installer::NETWORK_HOOK );

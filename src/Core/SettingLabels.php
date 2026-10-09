@@ -27,6 +27,22 @@ final class SettingLabels {
 	const CONSENT_KEYS = array( 'support.consent_given_at', 'support.consent_user_id' );
 
 	/**
+	 * What a settings row needs for each line template to show: "changed"
+	 * (a setting other than a switch or setup), "on" or "off" (a switch
+	 * turned on or off) and "setup" (setup was finished).
+	 */
+	const LINE_NEEDS = array(
+		'changed'      => array( 'changed' ),
+		'setup_on_off' => array( 'setup', 'on', 'off' ),
+		'setup_on'     => array( 'setup', 'on' ),
+		'setup_off'    => array( 'setup', 'off' ),
+		'setup'        => array( 'setup' ),
+		'on_off'       => array( 'on', 'off' ),
+		'on'           => array( 'on' ),
+		'off'          => array( 'off' ),
+	);
+
+	/**
 	 * Plain name for each dotted key, in screen order. A key that ends in
 	 * ".*" covers every key under it, such as one role of a role policy.
 	 *
@@ -193,11 +209,7 @@ final class SettingLabels {
 
 		$switches = self::switches( $on, $off, in_array( 'support.consent_given_at', $keys, true ) );
 		$names    = self::names( array_values( array_diff( $keys, self::CONSENT_KEYS ) ) );
-		$changed  = $names ? sprintf(
-			/* translators: %s: comma-separated names of the settings that changed. */
-			__( 'Changed settings: %s', 'happyaccess' ),
-			implode( ', ', $names )
-		) : '';
+		$changed  = $names ? sprintf( self::line_templates()['changed'], implode( ', ', $names ) ) : '';
 
 		if ( '' !== $switches && '' !== $changed ) {
 			/* translators: 1: what was finished or turned on or off, 2: the settings that changed. */
@@ -239,34 +251,87 @@ final class SettingLabels {
 	private static function switches( array $on, array $off, $setup ) {
 		$on_list  = $on ? wp_sprintf( '%l', $on ) : '';
 		$off_list = $off ? wp_sprintf( '%l', $off ) : '';
+		$lines    = self::line_templates();
 
 		if ( $setup ) {
 			if ( $on && $off ) {
-				/* translators: 1: features turned on, 2: features turned off. */
-				return sprintf( __( 'Finished setup, turned on %1$s and turned off %2$s', 'happyaccess' ), $on_list, $off_list );
+				return sprintf( $lines['setup_on_off'], $on_list, $off_list );
 			}
 			if ( $on ) {
-				/* translators: %s: features turned on, for example "Temporary access and Passwordless login". */
-				return sprintf( __( 'Finished setup and turned on %s', 'happyaccess' ), $on_list );
+				return sprintf( $lines['setup_on'], $on_list );
 			}
 			if ( $off ) {
-				/* translators: %s: features turned off. */
-				return sprintf( __( 'Finished setup and turned off %s', 'happyaccess' ), $off_list );
+				return sprintf( $lines['setup_off'], $off_list );
 			}
-			return __( 'Finished setup', 'happyaccess' );
+			return $lines['setup'];
 		}
 		if ( $on && $off ) {
-			/* translators: 1: features turned on, 2: features turned off. */
-			return sprintf( __( 'Turned on %1$s and turned off %2$s', 'happyaccess' ), $on_list, $off_list );
+			return sprintf( $lines['on_off'], $on_list, $off_list );
 		}
 		if ( $on ) {
-			/* translators: %s: features turned on. */
-			return sprintf( __( 'Turned on %s', 'happyaccess' ), $on_list );
+			return sprintf( $lines['on'], $on_list );
 		}
 		if ( $off ) {
-			/* translators: %s: features turned off. */
-			return sprintf( __( 'Turned off %s', 'happyaccess' ), $off_list );
+			return sprintf( $lines['off'], $off_list );
 		}
 		return '';
+	}
+
+	/**
+	 * The templates a settings line is built from, in the viewer's language.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function line_templates() {
+		return array(
+			/* translators: %s: comma-separated names of the settings that changed. */
+			'changed'      => __( 'Changed settings: %s', 'happyaccess' ),
+			/* translators: 1: features turned on, 2: features turned off. */
+			'setup_on_off' => __( 'Finished setup, turned on %1$s and turned off %2$s', 'happyaccess' ),
+			/* translators: %s: features turned on, for example "Temporary access and Passwordless login". */
+			'setup_on'     => __( 'Finished setup and turned on %s', 'happyaccess' ),
+			/* translators: %s: features turned off. */
+			'setup_off'    => __( 'Finished setup and turned off %s', 'happyaccess' ),
+			'setup'        => __( 'Finished setup', 'happyaccess' ),
+			/* translators: 1: features turned on, 2: features turned off. */
+			'on_off'       => __( 'Turned on %1$s and turned off %2$s', 'happyaccess' ),
+			/* translators: %s: features turned on. */
+			'on'           => __( 'Turned on %s', 'happyaccess' ),
+			/* translators: %s: features turned off. */
+			'off'          => __( 'Turned off %s', 'happyaccess' ),
+		);
+	}
+
+	/**
+	 * For each line template whose words, in the viewer's language,
+	 * contain a search term, what a row needs for that line to show (see
+	 * LINE_NEEDS). The log search uses it to find settings rows by the
+	 * words that join their line, such as "Turned on".
+	 *
+	 * @param string $term Search term.
+	 * @return array<int,string[]>
+	 */
+	public static function lines_matching( $term ) {
+		$term = (string) $term;
+		if ( '' === $term ) {
+			return array();
+		}
+		$found = array();
+		foreach ( self::line_templates() as $key => $template ) {
+			if ( self::contains( LogText::words( $template ), $term ) ) {
+				$found[] = self::LINE_NEEDS[ $key ];
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * The entries of all() a "Changed settings" line can name: every one
+	 * but the feature switches and the setup keys.
+	 *
+	 * @return string[]
+	 */
+	public static function named_entries() {
+		return array_values( array_diff( array_keys( self::all() ), self::FEATURE_KEYS, self::CONSENT_KEYS ) );
 	}
 }

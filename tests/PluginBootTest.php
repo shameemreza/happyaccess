@@ -144,6 +144,49 @@ class PluginBootTest extends WP_UnitTestCase {
 		$this->assertNull( Router::resolve( 'code' ) );
 	}
 
+	public function test_init_hooks_the_router_once_by_itself() {
+		global $wp_filter;
+		remove_all_actions( 'login_form_' . Router::ACTION );
+
+		Plugin::init();
+		Plugin::init();
+
+		$this->assertSame( 10, has_action( 'login_form_' . Router::ACTION, array( Router::class, 'dispatch' ) ) );
+		$this->assertCount( 1, $wp_filter[ 'login_form_' . Router::ACTION ]->callbacks[10] );
+	}
+
+	/**
+	 * Support Access's register() has no copy of Router::register(): the
+	 * only caller of a feature's register() is Plugin::init(), and it hooks
+	 * the router first. This fails if another caller shows up in src/.
+	 */
+	public function test_features_are_registered_only_from_init_after_the_router() {
+		$root  = dirname( __DIR__ ) . '/src';
+		$calls = array();
+		$files = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			foreach ( file( $file->getPathname() ) as $number => $line ) {
+				$line = trim( $line );
+				if ( 0 === strpos( $line, '//' ) || 0 === strpos( $line, '*' ) ) {
+					continue;
+				}
+				if ( false !== strpos( $line, 'Feature::register()' ) ) {
+					$calls[] = substr( $file->getPathname(), strlen( $root ) + 1 ) . ':' . ( $number + 1 );
+				}
+			}
+		}
+		$this->assertCount( 3, $calls );
+		foreach ( $calls as $call ) {
+			$this->assertStringStartsWith( 'Plugin.php:', $call );
+		}
+
+		$init = file_get_contents( $root . '/Plugin.php' );
+		$this->assertLessThan( strpos( $init, "\t\tFeature::register();" ), strpos( $init, "\t\tRouter::register();" ) );
+	}
+
 	public function test_new_sites_are_set_up_at_priority_11() {
 		Plugin::boot();
 		do_action( 'plugins_loaded' );
@@ -223,6 +266,21 @@ class PluginBootTest extends WP_UnitTestCase {
 		$this->assertTrue( Installer::table_exists( 'logs' ) );
 		$this->assertFalse( wp_next_scheduled( Cron::HOOK ) );
 		$this->assertNotFalse( get_userdata( $admin ) );
+	}
+
+	public function test_deactivate_removes_a_temp_user_left_by_an_earlier_failed_delete() {
+		global $wpdb;
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		list( $id, $user_id ) = $this->pass_with_user( 'Earlier' );
+		// Revoked before, with the delete that should have followed never done.
+		$wpdb->update( Installer::table( 'tokens' ), array( 'revoked_at' => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) ), array( 'id' => $id ) );
+		TempUsers::strip( $user_id );
+		Grants::flush_cache();
+
+		Plugin::deactivate();
+
+		$this->assertFalse( get_userdata( $user_id ) );
+		$this->assertFalse( TempUsers::any_exist() );
 	}
 
 	public function test_deactivate_as_a_temp_user_changes_nothing() {

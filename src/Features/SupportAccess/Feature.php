@@ -8,7 +8,6 @@
 namespace HappyAccess\Features\SupportAccess;
 
 use HappyAccess\Core\Features;
-use HappyAccess\Login\Router;
 use HappyAccess\Login\Session;
 
 defined( 'ABSPATH' ) || exit;
@@ -50,7 +49,7 @@ final class Feature {
 		// The ended screen and the CLI stay wired while the guards run, so a logged-out former agent
 		// still sees the ended screen and the owner can still revoke from the command line.
 		// LoginSteps adds the code and link steps and the login form link only while the feature is on.
-		Router::register();
+		// The router that serves those steps is hooked by Plugin::init(), before this runs.
 		LoginSteps::register();
 		Cli::register();
 	}
