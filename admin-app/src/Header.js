@@ -13,19 +13,19 @@ export default function Header( { onLocked } ) {
 		<header className="ha-header">
 			<div className="ha-logo" aria-hidden="true">
 				<svg
-					width="26"
-					height="26"
-					viewBox="0 0 24 24"
+					width="30"
+					height="30"
+					viewBox="0 0 64 64"
 					fill="none"
 					stroke="currentColor"
-					strokeWidth="2"
+					strokeWidth="4.6"
 					strokeLinecap="round"
 					strokeLinejoin="round"
 					focusable="false"
 				>
-					<circle cx="8" cy="12" r="4" />
-					<path d="M12 12h9M18 12v3M21 12v2" />
-					<path d="M6.5 13.2c.8.7 2.2.7 3 0" />
+					<path d="M32 8 L52 16 V30 C52 44 43 53 32 57 C21 53 12 44 12 30 V16 Z" />
+					<path d="M22 34 Q32 44 42 34" />
+					<path d="M25 26 V26.2 M39 26 V26.2" />
 				</svg>
 			</div>
 			<div className="ha-heading">
