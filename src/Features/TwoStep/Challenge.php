@@ -105,6 +105,12 @@ final class Challenge {
 	const SITE_ALERT_TRANSIENT = 'happyaccess_ts_site_alerted';
 
 	/**
+	 * Set for a week after the owner had the email about app secrets that
+	 * can't be opened.
+	 */
+	const SECRET_ALERT_TRANSIENT = 'happyaccess_ts_secret_alerted';
+
+	/**
 	 * Prefix of the transient that holds a backup code count to show after login.
 	 */
 	const NOTICE_TRANSIENT = 'happyaccess_ts_backup_';
@@ -317,6 +323,7 @@ final class Challenge {
 		if ( ! self::applies( $user ) ) {
 			return null;
 		}
+		self::check_secret( $user );
 		if ( ! self::needs_setup( $user ) && ! UserState::app_enabled( $user->ID ) ) {
 			return null;
 		}
@@ -694,6 +701,7 @@ final class Challenge {
 	 * @return string|\WP_Error
 	 */
 	private static function begin( \WP_User $user, $purpose, array $carry ) {
+		self::check_secret( $user );
 		$pending_id = self::start( $user, $purpose );
 		if ( is_wp_error( $pending_id ) ) {
 			return $pending_id;
@@ -716,6 +724,40 @@ final class Challenge {
 			}
 		}
 		return self::step_url( $carry );
+	}
+
+	/**
+	 * When the user's app secret can't be opened: one log row for the user
+	 * and, once a week at most, an email to the owner. The step itself
+	 * offers email and backup codes in its place.
+	 *
+	 * @param \WP_User $user The user logging in.
+	 * @return void
+	 */
+	private static function check_secret( \WP_User $user ) {
+		if ( ! UserState::secret_unreadable( $user->ID ) || ! UserState::note_unreadable( $user->ID ) ) {
+			return;
+		}
+		// Transient calls can add or delete an option, so they run inside the bypass.
+		$alerted = Internal::run(
+			static function () {
+				return get_transient( self::SECRET_ALERT_TRANSIENT );
+			}
+		);
+		if ( $alerted ) {
+			return;
+		}
+		Internal::run(
+			static function () {
+				set_transient( self::SECRET_ALERT_TRANSIENT, 1, WEEK_IN_SECONDS );
+			}
+		);
+		Mailer::send(
+			(string) get_option( 'admin_email' ),
+			__( "Authenticator app codes can't be checked", 'happyaccess' ),
+			'twostep-secret',
+			array()
+		);
 	}
 
 	/**
@@ -765,7 +807,8 @@ final class Challenge {
 	/**
 	 * The methods the step offers, in the order app, email, backup. After a
 	 * passwordless login email is left out, because it was the first step.
-	 * A user with no app can always ask for an email code.
+	 * A user with no app, or with an app secret that can't be opened, can
+	 * always ask for an email code.
 	 *
 	 * @param \WP_User $user    The user.
 	 * @param string   $purpose Challenge purpose.

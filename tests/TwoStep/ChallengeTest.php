@@ -1001,6 +1001,77 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->log_rows( 'twostep_site_alert' ) );
 	}
 
+	/**
+	 * Stores a secret sealed under other salts, as a salt change in
+	 * wp-config.php or a lost site key leaves it.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	private function break_secret( $user_id ) {
+		update_user_meta(
+			$user_id,
+			UserState::META_TOTP,
+			array(
+				'secret'    => 's1:' . base64_encode( random_bytes( 60 ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Same shape as a sealed secret.
+				'last_step' => 0,
+			)
+		);
+	}
+
+	public function test_an_unreadable_app_secret_still_asks_for_a_second_step() {
+		$made  = $this->app_user();
+		$codes = BackupCodes::generate( $made['user']->ID );
+		$this->break_secret( $made['user']->ID );
+
+		$this->assertTrue( UserState::is_enabled( $made['user']->ID ), 'Two-step login stays on.' );
+		$this->assertSame( array( 'backup' ), UserState::methods( $made['user']->ID ), 'Backup codes still count.' );
+
+		$res = $this->password_login( $made['user'] );
+		$this->assertNotNull( $res['url'], 'The password alone does not log in.' );
+		$this->assertSame( 0, $this->wp_login_count );
+		$args = $this->query( $res['url'] );
+		$this->assertSame( 'twostep', $args['step'] );
+		$this->assertSame( 'email', $args['method'], 'An email code stands in for the app.' );
+
+		$cookie = $this->pending_cookie();
+		$screen = Challenge::handle( 'GET', $args, array(), array( Challenge::COOKIE => $cookie ) );
+		$this->assertStringContainsString( 'Use a backup code', $screen['body'] );
+		$this->assertStringNotContainsString( 'Use your authenticator app', $screen['body'] );
+
+		$res = $this->post_code( $cookie, $codes[0], 'backup' );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_an_unreadable_secret_is_logged_once_and_the_owner_hears_once() {
+		$made = $this->app_user();
+		$this->break_secret( $made['user']->ID );
+		$other = $this->app_user();
+		$this->break_secret( $other['user']->ID );
+
+		$this->password_login( $made['user'] );
+		$this->password_login( $made['user'] );
+		$this->password_login( $other['user'] );
+
+		$rows = $this->log_rows( 'twostep_secret_unreadable' );
+		$this->assertCount( 2, $rows, 'One row for each user.' );
+		$this->assertSame( array( $other['user']->ID, $made['user']->ID ), array_map( 'intval', wp_list_pluck( $rows, 'user_id' ) ) );
+		$owner = $this->owner_mails();
+		$this->assertCount( 1, $owner );
+		$this->assertStringContainsString( 'set up their authenticator app again', $owner[0]['message'] );
+	}
+
+	public function test_an_unreadable_secret_never_sends_a_required_user_to_setup() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$made = $this->app_user();
+		$this->break_secret( $made['user']->ID );
+
+		$this->assertFalse( Challenge::needs_setup( $made['user'] ), 'Whoever has the password cannot enroll a new app at login.' );
+		$res = $this->password_login( $made['user'] );
+		$this->assertSame( 'twostep', $this->query( $res['url'] )['step'] );
+	}
+
 	public function test_a_missing_or_expired_cookie_goes_back_to_the_login() {
 		$made = $this->app_user();
 

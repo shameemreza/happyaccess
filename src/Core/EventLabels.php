@@ -92,6 +92,7 @@ final class EventLabels {
 			'twostep_backup_regenerated' => __( 'Backup codes renewed', 'happyaccess' ),
 			'twostep_skipped'            => __( 'Two-step login setup put off', 'happyaccess' ),
 			'twostep_site_alert'         => __( 'Many wrong two-step login codes', 'happyaccess' ),
+			'twostep_secret_unreadable'  => __( "Authenticator app secret can't be read", 'happyaccess' ),
 			'new_device_login'           => __( 'Login from a new device', 'happyaccess' ),
 		);
 	}

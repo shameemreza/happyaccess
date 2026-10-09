@@ -116,6 +116,24 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( ' required', $html, 'Nothing hidden can block the profile form.' );
 	}
 
+	public function test_an_unreadable_app_secret_shows_a_notice_and_offers_set_up_again() {
+		$user = $this->user();
+		update_user_meta(
+			$user->ID,
+			UserState::META_TOTP,
+			array(
+				'secret'    => 's1:' . base64_encode( random_bytes( 60 ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Same shape as a sealed secret.
+				'last_step' => 0,
+			)
+		);
+		wp_set_current_user( $user->ID );
+
+		$html = Profile::section( $user );
+		$this->assertStringContainsString( 'Set up your authenticator app again', $html );
+		$this->assertStringContainsString( 'data-happyaccess-action="app-begin"', $html );
+		$this->assertSame( '', Profile::section( $this->user() ), 'Others see nothing.' );
+	}
+
 	public function test_with_methods_on_it_offers_turn_off_and_new_backup_codes() {
 		$user = $this->user();
 		wp_set_current_user( $user->ID );

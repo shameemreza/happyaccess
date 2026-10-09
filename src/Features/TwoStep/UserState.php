@@ -26,8 +26,11 @@ defined( 'ABSPATH' ) || exit;
  *   the profile, before changing a method, as a map of the login session
  *   (a hash of its token) to the Unix time.
  *
- * The app is on when a secret is stored. Backup codes alone never turn
- * two-step login on.
+ * The app counts as set up while a secret is stored, even one that no
+ * longer opens (after a salt change in wp-config.php, say), so two-step
+ * login fails closed: the code step offers email and backup codes until
+ * the user sets the app up again. It can make codes only while the secret
+ * opens. Backup codes alone never turn two-step login on.
  *
  * Every write that changes who has two-step login or where their grace
  * period stands drops the Coverage counts.
@@ -51,9 +54,10 @@ final class UserState {
 	const LOCK_TTL = 30;
 
 	/**
-	 * The enabled methods, from app, email and backup, in that order. Backup
-	 * is listed while codes remain and another method is on, because it only
-	 * stands in for them.
+	 * The methods that can check a code, from app, email and backup, in that
+	 * order. The app is listed only while its secret opens. Backup is listed
+	 * while codes remain and two-step login is on, because it only stands in
+	 * for the other methods.
 	 *
 	 * @param int $user_id User id.
 	 * @return string[]
@@ -66,7 +70,7 @@ final class UserState {
 		if ( self::email_enabled( $user_id ) ) {
 			$methods[] = 'email';
 		}
-		if ( array() !== $methods && BackupCodes::remaining( $user_id ) > 0 ) {
+		if ( self::is_enabled( $user_id ) && BackupCodes::remaining( $user_id ) > 0 ) {
 			$methods[] = 'backup';
 		}
 		return $methods;
@@ -83,23 +87,71 @@ final class UserState {
 	}
 
 	/**
-	 * Whether the user has the app or email method on.
+	 * Whether the user has two-step login: an app secret stored, readable or
+	 * not, or the email method on.
 	 *
 	 * @param int $user_id User id.
 	 * @return bool
 	 */
 	public static function is_enabled( $user_id ) {
-		return self::app_enabled( $user_id ) || self::email_enabled( $user_id );
+		return self::app_configured( $user_id ) || self::email_enabled( $user_id );
 	}
 
 	/**
-	 * Whether the user has an app secret stored.
+	 * Whether the user has an app secret that opens, so app codes work.
 	 *
 	 * @param int $user_id User id.
 	 * @return bool
 	 */
 	public static function app_enabled( $user_id ) {
 		return null !== self::totp_secret( $user_id );
+	}
+
+	/**
+	 * Whether an app secret is stored, whether or not it opens.
+	 *
+	 * @param int $user_id User id.
+	 * @return bool
+	 */
+	public static function app_configured( $user_id ) {
+		$totp = get_user_meta( (int) $user_id, self::META_TOTP, true );
+		return is_array( $totp ) && ! empty( $totp['secret'] );
+	}
+
+	/**
+	 * Whether a stored app secret can't be opened any more: the salts in wp-config.php
+	 * or the site key changed since it was saved.
+	 *
+	 * @param int $user_id User id.
+	 * @return bool
+	 */
+	public static function secret_unreadable( $user_id ) {
+		return self::app_configured( $user_id ) && ! self::app_enabled( $user_id );
+	}
+
+	/**
+	 * Logs once per stored secret that it can't be opened. The mark sits
+	 * beside the secret, so setting the app up again clears it.
+	 *
+	 * @param int $user_id User id.
+	 * @return bool Whether this call wrote the log row.
+	 */
+	public static function note_unreadable( $user_id ) {
+		$row = self::read_raw( $user_id, self::META_TOTP );
+		if ( null === $row ) {
+			return false;
+		}
+		$totp = maybe_unserialize( $row['raw'] );
+		if ( ! is_array( $totp ) || ! empty( $totp['unreadable'] ) ) {
+			return false;
+		}
+		$totp['unreadable'] = 1;
+		// Only the request that marks the secret logs it.
+		if ( ! self::swap_raw( $user_id, $row, $totp ) ) {
+			return false;
+		}
+		AuditLog::add( 'twostep_secret_unreadable', self::log_args( $user_id, __( "Authenticator app secret can't be read, so email and backup codes stand in", 'happyaccess' ), 'app' ) );
+		return true;
 	}
 
 	/**
@@ -133,7 +185,7 @@ final class UserState {
 			return new \WP_Error( 'happyaccess_no_site_key', __( 'The authenticator app could not be set up. Try again later.', 'happyaccess' ) );
 		}
 
-		$was_on = self::app_enabled( $user_id );
+		$was_on = self::app_configured( $user_id );
 		update_user_meta(
 			$user_id,
 			self::META_TOTP,

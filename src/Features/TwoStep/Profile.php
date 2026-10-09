@@ -401,6 +401,9 @@ final class Profile {
 		if ( $required ) {
 			$html .= '<p><strong>' . esc_html__( 'Your role needs two-step login.', 'happyaccess' ) . '</strong></p>';
 		}
+		if ( UserState::secret_unreadable( $user->ID ) ) {
+			$html .= '<div class="' . esc_attr( $ui['warning'] ) . '"><p>' . esc_html__( "Set up your authenticator app again. This site changed its security keys, so codes from the app can't be checked. Until then, log in with an email code or a backup code.", 'happyaccess' ) . '</p></div>';
+		}
 		$html .= '<div id="happyaccess-ts-profile-error" class="' . esc_attr( $ui['error'] ) . '" role="alert" hidden><p></p></div>';
 
 		$html .= $account ? '<div class="happyaccess-ts-methods" data-happyaccess-methods>' : '<table class="form-table" role="presentation" data-happyaccess-methods><tbody>';
@@ -460,6 +463,7 @@ final class Profile {
 				'input'   => 'regular-text',
 				'help'    => 'description',
 				'error'   => 'notice notice-error inline',
+				'warning' => 'notice notice-warning inline',
 				'field'   => '',
 			);
 		}
@@ -473,6 +477,7 @@ final class Profile {
 			'input'   => 'woocommerce-Input woocommerce-Input--text input-text',
 			'help'    => 'happyaccess-ts-help',
 			'error'   => 'woocommerce-error',
+			'warning' => 'woocommerce-info',
 			'field'   => 'woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide',
 		);
 	}
