@@ -111,9 +111,17 @@ final class Profile {
 	 * @return string
 	 */
 	public static function link_for( \WP_User $user ) {
-		$url   = self::url_for( $user );
-		$label = self::url() === $url ? __( 'your profile', 'happyaccess' ) : __( 'your account page', 'happyaccess' );
-		return '<a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a>';
+		return '<a href="' . esc_url( self::url_for( $user ) ) . '">' . esc_html( self::link_label( $user ) ) . '</a>';
+	}
+
+	/**
+	 * The plain text name of url_for(): your profile, or your account page.
+	 *
+	 * @param \WP_User $user The user.
+	 * @return string
+	 */
+	public static function link_label( \WP_User $user ) {
+		return self::url() === self::url_for( $user ) ? __( 'your profile', 'happyaccess' ) : __( 'your account page', 'happyaccess' );
 	}
 
 	/**
@@ -216,9 +224,9 @@ final class Profile {
 				__( 'Two-step login was turned off', 'happyaccess' ),
 				'twostep-reset',
 				array(
-					'admin_name' => $admin->display_name,
-					'setup_link' => self::link_for( $user ),
-					'setup_url'  => self::url_for( $user ),
+					'admin_name'  => $admin->display_name,
+					'setup_label' => self::link_label( $user ),
+					'setup_url'   => self::url_for( $user ),
 				)
 			);
 		}
@@ -286,7 +294,7 @@ final class Profile {
 	 * @return void
 	 */
 	public static function print_pause_notice() {
-		echo self::pause_notice(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in pause_notice().
+		echo wp_kses_post( self::pause_notice() );
 	}
 
 	/**

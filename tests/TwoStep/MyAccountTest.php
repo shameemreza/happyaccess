@@ -539,6 +539,7 @@ class TwoStepMyAccountTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'woocommerce-info', $html );
 		$this->assertStringContainsString( 'You have 2 backup codes left.', $html );
 		$this->assertStringContainsString( 'href="' . esc_url( wc_get_account_endpoint_url( 'two-step-login' ) ) . '"', $html );
+		$this->assertStringContainsString( Profile::link_for( $customer ), $html, 'Escaping on output leaves the link as built.' );
 		$this->assertStringNotContainsString( 'profile.php', $html );
 	}
 }

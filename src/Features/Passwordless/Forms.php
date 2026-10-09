@@ -86,13 +86,12 @@ final class Forms {
 			}
 		}
 
-		$html = self::render(
+		self::output(
 			array(
 				'redirect_to' => $redirect,
 				'context'     => $context,
 			)
 		);
-		echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- The template escapes every value.
 	}
 
 	/**
@@ -128,8 +127,21 @@ final class Forms {
 	 * @return string
 	 */
 	public static function render( array $args ) {
+		ob_start();
+		self::output( $args );
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Prints the form. The template escapes every value as it prints it.
+	 * Loads the script and stylesheet when it prints anything.
+	 *
+	 * @param array $args The same as for render().
+	 * @return void
+	 */
+	public static function output( array $args ) {
 		if ( ! LoginSteps::db_ready() ) {
-			return '';
+			return;
 		}
 
 		$context  = isset( $args['context'] ) && in_array( $args['context'], self::CONTEXTS, true ) ? $args['context'] : 'shortcode';
@@ -137,7 +149,7 @@ final class Forms {
 
 		$file = HAPPYACCESS_PLUGIN_DIR . 'templates/login/passwordless-form.php';
 		if ( ! is_readable( $file ) ) {
-			return '';
+			return;
 		}
 
 		$style = isset( $args['style'] ) && is_string( $args['style'] ) && in_array( $args['style'], self::STYLES, true ) ? $args['style'] : (string) Settings::get( 'passwordless.toggle_style' );
@@ -157,12 +169,9 @@ final class Forms {
 
 		// phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- Template scope only; existing names are never overwritten.
 		extract( $vars, EXTR_SKIP );
-		ob_start();
 		include $file;
-		$html = (string) ob_get_clean();
 
 		self::enqueue();
-		return $html;
 	}
 
 	/**

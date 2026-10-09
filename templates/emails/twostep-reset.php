@@ -4,9 +4,10 @@
  *
  * @package HappyAccess
  *
- * @var string $site_name  Site name.
- * @var string $admin_name Display name of the admin who turned it off.
- * @var string $setup_link Link to where the user sets it up again, already escaped.
+ * @var string $site_name   Site name.
+ * @var string $admin_name  Display name of the admin who turned it off.
+ * @var string $setup_url   Where the user sets it up again.
+ * @var string $setup_label Name of that page: your profile, or your account page.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -32,7 +33,7 @@ echo ' ';
 printf(
 	/* translators: %s: link to the user's profile or account page. */
 	esc_html__( 'You can set it up again from %s.', 'happyaccess' ),
-	$setup_link // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Profile::link_for().
+	'<a href="' . esc_url( $setup_url ) . '">' . esc_html( $setup_label ) . '</a>'
 );
 ?>
 </p>
