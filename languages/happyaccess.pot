@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-09T11:03:39+00:00\n"
+"POT-Creation-Date: 2026-10-09T11:40:36+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: happyaccess\n"
@@ -280,12 +280,12 @@ msgid "Backup codes renewed"
 msgstr ""
 
 #: src/Core/EventLabels.php:95
-#: src/Features/TwoStep/SetupSteps.php:229
+#: src/Features/TwoStep/SetupSteps.php:221
 msgid "Two-step login setup put off"
 msgstr ""
 
 #: src/Core/EventLabels.php:96
-#: src/Features/TwoStep/Challenge.php:1769
+#: src/Features/TwoStep/Challenge.php:1745
 #: templates/emails/twostep-site-alert.php:13
 msgid "Many wrong two-step login codes"
 msgstr ""
@@ -315,7 +315,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Core/Privacy.php:171
-msgid "If reCAPTCHA is turned on in the HappyAccess settings, every HappyAccess login screen loads a script from Google, and the visitor's IP address and browser details are sent to Google to check that the visit is from a person. Google handles that data under its own privacy policy. While it is off, nothing is sent to Google."
+msgid "If reCAPTCHA is turned on in the HappyAccess settings, every HappyAccess login screen and login form loads a script from Google, and the visitor's IP address and browser details are sent to Google to check that the visit is from a person. Google handles that data under its own privacy policy. While it is off, nothing is sent to Google."
 msgstr ""
 
 #: src/Core/Privacy.php:172
@@ -403,8 +403,8 @@ msgid "Temporary access records that name this user or email address."
 msgstr ""
 
 #: src/Core/Privacy.php:368
-#: src/Features/TwoStep/Challenge.php:1553
-#: src/Features/TwoStep/Challenge.php:1580
+#: src/Features/TwoStep/Challenge.php:1530
+#: src/Features/TwoStep/Challenge.php:1556
 #: src/Features/TwoStep/MyAccount.php:106
 #: src/Features/TwoStep/Profile.php:400
 #: src/Features/TwoStep/Profile.php:549
@@ -420,14 +420,14 @@ msgstr ""
 #: src/Core/Privacy.php:375
 #: src/Features/TwoStep/Profile.php:424
 #: src/Features/TwoStep/Profile.php:551
-#: src/Features/TwoStep/SetupSteps.php:516
+#: src/Features/TwoStep/SetupSteps.php:507
 msgid "Authenticator app"
 msgstr ""
 
 #: src/Core/Privacy.php:379
 #: src/Features/TwoStep/Profile.php:437
 #: src/Features/TwoStep/Profile.php:552
-#: src/Features/TwoStep/SetupSteps.php:536
+#: src/Features/TwoStep/SetupSteps.php:527
 msgid "Email codes"
 msgstr ""
 
@@ -459,15 +459,15 @@ msgstr ""
 msgid "Two-step login settings were kept, because they protect the account."
 msgstr ""
 
-#: src/Core/Recaptcha.php:238
+#: src/Core/Recaptcha.php:343
 msgid "The security check didn't pass. Reload the page and try again."
 msgstr ""
 
-#: src/Core/Recaptcha.php:257
+#: src/Core/Recaptcha.php:361
 msgid "The security check couldn't reach Google"
 msgstr ""
 
-#: src/Core/Recaptcha.php:282
+#: src/Core/Recaptcha.php:383
 msgid "A login failed the security check"
 msgstr ""
 
@@ -494,10 +494,10 @@ msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:156
 #: src/Features/Passwordless/LoginSteps.php:259
-#: src/Features/TwoStep/Challenge.php:533
-#: src/Features/TwoStep/Challenge.php:1037
+#: src/Features/TwoStep/Challenge.php:532
+#: src/Features/TwoStep/Challenge.php:1031
 #: src/Features/TwoStep/Profile.php:197
-#: src/Features/TwoStep/SetupSteps.php:781
+#: src/Features/TwoStep/SetupSteps.php:770
 msgid "This page expired. Try again."
 msgstr ""
 
@@ -554,7 +554,7 @@ msgstr ""
 #. translators: %d: minutes.
 #: src/Features/Passwordless/LoginSteps.php:774
 #: src/Features/SupportAccess/LoginSteps.php:455
-#: src/Features/TwoStep/Challenge.php:1885
+#: src/Features/TwoStep/Challenge.php:1861
 #: src/Features/TwoStep/RestController.php:549
 #, php-format
 msgid "Too many attempts. Try again in %d minute."
@@ -563,7 +563,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Features/Passwordless/LoginSteps.php:786
-#: src/Features/TwoStep/Challenge.php:1899
+#: src/Features/TwoStep/Challenge.php:1875
 msgid "Login is updating. Try again in a minute."
 msgstr ""
 
@@ -608,16 +608,16 @@ msgstr ""
 #: src/Features/Passwordless/LoginSteps.php:917
 #: src/Features/SupportAccess/LoginSteps.php:482
 #: src/Features/SupportAccess/LoginSteps.php:515
-#: src/Features/TwoStep/Challenge.php:1538
+#: src/Features/TwoStep/Challenge.php:1515
 #: templates/login/passwordless-form.php:45
 #: build/index.js:30
 msgid "Log in"
 msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:881
-#: src/Features/TwoStep/Challenge.php:1628
+#: src/Features/TwoStep/Challenge.php:1604
 #: src/Features/TwoStep/Profile.php:595
-#: src/Features/TwoStep/SetupSteps.php:570
+#: src/Features/TwoStep/SetupSteps.php:561
 msgid "Send a new code"
 msgstr ""
 
@@ -1505,20 +1505,20 @@ msgstr ""
 msgid "Temporary access: %s"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:316
+#: src/Features/TwoStep/Challenge.php:315
 msgid "Finish logging in with your two-step login code."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:612
+#: src/Features/TwoStep/Challenge.php:606
 msgid "Your login took too long. Log in again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:613
+#: src/Features/TwoStep/Challenge.php:607
 msgid "Too many wrong codes. Log in again."
 msgstr ""
 
 #. translators: 1: backup codes left, 2: link to where new ones are made.
-#: src/Features/TwoStep/Challenge.php:654
+#: src/Features/TwoStep/Challenge.php:648
 #, php-format
 msgid "You have %1$d backup code left. Make new ones on %2$s."
 msgid_plural "You have %1$d backup codes left. Make new ones on %2$s."
@@ -1526,94 +1526,94 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: backup codes left.
-#: src/Features/TwoStep/Challenge.php:662
+#: src/Features/TwoStep/Challenge.php:656
 #, php-format
 msgid "You have %d backup code left. Make new ones on your profile."
 msgid_plural "You have %d backup codes left. Make new ones on your profile."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Features/TwoStep/Challenge.php:731
+#: src/Features/TwoStep/Challenge.php:725
 msgid "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:734
+#: src/Features/TwoStep/Challenge.php:728
 msgid "Your role needs two-step login. Log in on the login page to set it up."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:736
+#: src/Features/TwoStep/Challenge.php:730
 msgid "This account uses two-step login. Log in on the login page."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:822
+#: src/Features/TwoStep/Challenge.php:816
 #: templates/emails/twostep-secret.php:12
 msgid "Authenticator app codes can't be checked"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1234
+#: src/Features/TwoStep/Challenge.php:1224
 #: src/Features/TwoStep/RestController.php:289
 msgid "That code didn't work. Try again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1324
+#: src/Features/TwoStep/Challenge.php:1301
 msgid "You have logged in successfully."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1521
+#: src/Features/TwoStep/Challenge.php:1498
 #: build/index.js:30
 msgid "Authenticator app code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1522
-#: src/Features/TwoStep/SetupSteps.php:543
+#: src/Features/TwoStep/Challenge.php:1499
+#: src/Features/TwoStep/SetupSteps.php:534
 msgid "Email code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1523
+#: src/Features/TwoStep/Challenge.php:1500
 msgid "Backup code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1544
+#: src/Features/TwoStep/Challenge.php:1521
 #: src/Features/TwoStep/Profile.php:368
-#: src/Features/TwoStep/SetupSteps.php:414
+#: src/Features/TwoStep/SetupSteps.php:406
 msgid "We sent a code to your email address."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1546
+#: src/Features/TwoStep/Challenge.php:1523
 #: src/Features/TwoStep/RestController.php:344
 msgid "We already sent several codes. Check your email, or wait a few minutes and try again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1548
+#: src/Features/TwoStep/Challenge.php:1525
 msgid "Enter the code from your authenticator app."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1581
+#: src/Features/TwoStep/Challenge.php:1557
 msgid "Log in again"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1625
+#: src/Features/TwoStep/Challenge.php:1601
 msgid "Use your authenticator app"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1628
+#: src/Features/TwoStep/Challenge.php:1604
 msgid "Email me a code instead"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1637
+#: src/Features/TwoStep/Challenge.php:1613
 #: build/index.js:30
 msgid "Use a backup code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1762
+#: src/Features/TwoStep/Challenge.php:1738
 msgid "Many wrong two-step login codes on the site in the last hour"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1790
+#: src/Features/TwoStep/Challenge.php:1766
 msgid "Two-step login paused for this account after too many wrong codes"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1800
+#: src/Features/TwoStep/Challenge.php:1776
 #: templates/emails/twostep-account-lock-text.php:16
 #: templates/emails/twostep-account-lock.php:14
 msgid "Two-step login is paused for your account"
@@ -1754,7 +1754,7 @@ msgstr ""
 
 #: src/Features/TwoStep/Profile.php:404
 #: src/Features/TwoStep/RestController.php:534
-#: src/Features/TwoStep/SetupSteps.php:436
+#: src/Features/TwoStep/SetupSteps.php:427
 msgid "Your role needs two-step login."
 msgstr ""
 
@@ -1815,17 +1815,17 @@ msgid "Use this when they lost their phone or their backup codes. They get an em
 msgstr ""
 
 #: src/Features/TwoStep/Profile.php:572
-#: src/Features/TwoStep/SetupSteps.php:517
+#: src/Features/TwoStep/SetupSteps.php:508
 msgid "Scan this QR code with your authenticator app."
 msgstr ""
 
 #: src/Features/TwoStep/Profile.php:574
-#: src/Features/TwoStep/SetupSteps.php:519
+#: src/Features/TwoStep/SetupSteps.php:510
 msgid "Code from the app"
 msgstr ""
 
 #: src/Features/TwoStep/Profile.php:576
-#: src/Features/TwoStep/SetupSteps.php:522
+#: src/Features/TwoStep/SetupSteps.php:513
 msgid "Turn on two-step login"
 msgstr ""
 
@@ -1846,7 +1846,7 @@ msgid "Code from the email"
 msgstr ""
 
 #: src/Features/TwoStep/Profile.php:594
-#: src/Features/TwoStep/SetupSteps.php:546
+#: src/Features/TwoStep/SetupSteps.php:537
 msgid "Turn on email codes"
 msgstr ""
 
@@ -1938,128 +1938,128 @@ msgid "Two-step login isn't on for your role."
 msgstr ""
 
 #: src/Features/TwoStep/RestController.php:562
-#: src/Features/TwoStep/SetupSteps.php:404
+#: src/Features/TwoStep/SetupSteps.php:396
 #: src/Features/TwoStep/UserState.php:183
 #: src/Features/TwoStep/UserState.php:186
 msgid "The authenticator app could not be set up. Try again later."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:221
+#: src/Features/TwoStep/SetupSteps.php:213
 msgid "You can't put this off anymore. Set up two-step login to finish logging in."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:275
+#: src/Features/TwoStep/SetupSteps.php:267
 msgid "The setup key expired. Scan the new QR code and try again."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:419
-#: src/Features/TwoStep/SetupSteps.php:601
-#: src/Features/TwoStep/SetupSteps.php:673
+#: src/Features/TwoStep/SetupSteps.php:411
+#: src/Features/TwoStep/SetupSteps.php:592
+#: src/Features/TwoStep/SetupSteps.php:663
 msgid "Set up two-step login"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:438
+#: src/Features/TwoStep/SetupSteps.php:429
 msgid "Set it up to finish logging in."
 msgstr ""
 
 #. translators: %s: date the grace period ends.
-#: src/Features/TwoStep/SetupSteps.php:443
+#: src/Features/TwoStep/SetupSteps.php:434
 #, php-format
 msgid "You can skip this until %s."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:449
+#: src/Features/TwoStep/SetupSteps.php:440
 msgid "This is the last time you can skip this."
 msgstr ""
 
 #. translators: %d: logins that can still skip setup.
-#: src/Features/TwoStep/SetupSteps.php:453
+#: src/Features/TwoStep/SetupSteps.php:444
 #, php-format
 msgid "You can skip this %d more time."
 msgid_plural "You can skip this %d more times."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Features/TwoStep/SetupSteps.php:483
+#: src/Features/TwoStep/SetupSteps.php:474
 msgid "QR code that adds this account to your authenticator app. The setup key below does the same."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:484
+#: src/Features/TwoStep/SetupSteps.php:475
 msgid "Or type this setup key into the app:"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:538
+#: src/Features/TwoStep/SetupSteps.php:529
 msgid "We send a code to the email address on your account. Type it in here to turn on email codes."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:540
+#: src/Features/TwoStep/SetupSteps.php:531
 msgid "Email me a code"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:568
+#: src/Features/TwoStep/SetupSteps.php:559
 msgid "Use an authenticator app instead"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:574
+#: src/Features/TwoStep/SetupSteps.php:565
 msgid "Use email codes instead"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:577
+#: src/Features/TwoStep/SetupSteps.php:568
 msgid "Later"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:596
-#: src/Features/TwoStep/SetupSteps.php:668
+#: src/Features/TwoStep/SetupSteps.php:587
+#: src/Features/TwoStep/SetupSteps.php:658
 #: build/index.js:61
 msgid "Continue"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:604
-#: src/Features/TwoStep/SetupSteps.php:676
+#: src/Features/TwoStep/SetupSteps.php:595
+#: src/Features/TwoStep/SetupSteps.php:666
 msgid "Two-step login is on."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:632
+#: src/Features/TwoStep/SetupSteps.php:622
 msgid "Save your backup codes"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:633
+#: src/Features/TwoStep/SetupSteps.php:623
 msgid "Each code works once. Use one to log in when you can't get a code from your app or email."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:634
+#: src/Features/TwoStep/SetupSteps.php:624
 msgid "These codes won't be shown again."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:637
+#: src/Features/TwoStep/SetupSteps.php:627
 #: build/index.js:72
 msgid "Copy"
 msgstr ""
 
 #. translators: %s: site name.
-#: src/Features/TwoStep/SetupSteps.php:641
+#: src/Features/TwoStep/SetupSteps.php:631
 #, php-format
 msgid "Two-step login backup codes for %s"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:644
+#: src/Features/TwoStep/SetupSteps.php:634
 msgid "Download as text"
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:646
+#: src/Features/TwoStep/SetupSteps.php:636
 msgid "Codes copied."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:646
+#: src/Features/TwoStep/SetupSteps.php:636
 msgid "Copy didn't work. Select the codes and copy them by hand."
 msgstr ""
 
-#: src/Features/TwoStep/SetupSteps.php:647
+#: src/Features/TwoStep/SetupSteps.php:637
 msgid "I saved these codes"
 msgstr ""
 
 #. translators: %s: link to the two-step section of the profile or the account page.
-#: src/Features/TwoStep/SetupSteps.php:664
+#: src/Features/TwoStep/SetupSteps.php:654
 #, php-format
 msgid "Your backup codes were shown once. If you didn't save them, make new ones on %s."
 msgstr ""
@@ -2141,16 +2141,20 @@ msgstr ""
 msgid "%s can only hold text, numbers and true or false."
 msgstr ""
 
-#: src/Rest/SettingsController.php:276
+#: src/Rest/SettingsController.php:297
+msgid "Google didn't accept this secret key. Check it in your reCAPTCHA admin and try again."
+msgstr ""
+
+#: src/Rest/SettingsController.php:335
 #: build/index.js:25
 msgid "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site."
 msgstr ""
 
-#: src/Rest/SettingsController.php:396
+#: src/Rest/SettingsController.php:433
 msgid "Please confirm before giving anyone access."
 msgstr ""
 
-#: src/Rest/SettingsController.php:409
+#: src/Rest/SettingsController.php:446
 msgid "Settings could not be saved. Please try again."
 msgstr ""
 

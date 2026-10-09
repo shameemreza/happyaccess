@@ -182,4 +182,51 @@ class NetworkSettingsTest extends WP_UnitTestCase {
 		$this->assertSame( 4, Settings::get( 'two_step.grace_days' ) );
 		switch_to_blog( $this->site );
 	}
+
+	/**
+	 * First-run setup on this site.
+	 *
+	 * @param array $features Feature switches.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function first_run( array $features ) {
+		$request = new WP_REST_Request( 'POST', '/happyaccess/v1/setup' );
+		$request->set_param( 'features', $features );
+		$request->set_param( 'consent', true );
+		return SettingsController::setup( $request );
+	}
+
+	public function test_setup_refuses_the_two_step_switch_on_a_subsite_that_follows_the_main_site() {
+		wp_set_current_user( $this->admin->ID );
+		$this->activate_network_wide();
+		$before = get_option( Settings::OPTION );
+
+		$result = $this->first_run(
+			array(
+				'support_access' => true,
+				'two_step'       => true,
+			)
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'happyaccess_two_step_network', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertSame( "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.", $result->get_error_message() );
+		$this->assertSame( $before, get_option( Settings::OPTION ), 'Nothing was saved, consent included.' );
+
+		$this->assertNotWPError( $this->first_run( array( 'support_access' => true ) ), 'Setup without the two-step switch still works.' );
+		$this->assertNotSame( '', Settings::get( 'support.consent_given_at' ) );
+	}
+
+	public function test_setup_takes_the_two_step_switch_on_the_main_site_and_without_network_activation() {
+		wp_set_current_user( $this->admin->ID );
+		$this->assertNotWPError( $this->first_run( array( 'two_step' => true ) ) );
+		$this->assertTrue( Settings::get( 'features.two_step' ) );
+
+		$this->activate_network_wide();
+		restore_current_blog();
+		$this->assertNotWPError( $this->first_run( array( 'two_step' => false ) ) );
+		$this->assertFalse( Settings::get( 'features.two_step' ) );
+		switch_to_blog( $this->site );
+	}
 }

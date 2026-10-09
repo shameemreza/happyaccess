@@ -9,7 +9,7 @@ use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 
 /**
- * A token "pass:<action>" passes for that action with a high score. Any
+ * A token "pass-<action>" passes for that action with a high score. Any
  * other token fails. Nothing ever leaves the test.
  */
 trait HappyAccess_Test_Recaptcha {
@@ -74,7 +74,7 @@ trait HappyAccess_Test_Recaptcha {
 	 * @return array The posted field.
 	 */
 	protected function captcha_field( $action ) {
-		return array( Recaptcha::FIELD => 'pass:' . $action );
+		return array( Recaptcha::FIELD => 'pass-' . $action );
 	}
 
 	/**
@@ -91,7 +91,7 @@ trait HappyAccess_Test_Recaptcha {
 		}
 		++$this->captcha_calls;
 		$token = isset( $args['body']['response'] ) ? (string) $args['body']['response'] : '';
-		$data  = 0 === strpos( $token, 'pass:' )
+		$data  = 0 === strpos( $token, 'pass-' )
 			? array(
 				'success' => true,
 				'action'  => substr( $token, 5 ),

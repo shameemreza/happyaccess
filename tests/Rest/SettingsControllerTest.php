@@ -7,6 +7,7 @@
 
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Rest\SettingsController;
@@ -16,6 +17,53 @@ require_once __DIR__ . '/RestTestCase.php';
 class SettingsControllerTest extends RestTestCase {
 
 	const SECRET = 'happyaccess_recaptcha_secret_key';
+
+	const BAD_SECRET_MESSAGE = "Google didn't accept this secret key. Check it in your reCAPTCHA admin and try again.";
+
+	/**
+	 * Requests to Google's verify URL: their bodies.
+	 *
+	 * @var array
+	 */
+	private $key_checks = array();
+
+	/**
+	 * What the stub answers a key check with: Google's fields, or a WP_Error.
+	 *
+	 * @var array|WP_Error
+	 */
+	private $key_answer = array();
+
+	public function set_up() {
+		parent::set_up();
+		$this->key_checks = array();
+		// A good secret with a dummy response gets this answer from Google.
+		$this->key_answer = array(
+			'success'     => false,
+			'error-codes' => array( 'invalid-input-response' ),
+		);
+		add_filter( 'pre_http_request', array( $this, 'answer_key_check' ), 10, 3 );
+	}
+
+	public function answer_key_check( $preempt, $args, $url ) {
+		if ( false !== $preempt || Recaptcha::VERIFY_URL !== $url ) {
+			return $preempt;
+		}
+		$this->key_checks[] = $args['body'];
+		if ( is_wp_error( $this->key_answer ) ) {
+			return $this->key_answer;
+		}
+		return array(
+			'headers'  => array(),
+			'body'     => wp_json_encode( $this->key_answer ),
+			'response' => array(
+				'code'    => 200,
+				'message' => 'OK',
+			),
+			'cookies'  => array(),
+			'filename' => null,
+		);
+	}
 
 	/**
 	 * Every route, with params that pass validation so only the permission
@@ -717,5 +765,116 @@ class SettingsControllerTest extends RestTestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertCount( 1, $this->settings_rows() );
+	}
+
+	private function turn_on_params( array $extra = array() ) {
+		return array_merge(
+			array(
+				'security' => array(
+					'recaptcha_enabled'  => true,
+					'recaptcha_site_key' => 'test-site-key',
+				),
+			),
+			$extra
+		);
+	}
+
+	public function test_a_new_secret_is_checked_once_with_a_dummy_response() {
+		$response = $this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => 'test-secret-value' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				array(
+					'secret'   => 'test-secret-value',
+					'response' => 'happyaccess-key-check',
+				),
+			),
+			$this->key_checks
+		);
+		$this->assertSame( 'test-secret-value', get_option( self::SECRET ) );
+	}
+
+	public function test_turning_recaptcha_on_checks_the_stored_secret() {
+		update_option( self::SECRET, 'test-secret-value', false );
+
+		$this->assertSame( 200, $this->request( 'POST', '/settings', $this->turn_on_params() )->get_status() );
+
+		$this->assertCount( 1, $this->key_checks );
+		$this->assertSame( 'test-secret-value', $this->key_checks[0]['secret'] );
+		$this->assertTrue( Settings::get( 'security.recaptcha_enabled' ) );
+	}
+
+	public function provide_bad_secret_codes() {
+		return array(
+			'invalid' => array( 'invalid-input-secret' ),
+			'missing' => array( 'missing-input-secret' ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_bad_secret_codes
+	 */
+	public function test_a_secret_google_refuses_is_not_saved( $code ) {
+		update_option( self::SECRET, 'old-secret-value', false );
+		$before           = get_option( Settings::OPTION );
+		$this->key_answer = array(
+			'success'     => false,
+			'error-codes' => array( $code ),
+		);
+
+		$response = $this->request( 'POST', '/settings', $this->turn_on_params( array( 'recaptcha_secret_key' => 'new-secret-value' ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_recaptcha_secret', $response->get_data()['code'] );
+		$this->assertSame( self::BAD_SECRET_MESSAGE, $response->get_data()['message'] );
+		$this->assertStringNotContainsString( 'new-secret-value', wp_json_encode( $response->get_data() ) );
+		$this->assertSame( 'old-secret-value', get_option( self::SECRET ), 'The old secret stays.' );
+		$this->assertSame( $before, get_option( Settings::OPTION ), 'Nothing else in the save is stored either.' );
+		$this->assertStringNotContainsString( 'new-secret-value', wp_json_encode( $this->settings_rows() ) );
+	}
+
+	public function test_turning_recaptcha_on_with_a_stored_secret_google_refuses_is_refused() {
+		update_option( self::SECRET, 'old-secret-value', false );
+		$this->key_answer = array(
+			'success'     => false,
+			'error-codes' => array( 'invalid-input-secret' ),
+		);
+
+		$response = $this->request( 'POST', '/settings', $this->turn_on_params() );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertFalse( Settings::get( 'security.recaptcha_enabled' ) );
+	}
+
+	public function test_any_other_answer_lets_the_save_go_on() {
+		foreach ( array(
+			array(
+				'success'     => false,
+				'error-codes' => array( 'timeout-or-duplicate' ),
+			),
+			array( 'success' => true ),
+			new WP_Error( 'http_request_failed', 'cURL error 28: timed out' ),
+		) as $n => $answer ) {
+			$this->key_answer = $answer;
+			$response         = $this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => 'secret-value-' . $n ) );
+			$this->assertSame( 200, $response->get_status(), (string) $n );
+			$this->assertSame( 'secret-value-' . $n, get_option( self::SECRET ) );
+		}
+		$this->assertCount( 3, $this->key_checks );
+	}
+
+	public function test_a_save_that_neither_turns_recaptcha_on_nor_changes_the_secret_checks_nothing() {
+		update_option( self::SECRET, 'test-secret-value', false );
+		$this->request( 'POST', '/settings', array( 'security' => array( 'max_attempts' => 9 ) ) );
+		$this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => 'test-secret-value' ) );
+		$this->request( 'POST', '/settings', $this->turn_on_params() );
+		$this->key_checks = array();
+
+		$this->request( 'POST', '/settings', $this->turn_on_params() );
+		$this->request( 'POST', '/settings', array( 'security' => array( 'recaptcha_enabled' => false ) ) );
+		$this->request( 'POST', '/settings', array( 'recaptcha_secret_key' => '' ) );
+
+		$this->assertSame( array(), $this->key_checks, 'Staying on, turning off and clearing the secret ask nothing.' );
 	}
 }

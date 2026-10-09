@@ -14,8 +14,9 @@
 	}
 
 	// While reCAPTCHA is on, each request carries a token made for its
-	// step. Without Google's script the request goes without one, and the
-	// server answers with its reload message.
+	// step. Without Google's script, or when it hasn't answered in 8
+	// seconds, the request goes without one, and the server answers with
+	// its reload message.
 	function token( path ) {
 		var captcha = window.happyaccessRecaptcha;
 		var google = window.grecaptcha;
@@ -23,6 +24,7 @@
 			return Promise.resolve( '' );
 		}
 		return new Promise( function ( resolve ) {
+			window.setTimeout( resolve, 8000, '' );
 			google.ready( function () {
 				google
 					.execute( captcha.key, { action: 'pl_' + path } )

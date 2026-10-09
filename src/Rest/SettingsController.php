@@ -271,11 +271,7 @@ final class SettingsController {
 		unset( $changes['support']['consent_given_at'], $changes['support']['consent_user_id'] );
 
 		if ( self::follows_main_site() && self::has_main_site_keys( $changes ) ) {
-			return new \WP_Error(
-				'happyaccess_two_step_network',
-				__( "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.", 'happyaccess' ),
-				array( 'status' => 400 )
-			);
+			return self::network_error();
 		}
 
 		$turns_on = ! Features::is_enabled( 'support_access' )
@@ -295,12 +291,50 @@ final class SettingsController {
 		unset( $changes['security']['recaptcha_secret_key'] );
 
 		$secret_changed = is_string( $secret ) && (string) get_option( self::SECRET_OPTION, '' ) !== $secret;
-		$extra          = self::apply( $changes, $secret_changed ? $secret : null );
+		if ( self::secret_refused( $changes, $secret_changed ? $secret : null ) ) {
+			return new \WP_Error(
+				'happyaccess_recaptcha_secret',
+				__( "Google didn't accept this secret key. Check it in your reCAPTCHA admin and try again.", 'happyaccess' ),
+				array( 'status' => 400 )
+			);
+		}
+		$extra = self::apply( $changes, $secret_changed ? $secret : null );
 		if ( is_wp_error( $extra ) ) {
 			return $extra;
 		}
 
 		return rest_ensure_response( array_merge( self::present(), $extra ) );
+	}
+
+	/**
+	 * Whether Google refuses the secret a save would use. It asks only when
+	 * the save turns reCAPTCHA on or sets a new secret, once, and only a
+	 * clear "unknown secret" answer refuses.
+	 *
+	 * @param array       $changes Nested changes.
+	 * @param string|null $secret  The new secret, or null when it stays.
+	 * @return bool
+	 */
+	private static function secret_refused( array $changes, $secret ) {
+		$turns_on = true !== Settings::get( 'security.recaptcha_enabled' ) && true === Settings::merge( $changes )['security']['recaptcha_enabled'];
+		if ( null === $secret && ! $turns_on ) {
+			return false;
+		}
+		$check = null === $secret ? (string) get_option( self::SECRET_OPTION, '' ) : $secret;
+		return '' !== $check && Recaptcha::secret_rejected( $check );
+	}
+
+	/**
+	 * The error for a two-step setting sent from a subsite that follows the main site.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function network_error() {
+		return new \WP_Error(
+			'happyaccess_two_step_network',
+			__( "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.", 'happyaccess' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	/**
@@ -338,6 +372,9 @@ final class SettingsController {
 	public static function setup( \WP_REST_Request $request ) {
 		$features = (array) $request->get_param( 'features' );
 		$features = array_intersect_key( $features, array_flip( Features::ALL ) );
+		if ( self::follows_main_site() && array_key_exists( 'two_step', $features ) ) {
+			return self::network_error();
+		}
 
 		$support_on = array_key_exists( 'support_access', $features ) ? (bool) $features['support_access'] : Features::is_enabled( 'support_access' );
 		if ( $support_on && true !== $request->get_param( 'consent' ) ) {

@@ -17,7 +17,6 @@ use HappyAccess\Core\Internal;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\OtherTwoFactor;
 use HappyAccess\Core\RateLimiter;
-use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Router;
@@ -533,11 +532,6 @@ final class Challenge {
 			return self::code_screen( $allowed, $carry, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
-		$captcha = self::check_captcha( $post, self::STEP );
-		if ( is_wp_error( $captcha ) ) {
-			return self::code_screen( $allowed, $carry, $captcha );
-		}
-
 		$attempts = self::gate( $pending['id'], $user );
 		if ( is_wp_error( $attempts ) ) {
 			return self::code_screen( $allowed, $carry, $attempts );
@@ -1036,10 +1030,6 @@ final class Challenge {
 		if ( ! self::nonce_ok( $post, 'happyaccess_twostep_send' ) ) {
 			return self::code_screen( $allowed, $carry, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
-		$captcha = self::check_captcha( $post, self::STEP );
-		if ( is_wp_error( $captcha ) ) {
-			return self::code_screen( $allowed, $carry, $captcha );
-		}
 		$sent = self::send_email( $user, $pending['id'] );
 		if ( is_wp_error( $sent ) ) {
 			return self::code_screen( $allowed, $carry, self::screen_error( $sent ) );
@@ -1232,19 +1222,6 @@ final class Challenge {
 	 */
 	public static function invalid_code_error() {
 		return new \WP_Error( 'happyaccess_invalid_code', esc_html__( "That code didn't work. Try again.", 'happyaccess' ) );
-	}
-
-	/**
-	 * The reCAPTCHA check of a two-step POST, after its nonce and before any
-	 * limit counts it. The setup step uses it too.
-	 *
-	 * @param array  $post   Unslashed $_POST.
-	 * @param string $action twostep or twostep_setup.
-	 * @return true|\WP_Error The error is made safe for the screen.
-	 */
-	public static function check_captcha( array $post, $action ) {
-		$result = Recaptcha::check( self::text( $post, Recaptcha::FIELD ), $action );
-		return is_wp_error( $result ) ? self::screen_error( $result ) : true;
 	}
 
 	/**
@@ -1554,7 +1531,6 @@ final class Challenge {
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => $message,
-			'captcha' => self::STEP,
 		);
 	}
 

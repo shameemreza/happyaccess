@@ -21,6 +21,7 @@ use HappyAccess\Features\TwoStep\SetupSteps;
 use HappyAccess\Features\TwoStep\Totp;
 use HappyAccess\Features\TwoStep\UserState;
 use HappyAccess\Login\Router;
+use HappyAccess\Login\Screens;
 
 /**
  * Thrown by the test redirector so a redirect from inside wp_signon() stops
@@ -349,79 +350,45 @@ class SetupStepsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'You can skip this 2 more times.', $screen['message'] );
 	}
 
-	public function test_the_setup_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+	public function test_the_setup_steps_take_a_post_without_a_token_while_recaptcha_is_on() {
 		$this->turn_on_recaptcha();
-		$user   = $this->admin();
-		$cookie = $this->start_setup( $user );
-		$screen = $this->screen( $cookie );
-		$secret = $this->shown_secret( $screen['body'] );
-		$code   = Totp::code( $secret, Totp::step_for( Clock::now() ) );
-
-		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) );
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertFalse( UserState::app_enabled( $user->ID ) );
-
-		$res = $this->post( $cookie, 'later' );
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 0, $this->wp_login_count );
-
-		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) + $this->captcha_field( 'twostep_setup' ) );
-		$this->assertSame( 'render', $res['type'] );
-		$this->assertTrue( UserState::app_enabled( $user->ID ) );
-
-		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) );
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 0, $this->wp_login_count );
-
-		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) + $this->captcha_field( 'twostep_setup' ) );
-		$this->assertSame( 'redirect', $res['type'] );
-		$this->assertSame( 1, $this->wp_login_count );
-	}
-
-	public function test_the_setup_steps_go_on_when_google_cannot_be_reached_and_log_it() {
-		$this->turn_on_recaptcha();
-		$this->google_is_down();
 		$user   = $this->admin();
 		$cookie = $this->start_setup( $user );
 		$secret = $this->shown_secret( $this->screen( $cookie )['body'] );
 		$code   = Totp::code( $secret, Totp::step_for( Clock::now() ) );
-		$token  = array( Recaptcha::FIELD => 'any-token' );
 
-		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) + $token );
+		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) );
 		$this->assertSame( 'render', $res['type'] );
+		$this->assertNull( $res['errors'] );
 		$this->assertTrue( UserState::app_enabled( $user->ID ) );
 
-		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) + $token );
+		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) );
 		$this->assertSame( 'redirect', $res['type'] );
 		$this->assertSame( 1, $this->wp_login_count );
-		$rows = AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'];
-		$this->assertCount( 1, $rows );
-		$this->assertSame( 'twostep_setup', $rows[0]['meta']['step'] );
+		$this->assertSame( 0, $this->captcha_calls, 'The steps after the password never ask Google.' );
 	}
 
-	public function test_a_missing_token_is_still_refused_on_the_setup_step_when_google_cannot_be_reached() {
+	public function test_later_takes_a_post_without_a_token_while_recaptcha_is_on() {
 		$this->turn_on_recaptcha();
-		$this->google_is_down();
-		$cookie = $this->start_setup( $this->admin() );
-
-		$res = $this->post( $cookie, 'later' );
-
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 0, $this->wp_login_count );
-	}
-
-	public function test_the_setup_step_skips_the_check_while_recaptcha_is_off() {
-		$this->watch_recaptcha();
 		$cookie = $this->start_setup( $this->admin() );
 
 		$this->assertSame( 'redirect', $this->post( $cookie, 'later' )['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
 		$this->assertSame( 0, $this->captcha_calls );
 	}
 
-	public function test_the_setup_screens_name_their_recaptcha_action() {
+	public function test_the_setup_screens_load_no_recaptcha_script_while_it_is_on() {
+		$this->turn_on_recaptcha();
+		$GLOBALS['wp_scripts'] = null;
 		$cookie = $this->start_setup( $this->admin() );
-		$this->assertSame( 'twostep_setup', $this->screen( $cookie )['captcha'] );
-		$this->assertSame( 'twostep_setup', $this->screen( $cookie, array( 'method' => 'email' ) )['captcha'] );
+
+		foreach ( array( $this->screen( $cookie ), $this->screen( $cookie, array( 'method' => 'email' ) ) ) as $screen ) {
+			Screens::prepare( $screen );
+			$this->assertSame( 'render', $screen['type'] );
+			$this->assertArrayNotHasKey( 'captcha', $screen );
+		}
+		$this->assertFalse( wp_script_is( Recaptcha::HANDLE, 'registered' ) );
+		$GLOBALS['wp_scripts'] = null;
 	}
 
 	public function test_logins_one_to_three_offer_later_and_login_four_does_not() {

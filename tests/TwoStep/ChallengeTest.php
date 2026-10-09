@@ -21,6 +21,7 @@ use HappyAccess\Features\TwoStep\Feature;
 use HappyAccess\Features\TwoStep\Totp;
 use HappyAccess\Features\TwoStep\UserState;
 use HappyAccess\Login\Router;
+use HappyAccess\Login\Screens;
 
 /**
  * Thrown by the test redirector so a redirect from inside wp_signon() stops
@@ -433,128 +434,63 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( 1, $this->wp_login_count );
 	}
 
-	public function test_the_code_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+	public function test_the_code_step_takes_a_post_without_a_token_while_recaptcha_is_on() {
 		$this->turn_on_recaptcha();
-		$made   = $this->app_user();
-		$this->password_login( $made['user'] );
-		$cookie = $this->pending_cookie();
-
-		$res = $this->post_code( $cookie, $this->app_code( $made['secret'] ) );
-
-		$this->assertSame( 'render', $res['type'] );
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 'The security check didn&#039;t pass. Reload the page and try again.', $res['errors']->get_error_message() );
-		$this->assertSame( 0, $this->wp_login_count );
-		$this->assertSame( 0, (int) $this->pending_rows()[0]['attempts'], 'The pending login counts only checks that passed reCAPTCHA.' );
-		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ) );
-
-		$res = $this->post_code( $cookie, $this->app_code( $made['secret'] ), 'app', $this->captcha_field( 'twostep' ) );
-		$this->assertSame( 'redirect', $res['type'] );
-		$this->assertSame( 1, $this->wp_login_count );
-	}
-
-	public function test_sending_an_email_code_refuses_a_post_without_a_token_while_recaptcha_is_on() {
-		$this->turn_on_recaptcha();
-		$made = $this->app_user();
-		UserState::enable_email( $made['user']->ID );
-		$this->password_login( $made['user'] );
-		$cookie = $this->pending_cookie();
-		EmailMethod::flush_queue();
-		$send = array(
-			'method'   => 'email',
-			'send'     => '1',
-			'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
-		);
-
-		$res = Challenge::handle( 'POST', array(), $send, array( Challenge::COOKIE => $cookie ) );
-		EmailMethod::flush_queue();
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertSame( array(), $this->mails );
-
-		$res = Challenge::handle( 'POST', array(), $send + $this->captcha_field( 'twostep' ), array( Challenge::COOKIE => $cookie ) );
-		EmailMethod::flush_queue();
-		$this->assertSame( 'redirect', $res['type'] );
-		$this->assertCount( 1, $this->mails );
-	}
-
-	public function test_the_code_step_goes_on_when_google_cannot_be_reached_and_logs_it() {
-		$this->turn_on_recaptcha();
-		$this->google_is_down();
-		$made = $this->app_user();
-		$this->password_login( $made['user'] );
-
-		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ), 'app', $this->captcha_field( 'twostep' ) );
-
-		$this->assertSame( 'redirect', $res['type'] );
-		$this->assertSame( 1, $this->wp_login_count, 'A right code logs in while Google is down.' );
-		$rows = AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'];
-		$this->assertCount( 1, $rows );
-		$this->assertSame( 'twostep', $rows[0]['meta']['step'] );
-	}
-
-	public function test_a_wrong_code_is_still_refused_when_google_cannot_be_reached() {
-		$this->turn_on_recaptcha();
-		$this->google_is_down();
-		$made = $this->app_user();
-		$this->password_login( $made['user'] );
-
-		$res = $this->post_code( $this->pending_cookie(), '000000', 'app', $this->captcha_field( 'twostep' ) );
-
-		$this->assertSame( 'render', $res['type'] );
-		$this->assertSame( array( 'happyaccess_invalid_code' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 0, $this->wp_login_count );
-	}
-
-	public function test_a_missing_token_is_still_refused_on_the_code_step_when_google_cannot_be_reached() {
-		$this->turn_on_recaptcha();
-		$this->google_is_down();
 		$made = $this->app_user();
 		$this->password_login( $made['user'] );
 
 		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
 
-		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( 0, $this->captcha_calls, 'The step after the password never asks Google.' );
 	}
 
-	public function test_sending_an_email_code_goes_on_when_google_cannot_be_reached() {
+	public function test_a_wrong_code_without_a_token_is_still_refused_as_a_wrong_code() {
 		$this->turn_on_recaptcha();
-		$this->google_is_down();
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+
+		$res = $this->post_code( $this->pending_cookie(), '000000' );
+
+		$this->assertSame( array( 'happyaccess_invalid_code' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( 0, $this->captcha_calls );
+	}
+
+	public function test_sending_an_email_code_takes_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
 		$made = $this->app_user();
 		UserState::enable_email( $made['user']->ID );
 		$this->password_login( $made['user'] );
-		$cookie = $this->pending_cookie();
 		EmailMethod::flush_queue();
 		$send = array(
 			'method'   => 'email',
 			'send'     => '1',
 			'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
-			Recaptcha::FIELD => 'any-token',
 		);
 
-		$res = Challenge::handle( 'POST', array(), $send, array( Challenge::COOKIE => $cookie ) );
+		$res = Challenge::handle( 'POST', array(), $send, array( Challenge::COOKIE => $this->pending_cookie() ) );
 		EmailMethod::flush_queue();
 
 		$this->assertSame( 'redirect', $res['type'] );
 		$this->assertCount( 1, $this->mails );
-		$this->assertCount( 1, AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'] );
-	}
-
-	public function test_the_code_step_skips_the_check_while_recaptcha_is_off() {
-		$this->watch_recaptcha();
-		$made = $this->app_user();
-		$this->password_login( $made['user'] );
-
-		$this->assertSame( 'redirect', $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) )['type'] );
 		$this->assertSame( 0, $this->captcha_calls );
 	}
 
-	public function test_the_code_screen_names_its_recaptcha_action() {
+	public function test_the_code_screen_loads_no_recaptcha_script_while_it_is_on() {
+		$this->turn_on_recaptcha();
+		$GLOBALS['wp_scripts'] = null;
 		$made = $this->app_user();
 		$this->password_login( $made['user'] );
+
 		$screen = Challenge::handle( 'GET', array(), array(), array( Challenge::COOKIE => $this->pending_cookie() ) );
-		$this->assertSame( 'twostep', $screen['captcha'] );
-		$this->assertArrayNotHasKey( 'captcha', Challenge::unavailable() );
+		Screens::prepare( $screen );
+
+		$this->assertSame( 'render', $screen['type'] );
+		$this->assertArrayNotHasKey( 'captcha', $screen );
+		$this->assertFalse( wp_script_is( Recaptcha::HANDLE, 'registered' ) );
+		$GLOBALS['wp_scripts'] = null;
 	}
 
 	public function test_a_replayed_app_code_is_refused() {

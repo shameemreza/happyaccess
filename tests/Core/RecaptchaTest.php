@@ -200,60 +200,17 @@ class RecaptchaTest extends WP_UnitTestCase {
 		$this->assertCount( 2, $this->log_rows( 'captcha_unavailable' ), 'The next hour logs again.' );
 	}
 
-	public function test_the_two_step_steps_go_on_when_google_cannot_be_reached_and_log_it() {
-		$this->turn_on();
-		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
-
-		$this->assertTrue( Recaptcha::verify( 'good-token', 'twostep' ) );
-		$this->assertTrue( Recaptcha::verify( 'good-token', 'twostep_setup' ) );
-
-		$rows = $this->log_rows( 'captcha_unavailable' );
-		$this->assertCount( 1, $rows, 'Still one row an hour.' );
-		$this->assertSame( 'twostep', $rows[0]['meta']['step'] );
-		$this->assertSame( 'allowed', $rows[0]['meta']['outcome'] );
-	}
-
-	public function test_the_public_steps_log_that_they_were_refused() {
+	public function test_every_step_is_refused_when_google_cannot_be_reached() {
 		$this->turn_on();
 		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
 
 		foreach ( array( 'code', 'link', 'pl_request', 'pl_verify' ) as $action ) {
 			$this->assertWPError( Recaptcha::verify( 'good-token', $action ), $action );
 		}
-		$this->assertSame( 'refused', $this->log_rows( 'captcha_unavailable' )[0]['meta']['outcome'] );
+		$this->assertSame( array( 'step' => 'code' ), $this->log_rows( 'captcha_unavailable' )[0]['meta'], 'The row names the step and nothing else.' );
 	}
 
-	public function test_the_two_step_steps_still_refuse_what_a_reachable_google_refuses() {
-		$this->turn_on();
-
-		$this->assertWPError( Recaptcha::verify( '', 'twostep' ), 'A missing token.' );
-		$this->assertWPError( Recaptcha::verify( '', 'twostep_setup' ) );
-		$this->answer = array(
-			'success' => true,
-			'action'  => 'code',
-			'score'   => 0.9,
-		);
-		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep' ), 'A token made for another step.' );
-		$this->answer = array(
-			'success' => true,
-			'action'  => 'twostep',
-			'score'   => 0.1,
-		);
-		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep' ), 'A low score.' );
-		$this->answer = array( 'success' => false );
-		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep_setup' ), 'A token Google rejects.' );
-		$this->assertSame( array(), $this->log_rows( 'captcha_unavailable' ) );
-	}
-
-	public function test_the_filter_can_still_refuse_a_two_step_step_while_google_is_down() {
-		$this->turn_on();
-		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
-		add_filter( 'happyaccess_verify_captcha', '__return_false' );
-
-		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep' ) );
-	}
-
-	public function test_an_answer_that_is_not_json_counts_as_unavailable() {
+	public function test_a_server_error_from_google_counts_as_unavailable() {
 		$this->turn_on();
 		$this->answer = array();
 		add_filter(
@@ -280,15 +237,15 @@ class RecaptchaTest extends WP_UnitTestCase {
 	public function test_a_failed_check_is_logged_once_an_hour_without_the_token() {
 		$this->turn_on();
 		$this->answer['score']  = 0.1;
-		$this->answer['action'] = 'twostep';
+		$this->answer['action'] = 'pl_verify';
 
-		Recaptcha::verify( 'good-token', 'twostep' );
+		Recaptcha::verify( 'good-token', 'pl_verify' );
 		Recaptcha::verify( '', 'code' );
 
 		$rows = $this->log_rows( 'captcha_failed' );
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'core', $rows[0]['feature'] );
-		$this->assertSame( 'twostep', $rows[0]['meta']['step'] );
+		$this->assertSame( 'pl_verify', $rows[0]['meta']['step'] );
 		$this->assertSame( 'score', $rows[0]['meta']['reason'] );
 		$this->assertStringNotContainsString( 'good-token', wp_json_encode( $rows ) );
 	}
@@ -362,18 +319,247 @@ class RecaptchaTest extends WP_UnitTestCase {
 	}
 
 	public function test_every_step_has_its_own_action() {
-		$this->assertSame( array( 'code', 'link', 'pl_request', 'pl_verify', 'twostep', 'twostep_setup' ), Recaptcha::ACTIONS );
+		$this->assertSame( array( 'code', 'link', 'pl_request', 'pl_verify' ), Recaptcha::ACTIONS, 'Only the public steps. The two-step steps come after a right password.' );
+	}
+
+	public function test_the_two_step_steps_load_nothing_and_are_not_checked() {
+		$this->turn_on();
+		Recaptcha::enqueue( 'twostep' );
+		Recaptcha::enqueue( 'twostep_setup' );
+		$this->assertFalse( wp_script_is( Recaptcha::HANDLE, 'enqueued' ) );
 	}
 
 	public function test_the_privacy_text_names_google_and_says_it_is_only_while_on() {
 		$text = Privacy::policy_text();
 		$this->assertStringContainsString( 'If reCAPTCHA is turned on', $text );
-		$this->assertStringContainsString( 'every HappyAccess login screen', $text );
+		$this->assertStringContainsString( 'every HappyAccess login screen and login form', $text );
 		$this->assertStringContainsString( 'While it is off, nothing is sent to Google.', $text );
 	}
 
 	public function test_its_events_are_core_events() {
 		$this->assertContains( 'captcha_unavailable', Privacy::CORE_EVENTS );
 		$this->assertContains( 'captcha_failed', Privacy::CORE_EVENTS );
+	}
+
+	public function provide_malformed_tokens() {
+		return array(
+			'over 4096 bytes' => array( str_repeat( 'a', 4097 ) ),
+			'a space'         => array( 'abc def' ),
+			'a colon'         => array( 'abc:def' ),
+			'base64 extras'   => array( 'abc+/=' ),
+			'a newline'       => array( "abc\ndef" ),
+			'not ascii'       => array( "abc\xc3\xa9" ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_malformed_tokens
+	 */
+	public function test_a_malformed_token_counts_as_missing_and_never_goes_to_google( $token ) {
+		$this->turn_on();
+
+		$this->assertWPError( Recaptcha::verify( $token, 'code' ) );
+
+		$this->assertSame( array(), $this->requests );
+		$rows = $this->log_rows( 'captcha_failed' );
+		$this->assertSame( 'missing', $rows[0]['meta']['reason'] );
+	}
+
+	public function test_a_token_of_4096_bytes_from_the_token_alphabet_goes_to_google() {
+		$this->turn_on();
+		$token = substr( str_repeat( 'Az09_-', 683 ), 0, 4096 );
+
+		$this->assertTrue( Recaptcha::verify( $token, 'code' ) );
+		$this->assertCount( 1, $this->requests );
+		$this->assertSame( $token, $this->requests[0]['args']['body']['response'] );
+	}
+
+	private function answer_with( $code, $body ) {
+		add_filter(
+			'pre_http_request',
+			static function () use ( $code, $body ) {
+				return array(
+					'headers'  => array(),
+					'body'     => $body,
+					'response' => array(
+						'code'    => $code,
+						'message' => '',
+					),
+					'cookies'  => array(),
+					'filename' => null,
+				);
+			},
+			5
+		);
+	}
+
+	public function provide_rejected_answers() {
+		return array(
+			'400'                => array( 400, '{"success":true,"action":"code","score":0.9}' ),
+			'403'                => array( 403, '<html>Forbidden</html>' ),
+			'200 not json'       => array( 200, '<html>Hello</html>' ),
+			'200 empty'          => array( 200, '' ),
+			'200 a json string'  => array( 200, '"yes"' ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_rejected_answers
+	 */
+	public function test_a_client_error_or_an_unreadable_answer_is_rejected_not_unavailable( $code, $body ) {
+		$this->turn_on();
+		$this->answer_with( $code, $body );
+
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'code' ) );
+
+		$this->assertSame( array(), $this->log_rows( 'captcha_unavailable' ) );
+		$this->assertSame( 'rejected', $this->log_rows( 'captcha_failed' )[0]['meta']['reason'] );
+	}
+
+	public function test_a_server_error_with_a_passing_body_still_counts_as_unavailable() {
+		$this->turn_on();
+		$this->answer_with( 503, '{"success":true,"action":"code","score":0.9}' );
+
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'code' ) );
+		$this->assertCount( 1, $this->log_rows( 'captcha_unavailable' ) );
+		$this->assertSame( array(), $this->log_rows( 'captcha_failed' ) );
+	}
+
+	public function test_a_token_made_on_another_host_is_rejected() {
+		$this->turn_on();
+		$this->answer['hostname'] = 'evil.example.net';
+
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'code' ) );
+		$this->assertSame( 'rejected', $this->log_rows( 'captcha_failed' )[0]['meta']['reason'] );
+	}
+
+	public function test_a_token_made_on_the_home_or_the_site_host_passes() {
+		$this->turn_on();
+		update_option( 'home', 'https://Shop.Example.org' );
+		update_option( 'siteurl', 'https://wp.example.org/core' );
+
+		$this->answer['hostname'] = 'shop.example.org';
+		$this->assertTrue( Recaptcha::verify( 'good-token', 'code' ), 'The home host.' );
+
+		$this->answer['hostname'] = 'wp.example.org';
+		$this->assertTrue( Recaptcha::verify( 'good-token', 'code' ), 'The site host.' );
+
+		unset( $this->answer['hostname'] );
+		$this->assertTrue( Recaptcha::verify( 'good-token', 'code' ), 'No hostname in the answer.' );
+	}
+
+	public function test_the_key_check_sends_only_the_secret_and_a_dummy_response() {
+		$this->answer = array(
+			'success'     => false,
+			'error-codes' => array( 'invalid-input-response' ),
+		);
+
+		$this->assertFalse( Recaptcha::secret_rejected( 'test-secret-value' ) );
+
+		$this->assertCount( 1, $this->requests );
+		$this->assertSame( Recaptcha::VERIFY_URL, $this->requests[0]['url'] );
+		$this->assertSame(
+			array(
+				'secret'   => 'test-secret-value',
+				'response' => 'happyaccess-key-check',
+			),
+			$this->requests[0]['args']['body']
+		);
+		$this->assertSame( 5, $this->requests[0]['args']['timeout'] );
+	}
+
+	public function test_the_key_check_refuses_only_a_secret_google_names_as_bad() {
+		foreach ( array( 'invalid-input-secret', 'missing-input-secret' ) as $code ) {
+			$this->answer = array(
+				'success'     => false,
+				'error-codes' => array( 'invalid-input-response', $code ),
+			);
+			$this->assertTrue( Recaptcha::secret_rejected( 'test-secret-value' ), $code );
+		}
+
+		$this->answer = array(
+			'success'     => false,
+			'error-codes' => array( 'timeout-or-duplicate' ),
+		);
+		$this->assertFalse( Recaptcha::secret_rejected( 'test-secret-value' ) );
+
+		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
+		$this->assertFalse( Recaptcha::secret_rejected( 'test-secret-value' ), 'A network error lets the save go on.' );
+
+		$this->answer = array();
+		$this->answer_with( 500, 'error' );
+		$this->assertFalse( Recaptcha::secret_rejected( 'test-secret-value' ) );
+		$this->assertSame( array(), $this->log_rows( 'captcha_unavailable' ), 'The key check logs nothing.' );
+	}
+
+	public function test_the_form_script_is_added_when_the_inline_forms_loaded_the_script_first() {
+		$this->turn_on();
+		Recaptcha::load_script();
+		$this->assertTrue( wp_script_is( Recaptcha::HANDLE, 'enqueued' ) );
+
+		Recaptcha::enqueue( 'pl_request' );
+		Recaptcha::enqueue( 'pl_request' );
+
+		$after = array_values( array_filter( (array) wp_scripts()->get_data( Recaptcha::HANDLE, 'after' ), 'is_string' ) );
+		$this->assertCount( 1, $after, 'Added once.' );
+		$this->assertStringContainsString( '"pl_request"', $after[0] );
+	}
+
+	/**
+	 * Runs the inline form script in jsdom through tests/Support/recaptcha-form.cjs.
+	 *
+	 * @param string $scenario stall, pass, fail or old.
+	 * @return array What the form sent.
+	 */
+	private function run_form_script( $scenario ) {
+		$node = trim( (string) shell_exec( 'command -v node 2>/dev/null' ) );
+		if ( '' === $node || ! is_dir( HAPPYACCESS_PLUGIN_DIR . 'node_modules/jsdom' ) ) {
+			$this->markTestSkipped( 'Needs node and the npm packages.' );
+		}
+		$this->turn_on();
+		Recaptcha::enqueue( 'code' );
+		$script = implode( "\n", array_filter( (array) wp_scripts()->get_data( Recaptcha::HANDLE, 'after' ), 'is_string' ) );
+
+		$pipes = array();
+		$proc  = proc_open( array( $node, __DIR__ . '/../Support/recaptcha-form.cjs' ), array( array( 'pipe', 'r' ), array( 'pipe', 'w' ), array( 'pipe', 'w' ) ), $pipes );
+		fwrite( $pipes[0], wp_json_encode( array( 'script' => $script, 'scenario' => $scenario ) ) );
+		fclose( $pipes[0] );
+		$out = stream_get_contents( $pipes[1] );
+		$err = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+		$this->assertSame( 0, proc_close( $proc ), $err );
+		return json_decode( $out, true );
+	}
+
+	public function test_the_form_goes_without_a_token_after_8_seconds_when_grecaptcha_stalls() {
+		$out = $this->run_form_script( 'stall' );
+
+		$this->assertSame( 0, $out['before'], 'Nothing is sent while it waits.' );
+		$this->assertSame( array( 8000 ), $out['timers'] );
+		$this->assertCount( 1, $out['sent'] );
+		$this->assertSame( 'submit', $out['sent'][0]['how'] );
+		$this->assertContains( array( 'happyaccess_action', 'later' ), $out['sent'][0]['fields'], 'The button that was pressed still reaches the server.' );
+		$this->assertContains( array( 'happyaccess_recaptcha', '' ), $out['sent'][0]['fields'] );
+		$this->assertNotContains( array( 'other', 'x' ), $out['sent'][0]['fields'] );
+	}
+
+	public function test_the_form_goes_with_the_token_and_its_submitter_once_grecaptcha_answers() {
+		$out = $this->run_form_script( 'pass' );
+
+		$this->assertSame( array(), $out['timers'], 'The wait timer is cleared.' );
+		$this->assertCount( 1, $out['sent'], 'Sent once, the timer adds nothing.' );
+		$this->assertSame( 'requestSubmit', $out['sent'][0]['how'] );
+		$this->assertContains( array( 'happyaccess_recaptcha', 'token-value' ), $out['sent'][0]['fields'] );
+		$this->assertContains( array( 'happyaccess_action', 'later' ), $out['sent'][0]['fields'] );
+	}
+
+	public function test_a_failed_execute_or_an_old_browser_still_carries_the_submitter() {
+		foreach ( array( 'fail', 'old' ) as $scenario ) {
+			$out = $this->run_form_script( $scenario );
+			$this->assertCount( 1, $out['sent'], $scenario );
+			$this->assertSame( 'submit', $out['sent'][0]['how'], $scenario );
+			$this->assertContains( array( 'happyaccess_action', 'later' ), $out['sent'][0]['fields'], $scenario );
+		}
 	}
 }

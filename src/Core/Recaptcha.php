@@ -10,18 +10,18 @@ namespace HappyAccess\Core;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Loads Google's script on the HappyAccess login screens and checks the
- * token each POST step sends. Every step has its own action name, so a token
- * made on one screen can't be spent on another.
+ * Loads Google's script on the public HappyAccess login screens and checks
+ * the token each of their POST steps sends. Every step has its own action
+ * name, so a token made on one screen can't be spent on another.
  *
- * When Google can't be reached, the public steps are refused, as 1.0.6 did:
- * a site owner turned the check on to keep bots out, and letting every login
+ * The two-step steps are left out: they come after a right password and
+ * have their own per-account and per-IP limits, so a check there would only
+ * add a way to lock people out.
+ *
+ * When Google can't be reached, the step is refused, as 1.0.6 did: a site
+ * owner turned the check on to keep bots out, and letting every login
  * through whenever the check is down would let a bot in at the moment it
- * can block the check. The two-step steps (code, email send, setup) run only
- * after a right password, so they go on instead: refusing there would lock
- * out every user with two-step login, admins included, and the only way back
- * is a login. A reachable Google that says no still refuses every step.
- * The log says what happened, once an hour.
+ * can block the check. The log says so, once an hour.
  */
 final class Recaptcha {
 
@@ -41,15 +41,41 @@ final class Recaptcha {
 	const TIMEOUT = 5;
 
 	/**
-	 * Action names, one per step.
+	 * Action names, one per public step.
 	 */
-	const ACTIONS = array( 'code', 'link', 'pl_request', 'pl_verify', 'twostep', 'twostep_setup' );
+	const ACTIONS = array( 'code', 'link', 'pl_request', 'pl_verify' );
 
 	/**
-	 * Steps that go on when Google can't be reached. They come after a right
-	 * password, so a bot has already failed to get here.
+	 * Longest token sent to Google. Real ones are well under it.
 	 */
-	const OPEN_WHEN_UNREACHABLE = array( 'twostep', 'twostep_setup' );
+	const MAX_TOKEN_BYTES = 4096;
+
+	/**
+	 * The characters a token is made of.
+	 */
+	const TOKEN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+
+	/**
+	 * The response sent with a secret when a save checks it. Google answers
+	 * it with invalid-input-response for a good secret.
+	 */
+	const KEY_CHECK_RESPONSE = 'happyaccess-key-check';
+
+	/**
+	 * Google's error codes for a secret it doesn't know.
+	 */
+	const BAD_SECRET_CODES = array( 'invalid-input-secret', 'missing-input-secret' );
+
+	/**
+	 * Milliseconds the form script waits for Google before it sends the
+	 * form without a token.
+	 */
+	const WAIT_MS = 8000;
+
+	/**
+	 * Marks the submit script, so it is added only once.
+	 */
+	const FORM_SCRIPT_MARK = 'data-happyaccess-wait';
 
 	/**
 	 * Set while the log already has this hour's row.
@@ -110,34 +136,48 @@ final class Recaptcha {
 	 * @return void
 	 */
 	public static function enqueue( $action ) {
-		if ( ! in_array( $action, self::ACTIONS, true ) || wp_script_is( self::HANDLE, 'enqueued' ) || ! self::load_script() ) {
+		if ( ! in_array( $action, self::ACTIONS, true ) || ! self::load_script() ) {
 			return;
+		}
+		// The inline forms may have loaded Google's script already; the
+		// submit script is still needed, once.
+		foreach ( (array) wp_scripts()->get_data( self::HANDLE, 'after' ) as $script ) {
+			if ( is_string( $script ) && false !== strpos( $script, self::FORM_SCRIPT_MARK ) ) {
+				return;
+			}
 		}
 		wp_add_inline_script( self::HANDLE, self::form_script( $action ), 'after' );
 	}
 
 	/**
 	 * The script that fills the hidden field on submit. Without Google's
-	 * script, or when it fails, the form goes as it is and the step answers
-	 * with the reload message.
+	 * script, when it fails, or when it hasn't answered after WAIT_MS, the
+	 * form goes without a token and the step answers with the reload
+	 * message. form.submit() skips the pressed button, so its name and
+	 * value go in a hidden field.
 	 *
 	 * @param string $action Action name.
 	 * @return string
 	 */
 	private static function form_script( $action ) {
 		return sprintf(
-			'(function(){var key=%1$s,action=%2$s,field=%3$s;' .
-			'document.addEventListener("submit",function(e){var form=e.target,by=e.submitter,input;' .
+			'(function(){var key=%1$s,action=%2$s,field=%3$s,wait=%4$d;' .
+			'document.addEventListener("submit",function(e){var form=e.target,by=e.submitter,input,timer,done=false;' .
 			'if(!form.matches||!form.matches("form[name^=\"happyaccess\"],form[id^=\"happyaccess\"]")||!window.grecaptcha){return;}' .
 			'input=form.querySelector("input[name=\""+field+"\"]");if(input&&input.value){return;}' .
 			'e.preventDefault();if(form.hasAttribute("data-happyaccess-wait")){return;}form.setAttribute("data-happyaccess-wait","1");' .
 			'if(!input){input=document.createElement("input");input.type="hidden";input.name=field;form.appendChild(input);}' .
-			'function send(){form.removeAttribute("data-happyaccess-wait");if(!input.value||!form.requestSubmit){form.submit();}else if(by&&by.form===form){form.requestSubmit(by);}else{form.requestSubmit();}}' .
-			'window.grecaptcha.ready(function(){window.grecaptcha.execute(key,{action:action}).then(function(t){input.value=t;send();},send);});' .
+			'function send(){var carry;if(done){return;}done=true;window.clearTimeout(timer);form.removeAttribute("data-happyaccess-wait");' .
+			'if(input.value&&form.requestSubmit){if(by&&by.form===form){form.requestSubmit(by);}else{form.requestSubmit();}return;}' .
+			'if(by&&by.form===form&&by.name){carry=document.createElement("input");carry.type="hidden";carry.name=by.name;carry.value=by.value;form.appendChild(carry);}' .
+			'form.submit();}' .
+			'timer=window.setTimeout(send,wait);' .
+			'window.grecaptcha.ready(function(){window.grecaptcha.execute(key,{action:action}).then(function(t){if(!done){input.value=t;}send();},send);});' .
 			'},true);})();',
 			wp_json_encode( self::site_key() ),
 			wp_json_encode( (string) $action ),
-			wp_json_encode( self::FIELD )
+			wp_json_encode( self::FIELD ),
+			self::WAIT_MS
 		);
 	}
 
@@ -168,15 +208,14 @@ final class Recaptcha {
 	public static function verify( $token, $action ) {
 		$action = (string) $action;
 		$reason = self::reason( is_string( $token ) ? trim( $token ) : '', $action );
-		$open   = 'unavailable' === $reason && in_array( $action, self::OPEN_WHEN_UNREACHABLE, true );
 
 		/**
 		 * Overrides the reCAPTCHA result of a login step.
 		 *
 		 * @param bool   $passed Whether the check passed.
-		 * @param string $action The step: code, link, pl_request, pl_verify, twostep or twostep_setup.
+		 * @param string $action The step: code, link, pl_request or pl_verify.
 		 */
-		if ( (bool) apply_filters( 'happyaccess_verify_captcha', '' === $reason || $open, $action ) ) {
+		if ( (bool) apply_filters( 'happyaccess_verify_captcha', '' === $reason, $action ) ) {
 			return true;
 		}
 
@@ -194,7 +233,7 @@ final class Recaptcha {
 	 * @return string missing, unavailable, rejected, action, score or empty.
 	 */
 	private static function reason( $token, $action ) {
-		if ( '' === $token ) {
+		if ( ! self::well_formed( $token ) ) {
 			return 'missing';
 		}
 
@@ -210,13 +249,17 @@ final class Recaptcha {
 			)
 		);
 
-		$data = is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ? null : json_decode( wp_remote_retrieve_body( $response ), true );
-		if ( ! is_array( $data ) ) {
-			self::log_unavailable( $action, in_array( $action, self::OPEN_WHEN_UNREACHABLE, true ) );
+		$status = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		if ( 0 === $status || $status >= 500 ) {
+			self::log_unavailable( $action );
 			return 'unavailable';
 		}
 
-		if ( empty( $data['success'] ) ) {
+		$data = 200 === $status ? json_decode( wp_remote_retrieve_body( $response ), true ) : null;
+		if ( ! is_array( $data ) || empty( $data['success'] ) ) {
+			return 'rejected';
+		}
+		if ( isset( $data['hostname'] ) && ! self::own_host( $data['hostname'] ) ) {
 			return 'rejected';
 		}
 		if ( ! isset( $data['action'] ) || $action !== $data['action'] ) {
@@ -227,6 +270,68 @@ final class Recaptcha {
 			return 'score';
 		}
 		return '';
+	}
+
+	/**
+	 * Whether a token is worth sending to Google: not empty, not too long,
+	 * and only the characters tokens are made of.
+	 *
+	 * @param string $token Token, trimmed.
+	 * @return bool
+	 */
+	private static function well_formed( $token ) {
+		$length = strlen( $token );
+		return $length > 0 && $length <= self::MAX_TOKEN_BYTES && strspn( $token, self::TOKEN_CHARS ) === $length;
+	}
+
+	/**
+	 * Whether the host Google saw the token made on is this site's.
+	 *
+	 * @param mixed $hostname Host from Google's answer.
+	 * @return bool
+	 */
+	private static function own_host( $hostname ) {
+		if ( ! is_string( $hostname ) || '' === $hostname ) {
+			return false;
+		}
+		$hosts = array();
+		foreach ( array( home_url(), site_url() ) as $url ) {
+			$host = wp_parse_url( $url, PHP_URL_HOST );
+			if ( is_string( $host ) && '' !== $host ) {
+				$hosts[] = strtolower( $host );
+			}
+		}
+		return in_array( strtolower( $hostname ), $hosts, true );
+	}
+
+	/**
+	 * Asks Google once whether it knows a secret, before a save stores it
+	 * or turns the check on with it. Only an answer that names the secret
+	 * as bad counts; a network error or anything else lets the save go on,
+	 * so an outage never blocks the settings. Nothing is logged.
+	 *
+	 * @param string $secret Secret to check.
+	 * @return bool Whether Google said the secret is wrong.
+	 */
+	public static function secret_rejected( $secret ) {
+		$response = wp_remote_post(
+			self::VERIFY_URL,
+			array(
+				'timeout' => self::TIMEOUT,
+				'body'    => array(
+					'secret'   => (string) $secret,
+					'response' => self::KEY_CHECK_RESPONSE,
+				),
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return false;
+		}
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $data ) || ! isset( $data['error-codes'] ) || ! is_array( $data['error-codes'] ) ) {
+			return false;
+		}
+		return array() !== array_intersect( self::BAD_SECRET_CODES, $data['error-codes'] );
 	}
 
 	/**
@@ -242,10 +347,9 @@ final class Recaptcha {
 	 * Logs that Google couldn't be reached, once an hour.
 	 *
 	 * @param string $action Action name.
-	 * @param bool   $open   Whether the step went on.
 	 * @return void
 	 */
-	private static function log_unavailable( $action, $open ) {
+	private static function log_unavailable( $action ) {
 		if ( ! self::first_this_hour( self::UNAVAILABLE_TRANSIENT ) ) {
 			return;
 		}
@@ -255,10 +359,7 @@ final class Recaptcha {
 				'feature' => 'core',
 				'user_id' => 0,
 				'summary' => __( "The security check couldn't reach Google", 'happyaccess' ),
-				'meta'    => array(
-					'step'    => $action,
-					'outcome' => $open ? 'allowed' : 'refused',
-				),
+				'meta'    => array( 'step' => $action ),
 			)
 		);
 	}
