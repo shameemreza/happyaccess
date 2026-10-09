@@ -205,6 +205,74 @@ class PrivacyTest extends WP_UnitTestCase {
 		$this->assertSame( '0', $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND metadata LIKE %s", $created['id'], '%Acme%' ) ) );
 	}
 
+	/**
+	 * A writer locale that puts the label mid-sentence.
+	 *
+	 * @param string $translation Translation.
+	 * @param string $text        Original.
+	 * @param string $domain      Text domain.
+	 * @return string
+	 */
+	public static function label_mid_sentence( $translation, $text, $domain ) {
+		return 'happyaccess' === $domain && 'Temporary access granted to %s' === $text ? 'Zugang für %s gewährt' : $translation;
+	}
+
+	public function test_label_scrub_rebuilds_a_stored_summary_with_the_label_mid_sentence() {
+		global $wpdb;
+		$logs = Installer::table( 'logs' );
+		add_filter( 'gettext', array( __CLASS__, 'label_mid_sentence' ), 10, 3 );
+		$created = Grants::create(
+			array(
+				'label' => 'Acme',
+				'email' => 'acme@example.net',
+			)
+		);
+		remove_filter( 'gettext', array( __CLASS__, 'label_mid_sentence' ), 10 );
+		$this->assertSame( 'Zugang für Acme gewährt', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ) ) );
+
+		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
+		$result  = call_user_func( $erasers['happyaccess']['callback'], 'acme@example.net', 1 );
+
+		$this->assertNotContains( 'Some log summaries may still contain the grant label.', $result['messages'] );
+		$this->assertSame( '0', $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND summary LIKE %s", $created['id'], '%Acme%' ) ) );
+		$this->assertSame( 'Temporary access granted to [removed]', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ) ) );
+	}
+
+	public function test_label_scrub_gets_past_rows_it_cannot_clean() {
+		global $wpdb;
+		$logs    = Installer::table( 'logs' );
+		$created = Grants::create(
+			array(
+				'label' => 'Acme',
+				'email' => 'acme@example.net',
+			)
+		);
+		// Rows that hold the label in meta outside the text values, which the scrub leaves alone.
+		for ( $i = 0; $i < 55; $i++ ) {
+			AuditLog::add(
+				'note',
+				array(
+					'token_id' => $created['id'],
+					'meta'     => array( 'company' => 'Acme' ),
+				)
+			);
+		}
+		$late = AuditLog::add(
+			'grant_extended',
+			array(
+				'token_id'     => $created['id'],
+				'summary_key'  => 'grant_extended',
+				'summary_args' => array( 'Acme' ),
+			)
+		);
+
+		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
+		call_user_func( $erasers['happyaccess']['callback'], 'acme@example.net', 1 );
+
+		$meta = json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT metadata FROM {$logs} WHERE id = %d", $late ) ), true );
+		$this->assertSame( array( '[removed]' ), $meta['summary_args'], 'A row after the ones it skipped is cleaned in the same run.' );
+	}
+
 	public function test_label_scrub_only_replaces_the_trailing_label() {
 		global $wpdb;
 		$logs    = Installer::table( 'logs' );

@@ -580,8 +580,11 @@ final class Privacy {
 
 	/**
 	 * Swaps a grant label for the placeholder among the text values of that
-	 * grant's log rows, up to PER_PAGE rows a run. A row whose meta holds the
-	 * label anywhere else is left, and counts as not done.
+	 * grant's log rows, and rebuilds the stored summary of a row that has a
+	 * text key from the cleaned values, so a label in the middle of a
+	 * translated line goes too. Reads the rows in pages by id, so a row
+	 * whose meta holds the label anywhere else is passed over, counts as not
+	 * done, and never holds back the rows after it.
 	 *
 	 * @param int    $grant_id Grant id.
 	 * @param string $label    Grant label.
@@ -591,22 +594,31 @@ final class Privacy {
 	private static function scrub_label_in_meta( $grant_id, $label, $like ) {
 		global $wpdb;
 
-		$logs = Installer::table( 'logs' );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-		$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, metadata FROM %i WHERE token_id = %d AND metadata LIKE %s ORDER BY id ASC LIMIT %d', $logs, $grant_id, $like, self::PER_PAGE ), ARRAY_A );
-		foreach ( $rows as $row ) {
-			$meta = json_decode( (string) $row['metadata'], true );
-			if ( ! is_array( $meta ) || ! isset( $meta[ LogText::META_ARGS ] ) || ! is_array( $meta[ LogText::META_ARGS ] ) ) {
-				continue;
-			}
-			foreach ( $meta[ LogText::META_ARGS ] as $index => $value ) {
-				if ( $value === $label ) {
-					$meta[ LogText::META_ARGS ][ $index ] = '[removed]';
-				}
-			}
+		$logs    = Installer::table( 'logs' );
+		$last_id = 0;
+		do {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-			$wpdb->update( $logs, array( 'metadata' => wp_json_encode( $meta ) ), array( 'id' => (int) $row['id'] ), array( '%s' ), array( '%d' ) );
-		}
+			$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, metadata FROM %i WHERE token_id = %d AND id > %d AND metadata LIKE %s ORDER BY id ASC LIMIT %d', $logs, $grant_id, $last_id, $like, self::PER_PAGE ), ARRAY_A );
+			$read = count( $rows );
+			foreach ( $rows as $row ) {
+				$last_id = (int) $row['id'];
+				$meta    = json_decode( (string) $row['metadata'], true );
+				if ( ! is_array( $meta ) || ! isset( $meta[ LogText::META_ARGS ] ) || ! is_array( $meta[ LogText::META_ARGS ] ) ) {
+					continue;
+				}
+				foreach ( $meta[ LogText::META_ARGS ] as $index => $value ) {
+					if ( $value === $label ) {
+						$meta[ LogText::META_ARGS ][ $index ] = '[removed]';
+					}
+				}
+				$data = array( 'metadata' => wp_json_encode( $meta ) );
+				if ( isset( $meta[ LogText::META_KEY ] ) && LogText::exists( $meta[ LogText::META_KEY ] ) ) {
+					$data['summary'] = LogText::render( $meta[ LogText::META_KEY ], $meta[ LogText::META_ARGS ] );
+				}
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				$wpdb->update( $logs, $data, array( 'id' => $last_id ), array_fill( 0, count( $data ), '%s' ), array( '%d' ) );
+			}
+		} while ( self::PER_PAGE === $read );
 	}
 
 	/**
