@@ -121,12 +121,12 @@ Return true for a two-step plugin HappyAccess doesn't check.
 
 ### happyaccess_twostep_login_request
 
-Decides whether a browser login with the right password goes to the two-step screen. HappyAccess only sends logins from the WordPress login form and the WooCommerce login form there. When other code calls `wp_authenticate()`, for example to check a password, HappyAccess leaves the result alone.
+Decides whether a browser login with the right password goes to the two-step screen. A login through `wp_signon()` goes there. That covers the WordPress login form, the WooCommerce login form and any other login form built on `wp_signon()`. When other code calls `wp_authenticate()` on its own, for example to check a password, HappyAccess leaves the result alone.
 
-- **`$is_login` (bool):** true when the WordPress login form (`log` and `pwd`) or the WooCommerce login form was posted.
+- **`$is_login` (bool):** true when `wp_signon()` made the call.
 - **`$user` (WP_User):** the person whose password was right.
 
-Return true for your own login form, so its logins go to the two-step screen too. Without that, people who use two-step login skip the second step on your form.
+Return true for a login that calls `wp_authenticate()` itself and then sets the auth cookie, so it gets the two-step screen too. Return false to keep a `wp_signon()` call away from it.
 
 ```
 add_filter( 'happyaccess_twostep_login_request', function ( $is_login ) {

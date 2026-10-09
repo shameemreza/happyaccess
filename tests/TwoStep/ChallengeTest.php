@@ -1305,14 +1305,125 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertNotSame( 0, UserState::grace_started_at( $user->ID ) );
 	}
 
-	public function test_a_post_with_only_a_log_field_is_not_a_login_form() {
+	public function test_a_bare_check_during_a_core_login_post_is_left_alone() {
 		$made = $this->app_user();
-		$res  = $this->third_party_check( $made['user'], array( 'log' => $made['user']->user_login ) );
-		$this->assertNull( $res['url'] );
+		$res  = $this->third_party_check(
+			$made['user'],
+			array(
+				'log' => $made['user']->user_login,
+				'pwd' => self::PASSWORD,
+			)
+		);
+		$this->assertNull( $res['url'], 'Posted field names alone are not a sign-on.' );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
 		$this->assertSame( array(), $this->pending_rows() );
 	}
 
-	public function test_the_login_request_filter_sends_another_login_form_to_the_step() {
+	/**
+	 * A custom login form with its own field names that logs in through
+	 * wp_signon().
+	 *
+	 * @param WP_User $user User.
+	 * @return array url when the browser was sent somewhere, result otherwise.
+	 */
+	private function custom_form_login( WP_User $user ) {
+		$_POST    = array(
+			'username' => $user->user_login,
+			'pass'     => self::PASSWORD,
+		);
+		$_REQUEST = $_POST;
+		try {
+			$result = wp_signon(
+				array(
+					'user_login'    => $user->user_login,
+					'user_password' => self::PASSWORD,
+				)
+			);
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			return array(
+				'url'    => $stop->url,
+				'result' => null,
+			);
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+		return array(
+			'url'    => null,
+			'result' => $result,
+		);
+	}
+
+	public function test_a_custom_form_that_signs_on_through_wp_signon_gets_the_step() {
+		$made = $this->app_user();
+		$res  = $this->custom_form_login( $made['user'] );
+
+		$this->assertNotNull( $res['url'] );
+		$this->assertSame( 'twostep', $this->query( $res['url'] )['step'] );
+		$this->assertCount( 1, $this->pending_rows() );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( array(), $this->auth );
+	}
+
+	public function test_a_bare_check_after_a_failed_sign_on_is_left_alone() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'], array(), 'not the password' );
+
+		$res = $this->third_party_check( $made['user'], array() );
+		$this->assertNull( $res['url'], 'The sign-on note ended with the failed sign-on.' );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	/**
+	 * A plugin on the wp_authenticate action that checks another account's
+	 * password before the sign-on runs.
+	 */
+	public function check_other_account() {
+		$this->other_result = wp_authenticate( $this->other_user->user_login, self::PASSWORD );
+	}
+
+	/**
+	 * The account check_other_account() checks, and what it got.
+	 *
+	 * @var WP_User|null
+	 */
+	private $other_user = null;
+
+	/**
+	 * Result of check_other_account().
+	 *
+	 * @var mixed
+	 */
+	private $other_result = null;
+
+	public function test_a_check_of_another_login_inside_a_sign_on_keeps_the_sign_on() {
+		$made             = $this->app_user();
+		$this->other_user = $this->app_user()['user'];
+		add_action( 'wp_authenticate', array( $this, 'check_other_account' ), PHP_INT_MAX );
+		$res = $this->password_login( $made['user'] );
+		remove_action( 'wp_authenticate', array( $this, 'check_other_account' ), PHP_INT_MAX );
+
+		$this->assertInstanceOf( WP_User::class, $this->other_result, 'The other check got its answer as it was.' );
+		$this->assertSame( $this->other_user->ID, $this->other_result->ID );
+		$this->assertNotNull( $res['url'], 'The sign-on itself still goes to the step.' );
+		$rows = $this->pending_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $made['user']->ID, (int) $rows[0]['user_id'] );
+	}
+
+	public function test_the_login_request_filter_can_skip_the_step_for_a_sign_on() {
+		$made = $this->app_user();
+		add_filter( 'happyaccess_twostep_login_request', '__return_false' );
+		$res = $this->password_login( $made['user'] );
+		remove_filter( 'happyaccess_twostep_login_request', '__return_false' );
+
+		$this->assertNull( $res['url'] );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	public function test_the_login_request_filter_sends_a_bare_check_to_the_step() {
 		$made = $this->app_user();
 		$seen = array();
 		$cb   = static function ( $is_login, $user ) use ( &$seen ) {

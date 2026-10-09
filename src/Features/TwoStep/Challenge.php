@@ -150,6 +150,15 @@ final class Challenge {
 	private static $reset_users = array();
 
 	/**
+	 * The sanitized login wp_signon() is about to check, set on its
+	 * wp_authenticate action and used up by the authenticate call that
+	 * follows. Null when no wp_signon() is under way.
+	 *
+	 * @var string|null
+	 */
+	private static $signon_login = null;
+
+	/**
 	 * Request kind override for tests: browser, xmlrpc or api.
 	 *
 	 * @var string|null
@@ -172,6 +181,10 @@ final class Challenge {
 		add_filter( 'send_auth_cookies', array( __CLASS__, 'hold_reset_cookie' ), PHP_INT_MAX, 4 );
 		add_filter( 'authenticate', array( __CLASS__, 'filter_authenticate' ), 50, 3 );
 		add_filter( 'authenticate', array( __CLASS__, 'finish_authenticate' ), PHP_INT_MAX, 3 );
+		// Last, so a login that another callback on the action checks first isn't taken for the sign-on.
+		add_action( 'wp_authenticate', array( __CLASS__, 'note_signon' ), PHP_INT_MAX, 1 );
+		add_action( 'wp_login_failed', array( __CLASS__, 'forget_signon' ), 10, 0 );
+		add_action( 'wp_login', array( __CLASS__, 'forget_signon' ), 10, 0 );
 		add_action( 'application_password_did_authenticate', array( __CLASS__, 'note_application_password' ), 10, 1 );
 		add_filter( 'wp_login_errors', array( __CLASS__, 'filter_login_errors' ), 10, 1 );
 		add_action( 'admin_notices', array( __CLASS__, 'print_backup_notice' ) );
@@ -286,13 +299,35 @@ final class Challenge {
 	}
 
 	/**
-	 * The authenticate filter at the end of the chain. A browser login from
-	 * a login form that is still a WP_User here starts a pending login and
-	 * goes to the second step. The request ends in the redirect, so
-	 * wp_signon() never sets the auth cookie and never fires wp_login.
+	 * Notes that wp_signon() is about to check this login. Core fires the
+	 * wp_authenticate action only from wp_signon(), so this covers
+	 * wp-login.php, WooCommerce and every other login form built on it.
 	 *
-	 * A wp_authenticate() call in a browser request that isn't a login form,
-	 * such as another plugin checking a password, is returned as it is.
+	 * @param string $login Username or email to be checked.
+	 * @return void
+	 */
+	public static function note_signon( $login ) {
+		self::$signon_login = sanitize_user( is_string( $login ) ? $login : '' );
+	}
+
+	/**
+	 * Drops the note once the sign-on has its answer, so a later
+	 * wp_authenticate() call in the same request starts clean.
+	 *
+	 * @return void
+	 */
+	public static function forget_signon() {
+		self::$signon_login = null;
+	}
+
+	/**
+	 * The authenticate filter at the end of the chain. A browser sign-on
+	 * through wp_signon() that is still a WP_User here starts a pending
+	 * login and goes to the second step. The request ends in the redirect,
+	 * so wp_signon() never sets the auth cookie and never fires wp_login.
+	 *
+	 * A bare wp_authenticate() call in a browser request, such as another
+	 * plugin checking a password, is returned as it is.
 	 *
 	 * @param \WP_User|\WP_Error|null $user     Authentication result.
 	 * @param string                  $username Username or email typed.
@@ -300,11 +335,11 @@ final class Challenge {
 	 * @return \WP_User|\WP_Error|null
 	 */
 	public static function finish_authenticate( $user, $username = '', $password = '' ) {
-		unset( $username );
+		$signon = self::take_signon( $username );
 		if ( ! self::is_first_factor( $user, $password ) ) {
 			return $user;
 		}
-		if ( 'browser' === self::context() && ! self::is_login_request( $user ) ) {
+		if ( 'browser' === self::context() && ! self::is_login_request( $user, $signon ) ) {
 			return $user;
 		}
 		self::forget_stale_grace( $user );
@@ -769,6 +804,7 @@ final class Challenge {
 		self::$reset_users        = array();
 		self::$redirector         = null;
 		self::$context            = null;
+		self::$signon_login       = null;
 	}
 
 	/**
@@ -788,33 +824,41 @@ final class Challenge {
 	}
 
 	/**
-	 * Whether the request is a person at a login form: wp-login.php's log
-	 * and pwd fields, or WooCommerce's login form. A plugin with its own
-	 * login form can return true from the happyaccess_twostep_login_request
-	 * filter, so its logins go to the second step too.
+	 * Whether this authenticate call is the one wp_signon() announced: a
+	 * note is waiting and it names the same login. Uses the note up. A call
+	 * for another login, made while the sign-on runs, leaves it in place.
 	 *
-	 * @param \WP_User $user The user whose password passed.
+	 * @param mixed $username Username or email, as wp_authenticate() sanitized it.
 	 * @return bool
 	 */
-	private static function is_login_request( \WP_User $user ) {
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Only whether the fields are there is read; core's login form has no nonce and WooCommerce checks its own.
-		$post = array();
-		foreach ( array( 'log', 'pwd', 'login', 'username', 'password' ) as $key ) {
-			if ( isset( $_POST[ $key ] ) ) {
-				$post[ $key ] = '1';
-			}
+	private static function take_signon( $username ) {
+		if ( null === self::$signon_login || ! is_string( $username ) || self::$signon_login !== $username ) {
+			return false;
 		}
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-		$is_login = isset( $post['log'], $post['pwd'] ) || self::is_woo_form( $post );
+		self::$signon_login = null;
+		return true;
+	}
 
+	/**
+	 * Whether a browser login goes to the second step: true for a sign-on
+	 * through wp_signon(), false for a bare wp_authenticate() call. The
+	 * happyaccess_twostep_login_request filter can turn either answer round.
+	 *
+	 * @param \WP_User $user   The user whose password passed.
+	 * @param bool     $signon Whether wp_signon() made this call.
+	 * @return bool
+	 */
+	private static function is_login_request( \WP_User $user, $signon ) {
 		/**
-		 * Filters whether a browser login with a correct password comes from
-		 * a login form and goes to the second step.
+		 * Filters whether a browser login with a correct password goes to
+		 * the second step.
 		 *
-		 * @param bool     $is_login True for wp-login.php and WooCommerce's login form.
+		 * @param bool     $is_login True when wp_signon() made the call, which
+		 *                           covers wp-login.php, WooCommerce and other
+		 *                           login forms built on it.
 		 * @param \WP_User $user     The user whose password passed.
 		 */
-		return (bool) apply_filters( 'happyaccess_twostep_login_request', $is_login, $user );
+		return (bool) apply_filters( 'happyaccess_twostep_login_request', (bool) $signon, $user );
 	}
 
 	/**
