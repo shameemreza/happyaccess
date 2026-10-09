@@ -514,6 +514,10 @@ class RecaptchaTest extends WP_UnitTestCase {
 	private function run_form_script( $scenario ) {
 		$node = trim( (string) shell_exec( 'command -v node 2>/dev/null' ) );
 		if ( '' === $node || ! is_dir( HAPPYACCESS_PLUGIN_DIR . 'node_modules/jsdom' ) ) {
+			// CI runs npm ci before PHPUnit, so a missing jsdom there is a broken job, not a skip.
+			if ( getenv( 'CI' ) ) {
+				$this->fail( 'Needs node and the npm packages. Run npm ci before PHPUnit.' );
+			}
 			$this->markTestSkipped( 'Needs node and the npm packages.' );
 		}
 		$this->turn_on();

@@ -11,7 +11,9 @@
 		"yoast/phpunit-polyfills": "^4.0",
 		"wp-phpunit/wp-phpunit": "7.1.*",
 		"wp-coding-standards/wpcs": "^3.1",
-		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"phpcompatibility/phpcompatibility-wp": "^3.0@alpha",
+		"phpcompatibility/php-compatibility": "^10.0@alpha",
+		"phpcompatibility/phpcompatibility-paragonie": "^2.0@alpha",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0"
 	},
 	"config": {
@@ -28,7 +30,12 @@
 			"@putenv WP_MULTISITE=1",
 			"phpunit --exclude-group ms-excluded"
 		],
+		"test:release": [
+			"@putenv HAPPYACCESS_RELEASE_TEST=1",
+			"phpunit --filter ReleaseFilesTest"
+		],
 		"lint": "phpcs",
+		"lint:compat": "phpcs -p --standard=PHPCompatibilityWP --runtime-set testVersion 7.4- --extensions=php src templates blocks happyaccess.php uninstall.php",
 		"lint:fix": "phpcbf"
 	}
 }
