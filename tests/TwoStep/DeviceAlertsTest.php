@@ -345,18 +345,17 @@ class DeviceAlertsTest extends WP_UnitTestCase {
 		$ip        = '203.0.113.0';
 		$reset_url = wp_lostpassword_url();
 		$setup_url = Profile::url();
+		// The plain-text template returns its text and prints nothing.
 		ob_start();
-		include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/new-device-text.php';
-		$text = (string) ob_get_clean();
+		$text = (string) include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/new-device-text.php';
+		$this->assertSame( '', ob_get_clean() );
 
 		foreach ( array( $time, $device, $ip, $reset_url, $setup_url, "If this wasn't you, change your password now.", 'Turn on two-step login to keep your account safe.' ) as $part ) {
 			$this->assertStringContainsString( $part, $text );
 		}
 
 		$setup_url = '';
-		ob_start();
-		include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/new-device-text.php';
-		$this->assertStringNotContainsString( 'Turn on two-step login', (string) ob_get_clean() );
+		$this->assertStringNotContainsString( 'Turn on two-step login', (string) include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/new-device-text.php' );
 	}
 
 	public function test_a_user_with_two_step_gets_no_tip() {

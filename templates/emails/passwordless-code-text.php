@@ -14,7 +14,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Plain text, so nothing here is HTML escaped. Values are cleaned for a text part.
+// Plain text, so nothing here is HTML escaped. Values are cleaned for a text part, and the
+// text is returned to the mailer, never printed.
 $happyaccess_text_lines = array(
 	/* translators: %s: site name. */
 	sprintf( __( 'Log in to %s', 'happyaccess' ), wp_strip_all_tags( $site_name ) ),
@@ -23,7 +24,7 @@ $happyaccess_text_lines = array(
 	sprintf( __( 'Your login code is %s', 'happyaccess' ), wp_strip_all_tags( $code ) ),
 	'',
 	__( 'Or open this login link:', 'happyaccess' ),
-	esc_url_raw( $link ),
+	sanitize_url( $link ),
 	'',
 	sprintf(
 		/* translators: %d: minutes until the login code expires. */
@@ -39,4 +40,4 @@ $happyaccess_text_lines = array(
 	__( "If you didn't ask for this, you can ignore this email.", 'happyaccess' ) . ( ! empty( $password_works ) ? ' ' . __( 'Your password still works.', 'happyaccess' ) : '' ),
 );
 
-echo implode( "\n", $happyaccess_text_lines ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Plain-text part; each value is cleaned above.
+return implode( "\n", $happyaccess_text_lines );

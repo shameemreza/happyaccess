@@ -246,9 +246,8 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$site_name  = 'Test site';
 		$admin_name = 'Ada Admin';
 		$setup_url  = Profile::url_for( $user );
-		ob_start();
-		include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/twostep-reset-text.php';
-		$text = (string) ob_get_clean();
+		// The plain-text template returns its text.
+		$text = (string) include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/twostep-reset-text.php';
 		$this->assertStringNotContainsString( 'your profile', $text );
 		$this->assertStringContainsString( 'You can set it up again from your account: ' . $setup_url, $text );
 	}
@@ -324,6 +323,9 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 
 		wp_set_current_user( $admin->ID );
 		$this->assertStringContainsString( 'Two-step login is paused by HAPPYACCESS_DISABLE_TWOSTEP in wp-config.php. Remove it when you&#039;re back in.', Profile::pause_notice() );
+		ob_start();
+		Profile::print_pause_notice();
+		$this->assertSame( Profile::pause_notice(), (string) ob_get_clean(), 'Escaping on output leaves the notice as built.' );
 		ob_start();
 		do_action( 'admin_notices' );
 		$this->assertStringContainsString( 'HAPPYACCESS_DISABLE_TWOSTEP', (string) ob_get_clean(), 'It prints on admin_notices.' );

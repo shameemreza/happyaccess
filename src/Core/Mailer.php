@@ -46,17 +46,17 @@ final class Mailer {
 			return false;
 		}
 
-		$body = self::render(
-			'layout',
-			array(
-				'content'   => $content,
-				'site_name' => $site_name,
-				'subject'   => $subject,
-			)
+		// The layout parts go around the content, which its own template escaped, so it is joined here and never printed again.
+		$frame = array(
+			'site_name' => $site_name,
+			'subject'   => $subject,
 		);
-		if ( null === $body ) {
+		$start = self::render( 'layout', $frame );
+		$end   = self::render( 'layout-end', $frame );
+		if ( null === $start || null === $end ) {
 			return false;
 		}
+		$body = $start . $content . $end;
 
 		// An optional "<template>-text" file adds a plain-text part for mail clients that don't show HTML.
 		$text = self::render( sanitize_key( $template ) . '-text', $vars );
@@ -110,7 +110,9 @@ final class Mailer {
 		// phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- Template scope only; existing names are never overwritten.
 		extract( $vars, EXTR_SKIP );
 		ob_start();
-		include $file;
-		return (string) ob_get_clean();
+		$returned = include $file;
+		$printed  = (string) ob_get_clean();
+		// A plain-text template returns its text instead of printing it, because none of it is HTML.
+		return is_string( $returned ) ? $returned : $printed;
 	}
 }
