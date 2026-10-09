@@ -11,6 +11,10 @@ const preloaded = {
 	'/happyaccess/v1/settings': { body: settingsBody, headers: {} },
 	'/happyaccess/v1/grants': { body: { items: [] }, headers: {} },
 	'/happyaccess/v1/catalog': { body: { groups: [] }, headers: {} },
+	'/happyaccess/v1/twostep/coverage': {
+		body: { roles: [], large: false },
+		headers: {},
+	},
 	// The PHP side writes the query unsorted. The middleware sorts both sides.
 	[ activityPath ]: {
 		body: { items: [], total: 0, page: 1, per_page: 25 },
@@ -53,6 +57,16 @@ describe( 'preloaded first data', () => {
 
 		expect( await api.listGrants() ).toEqual( { items: [] } );
 		expect( await api.getCatalog() ).toEqual( { groups: [] } );
+		expect( network ).not.toHaveBeenCalled();
+	} );
+
+	it( 'answers the two-step coverage call from the page', async () => {
+		network.mockClear();
+
+		expect( await api.getCoverage() ).toEqual( {
+			roles: [],
+			large: false,
+		} );
 		expect( network ).not.toHaveBeenCalled();
 	} );
 

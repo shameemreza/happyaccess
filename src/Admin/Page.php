@@ -9,6 +9,7 @@ namespace HappyAccess\Admin;
 
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Clock;
+use HappyAccess\Core\Features;
 use HappyAccess\Core\OtherTwoFactor;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\MenuGuard;
@@ -171,7 +172,7 @@ final class Page {
 	/**
 	 * Answers the app's first GET requests from the page, so the first view
 	 * needs no round trip. Nothing here carries a code, key or hash: the
-	 * settings, grants, catalog and activity responses never hold one.
+	 * settings, grants, catalog, activity and coverage responses never hold one.
 	 *
 	 * @return void
 	 */
@@ -223,12 +224,17 @@ final class Page {
 			'/happyaccess/v1/activity'
 		);
 
-		return array(
+		$paths = array(
 			'/happyaccess/v1/settings',
 			'/happyaccess/v1/grants',
 			'/happyaccess/v1/catalog',
 			$activity,
 		);
+		// The route exists only while two-step login is on.
+		if ( Features::is_enabled( 'two_step' ) ) {
+			$paths[] = '/happyaccess/v1/twostep/coverage';
+		}
+		return $paths;
 	}
 
 	/**

@@ -342,6 +342,16 @@ class PageTest extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_preload_adds_the_two_step_coverage_while_two_step_is_on() {
+		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+		$this->assertNotContains( '/happyaccess/v1/twostep/coverage', Page::preload_paths() );
+
+		\HappyAccess\Core\Features::set( 'two_step', true );
+		$paths = Page::preload_paths();
+		$this->assertSame( '/happyaccess/v1/twostep/coverage', end( $paths ) );
+		$this->assertCount( 5, $paths );
+	}
+
 	public function test_preload_days_follow_the_site_timezone() {
 		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
 		update_option( 'timezone_string', 'Pacific/Auckland' );
@@ -395,6 +405,24 @@ class PageTest extends WP_UnitTestCase {
 		foreach ( array( '_hash', 'code"', 'link_key', 'recaptcha-private-value' ) as $needle ) {
 			$this->assertStringNotContainsString( $needle, $script );
 		}
+	}
+
+	public function test_enqueue_preloads_the_two_step_coverage() {
+		if ( ! is_readable( HAPPYACCESS_PLUGIN_DIR . 'build/index.asset.php' ) ) {
+			$this->markTestSkipped( 'Run npm run build first.' );
+		}
+		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+		\HappyAccess\Core\Features::set( 'two_step', true );
+		\HappyAccess\Features\TwoStep\Feature::register();
+		$GLOBALS['wp_rest_server'] = null;
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		Routes::register();
+		Page::add_menu();
+
+		Page::enqueue( Page::hook_suffix() );
+
+		list( , $data ) = $this->printed_preload();
+		$this->assertArrayHasKey( 'roles', $data['/happyaccess/v1/twostep/coverage']['body'] );
 	}
 
 	public function test_enqueue_preloads_nothing_before_setup() {

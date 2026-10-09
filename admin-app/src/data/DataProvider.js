@@ -10,6 +10,7 @@ import {
 	defaultActivityRequest,
 } from '../activity/activityFormat';
 import { useCatalogStore } from '../hooks/useCatalogStore';
+import { useCoverageStore } from '../hooks/useCoverageStore';
 import { useGrantsStore } from '../hooks/useGrantsStore';
 import { useSettingsStore } from '../hooks/useSettingsStore';
 import { createActivityCache } from './activityCache';
@@ -25,6 +26,8 @@ const DataContext = createContext( null );
  *   the settings and quietly reloads the catalog and grants it may change.
  * - The last Activity page for each set of filters is kept, and the Activity
  *   tab refreshes it in the background.
+ * - Who has two-step login loads when the Login and security tab first asks,
+ *   and quietly again after a settings save.
  *
  * Plain codes and link keys are not kept here. They stay in SupportTab.
  *
@@ -37,6 +40,7 @@ export default function DataProvider( { enabled = true, children } ) {
 	const grants = useGrantsStore( enabled );
 	const settings = useSettingsStore( enabled );
 	const catalog = useCatalogStore( enabled );
+	const coverage = useCoverageStore();
 	const activity = useMemo( () => createActivityCache(), [] );
 
 	const {
@@ -46,6 +50,7 @@ export default function DataProvider( { enabled = true, children } ) {
 	} = grants;
 	const { save: saveSettings } = settings;
 	const { refresh: refreshCatalog } = catalog;
+	const { refresh: refreshCoverage } = coverage;
 
 	// The first Activity page is in the page already. Taking it now uses it
 	// up before it can go stale, and the Activity tab then opens with it.
@@ -86,12 +91,20 @@ export default function DataProvider( { enabled = true, children } ) {
 		async ( patch ) => {
 			const result = await saveSettings( patch );
 			activity.markStale();
-			// A save can end passes, so the list loads again, and so does the catalog.
+			// A save can end passes, so the list loads again, and so does the
+			// catalog. A role policy change moves the two-step counts.
 			refreshGrants();
 			refreshCatalog();
+			refreshCoverage();
 			return result;
 		},
-		[ saveSettings, activity, refreshGrants, refreshCatalog ]
+		[
+			saveSettings,
+			activity,
+			refreshGrants,
+			refreshCatalog,
+			refreshCoverage,
+		]
 	);
 
 	const grantsValue = useMemo(
@@ -109,8 +122,9 @@ export default function DataProvider( { enabled = true, children } ) {
 			settings: settingsValue,
 			catalog,
 			activity,
+			coverage,
 		} ),
-		[ grantsValue, settingsValue, catalog, activity ]
+		[ grantsValue, settingsValue, catalog, activity, coverage ]
 	);
 
 	return (
@@ -147,3 +161,8 @@ export const useCatalog = () => useData().catalog;
  * @return {Object} The kept Activity pages: { get, set, isFresh, markStale }.
  */
 export const useActivityCache = () => useData().activity;
+
+/**
+ * @return {Object} Who has two-step login: { coverage, loading, error, loadOnce, retry, refresh }.
+ */
+export const useCoverage = () => useData().coverage;

@@ -28,6 +28,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * The app is on when a secret is stored. Backup codes alone never turn
  * two-step login on.
+ *
+ * Every write that changes who has two-step login or where their grace
+ * period stands drops the Coverage counts.
  */
 final class UserState {
 
@@ -141,6 +144,7 @@ final class UserState {
 				)
 			)
 		);
+		Coverage::forget();
 		if ( ! $was_on ) {
 			AuditLog::add( 'twostep_enabled', self::log_args( $user_id, __( 'Two-step login turned on with an authenticator app', 'happyaccess' ), 'app' ) );
 		}
@@ -159,6 +163,7 @@ final class UserState {
 			return;
 		}
 		delete_user_meta( $user_id, self::META_TOTP );
+		Coverage::forget();
 		AuditLog::add( 'twostep_disabled', self::log_args( $user_id, __( 'Authenticator app turned off for two-step login', 'happyaccess' ), 'app' ) );
 	}
 
@@ -174,6 +179,7 @@ final class UserState {
 			return;
 		}
 		self::save_state( $user_id, array( 'email' => true ) );
+		Coverage::forget();
 		AuditLog::add( 'twostep_enabled', self::log_args( $user_id, __( 'Two-step login turned on with email codes', 'happyaccess' ), 'email' ) );
 	}
 
@@ -189,6 +195,7 @@ final class UserState {
 			return;
 		}
 		self::save_state( $user_id, array( 'email' => false ) );
+		Coverage::forget();
 		AuditLog::add( 'twostep_disabled', self::log_args( $user_id, __( 'Email codes turned off for two-step login', 'happyaccess' ), 'email' ) );
 	}
 
@@ -211,6 +218,7 @@ final class UserState {
 			}
 		}
 		if ( $had ) {
+			Coverage::forget();
 			$args         = self::log_args( $user_id, __( 'Two-step login reset', 'happyaccess' ), '' );
 			$args['meta'] = $meta;
 			AuditLog::add( 'twostep_reset', $args );
@@ -295,6 +303,7 @@ final class UserState {
 				return $state;
 			}
 		);
+		Coverage::forget();
 	}
 
 	/**
@@ -389,6 +398,7 @@ final class UserState {
 				return $state;
 			}
 		);
+		Coverage::forget();
 	}
 
 	/**
@@ -409,6 +419,7 @@ final class UserState {
 				return $state;
 			}
 		);
+		Coverage::forget();
 		return null === $state ? self::grace_logins_used( $user_id ) + 1 : (int) $state['grace_logins_used'];
 	}
 

@@ -2,7 +2,10 @@
 
 .happyaccess-app {
 
-	.ha-settings {
+	// Settings and Login and security share the layout: the forms, and a
+	// panel beside them that drops below when the screen is narrow.
+	.ha-settings,
+	.ha-columns {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
@@ -10,7 +13,8 @@
 		min-width: 0;
 	}
 
-	.ha-settings__main {
+	.ha-settings__main,
+	.ha-columns__main {
 		display: flex;
 		flex: 999 1 560px;
 		flex-direction: column;

@@ -8,6 +8,7 @@ import {
 import DataProvider, {
 	useActivityCache,
 	useCatalog,
+	useCoverage,
 	useGrants,
 	useSettings,
 } from './DataProvider';
@@ -18,6 +19,7 @@ const answers = {
 	'/happyaccess/v1/settings': { needs_setup: false, features: {} },
 	'/happyaccess/v1/grants': { items: [ { id: 1 } ] },
 	'/happyaccess/v1/catalog': { groups: [], presets: {} },
+	'/happyaccess/v1/twostep/coverage': { roles: [], large: false },
 };
 
 const gets = () =>
@@ -45,6 +47,7 @@ function useAll() {
 		settings: useSettings(),
 		catalog: useCatalog(),
 		activity: useActivityCache(),
+		coverage: useCoverage(),
 	};
 }
 
@@ -133,4 +136,31 @@ it( 'keeps the first Activity page, and marks it stale after a pass is made', as
 	expect( result.current.activity.isFresh( key ) ).toBe( false );
 	// The page itself stays, to show while the next visit loads a new one.
 	expect( result.current.activity.get( key ) ).toBeDefined();
+} );
+
+it( 'loads the two-step coverage only when asked, once, and again after a settings save', async () => {
+	const { result } = renderHook( useAll, { wrapper } );
+	await loaded( result );
+	const coverageGets = () =>
+		gets().filter(
+			( path ) => '/happyaccess/v1/twostep/coverage' === path
+		);
+	expect( coverageGets() ).toHaveLength( 0 );
+
+	act( () => result.current.coverage.loadOnce() );
+	await waitFor( () =>
+		expect( result.current.coverage.coverage ).toEqual( {
+			roles: [],
+			large: false,
+		} )
+	);
+	act( () => result.current.coverage.loadOnce() );
+	expect( coverageGets() ).toHaveLength( 1 );
+
+	await act( async () => {
+		await result.current.settings.save( {
+			two_step: { role_policy: { editor: 'required' } },
+		} );
+	} );
+	await waitFor( () => expect( coverageGets() ).toHaveLength( 2 ) );
 } );

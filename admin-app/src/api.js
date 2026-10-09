@@ -226,4 +226,5 @@ export const saveSettings = ( patch ) => request( '/settings', 'POST', patch );
 export const runSetup = ( { features, consent } ) =>
 	request( '/setup', 'POST', { features, consent: Boolean( consent ) } );
 export const getCatalog = () => request( '/catalog' );
+export const getCoverage = () => request( '/twostep/coverage' );
 export const emergencyLock = () => request( '/lock', 'POST' );

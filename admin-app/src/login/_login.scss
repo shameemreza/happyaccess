@@ -5,7 +5,123 @@
 		flex-direction: column;
 		gap: 24px;
 		min-width: 0;
-		max-inline-size: 760px;
+	}
+
+	// The panel beside the forms: what people see, and who has two-step login.
+	.ha-side {
+		display: flex;
+		flex: 1 1 320px;
+		flex-direction: column;
+		gap: 24px;
+		min-width: 0;
+
+		.ha-loginprev {
+			flex: none;
+		}
+	}
+
+	.ha-seeprev__alt {
+		color: #135e96;
+		font-size: 12px;
+		text-decoration: underline;
+
+		&.is-button {
+			box-sizing: border-box;
+			width: 100%;
+			padding: 5px 10px;
+			border: 1px solid #2271b1;
+			border-radius: 3px;
+			background: #f6f7f7;
+			color: #2271b1;
+			text-align: center;
+			text-decoration: none;
+		}
+	}
+
+	.ha-seeprev__step {
+		margin-block-start: 4px;
+	}
+
+	.ha-seeprev__digits {
+		display: flex;
+		gap: 6px;
+
+		span {
+			flex: 1 1 0;
+			height: 30px;
+			border: 1px solid #8c8f94;
+			border-radius: 4px;
+		}
+	}
+
+	.ha-seeprev__backup {
+		color: #135e96;
+		text-align: center;
+		text-decoration: underline;
+	}
+
+	.ha-coverage__list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.ha-coverage__row {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 0;
+		padding-block: 10px;
+
+		& + & {
+			border-block-start: 1px solid var(--ha-line-soft);
+		}
+	}
+
+	.ha-coverage__count {
+		color: var(--ha-text);
+		font-weight: 500;
+	}
+
+	.ha-coverage__bar {
+		display: block;
+		overflow: hidden;
+		block-size: 6px;
+		border-radius: 3px;
+		background: var(--ha-line-soft);
+
+		span {
+			display: block;
+			block-size: 100%;
+			background: var(--wp-admin-theme-color, #2271b1);
+		}
+	}
+
+	.ha-coverage__notes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+
+	.ha-coverage__late {
+		color: #cc1818;
+	}
+
+	.ha-coverage__note {
+		margin-block: 8px 0;
+	}
+
+	.ha-coverage__error {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 12px;
+
+		p {
+			margin: 0;
+		}
 	}
 
 	.ha-login__group {

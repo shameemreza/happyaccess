@@ -12,6 +12,31 @@ vi.mock( '@wordpress/api-fetch' );
 
 let server;
 let posts;
+let coverage;
+
+const COVERAGE = {
+	roles: [
+		{
+			slug: 'editor',
+			name: 'Editors',
+			total: 5,
+			enabled: 2,
+			required: true,
+			setting_up: 2,
+			past_grace: 1,
+		},
+		{
+			slug: 'administrator',
+			name: 'Administrators',
+			total: 3,
+			enabled: 2,
+			required: false,
+			setting_up: 0,
+			past_grace: 0,
+		},
+	],
+	large: false,
+};
 
 const passwordless = ( overrides = {} ) => ( {
 	code_lifetime: 600,
@@ -38,6 +63,9 @@ function mockServer( initial ) {
 	posts = [];
 	apiFetch.mockReset();
 	apiFetch.mockImplementation( async ( { path, method, data } ) => {
+		if ( '/happyaccess/v1/twostep/coverage' === path ) {
+			return coverage;
+		}
 		if ( '/happyaccess/v1/settings' !== path ) {
 			return { items: [], groups: [], presets: {} };
 		}
@@ -86,6 +114,7 @@ async function renderTab( bootData = boot() ) {
 }
 
 beforeEach( () => {
+	coverage = COVERAGE;
 	mockServer( settingsFixture( { passwordless: passwordless() } ) );
 } );
 
@@ -389,7 +418,7 @@ describe( 'Login tab', () => {
 		await screen.findByRole( 'heading', { name: 'Two-step login' } );
 
 		expect(
-			[ ...container.querySelectorAll( 'h2' ) ].map(
+			[ ...container.querySelectorAll( '.ha-login h2' ) ].map(
 				( heading ) => heading.textContent
 			)
 		).toEqual( [ 'Two-step login' ] );
@@ -465,9 +494,9 @@ describe( 'Login tab', () => {
 			} )
 		);
 
-		const headings = [ ...container.querySelectorAll( 'h2' ) ].map(
-			( heading ) => heading.textContent
-		);
+		const headings = [
+			...container.querySelectorAll( '.ha-login h2' ),
+		].map( ( heading ) => heading.textContent );
 		expect( headings ).toEqual( [
 			'Passwordless login',
 			'Two-step login',
@@ -475,5 +504,137 @@ describe( 'Login tab', () => {
 		expect(
 			screen.getByLabelText( 'Grace period for required roles' )
 		).toBeInTheDocument();
+	} );
+} );
+
+const BOTH_ON = {
+	features: { support_access: true, passwordless: true, two_step: true },
+};
+
+const preview = () => screen.getByRole( 'region', { name: 'What people see' } );
+const drawing = () => preview().querySelector( '[aria-hidden="true"]' );
+
+describe( 'Login and security side panel', () => {
+	it( 'shows the email code link under the login form, and follows unsaved changes', async () => {
+		const user = userEvent.setup();
+		await renderTab();
+
+		expect( drawing() ).toHaveTextContent( 'Email me a login code' );
+		expect(
+			within( drawing() ).getByText( 'Email me a login code' )
+		).not.toHaveClass( 'is-button' );
+
+		await user.selectOptions(
+			screen.getByLabelText( 'Button style' ),
+			'button'
+		);
+		expect(
+			within( drawing() ).getByText( 'Email me a login code' )
+		).toHaveClass( 'is-button' );
+
+		await user.click(
+			screen.getByRole( 'switch', { name: 'WordPress login page' } )
+		);
+		expect( drawing() ).not.toHaveTextContent( 'Email me a login code' );
+		expect( screen.getByText( 'Unsaved changes' ) ).toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole( 'switch', { name: 'WordPress login page' } )
+		);
+		expect( drawing() ).toHaveTextContent( 'Email me a login code' );
+		expect( posts ).toEqual( [] );
+	} );
+
+	it( 'says what the drawing shows in one sentence, for screen readers', async () => {
+		const user = userEvent.setup();
+		await renderTab();
+		const sentence = () =>
+			preview().querySelector( '.screen-reader-text' ).textContent;
+
+		expect( drawing() ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( sentence() ).toBe(
+			'The WordPress login form, with an "Email me a login code" link under it.'
+		);
+
+		await user.selectOptions(
+			screen.getByLabelText( 'Button style' ),
+			'button'
+		);
+		expect( sentence() ).toBe(
+			'The WordPress login form, with an "Email me a login code" button under it.'
+		);
+	} );
+
+	it( 'shows the code step only while two-step login is on', async () => {
+		await renderTab();
+		expect( drawing() ).not.toHaveTextContent( 'Authenticator app code' );
+		expect(
+			screen.queryByRole( 'region', { name: 'Who has two-step login' } )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'shows the code step and who has two-step login while it is on', async () => {
+		await renderTab( boot( BOTH_ON ) );
+
+		expect( drawing() ).toHaveTextContent( 'Authenticator app code' );
+		expect( drawing() ).toHaveTextContent( 'Use a backup code' );
+		expect(
+			drawing().querySelectorAll( '.ha-seeprev__digits span' )
+		).toHaveLength( 6 );
+		expect(
+			preview().querySelector( '.screen-reader-text' ).textContent
+		).toBe(
+			'The WordPress login form, with an "Email me a login code" link under it, then a second step that asks for an authenticator app code, with a link to use a backup code.'
+		);
+
+		const card = await screen.findByRole( 'region', {
+			name: 'Who has two-step login',
+		} );
+		const rows = await within( card ).findAllByRole( 'listitem' );
+		expect( rows.map( ( row ) => row.textContent ) ).toEqual( [
+			"Editors: 2 of 52 still setting up1 can't skip anymore",
+			'Administrators: 2 of 3',
+		] );
+		expect(
+			within( card ).queryByText( 'Counts are updated every 5 minutes.' )
+		).not.toBeInTheDocument();
+	} );
+
+	it( 'leaves the email code link out while passwordless login is off', async () => {
+		render(
+			<AnnounceProvider>
+				<DataProvider>
+					<LoginTab
+						boot={ boot( {
+							features: {
+								support_access: true,
+								passwordless: false,
+								two_step: true,
+							},
+						} ) }
+					/>
+				</DataProvider>
+			</AnnounceProvider>
+		);
+		await screen.findByRole( 'heading', { name: 'Two-step login' } );
+
+		expect( drawing() ).not.toHaveTextContent( 'Email me a login code' );
+		expect( drawing() ).toHaveTextContent( 'Authenticator app code' );
+	} );
+
+	it( 'says the counts can be 5 minutes old on a big site', async () => {
+		coverage = { ...COVERAGE, large: true };
+		await renderTab( boot( BOTH_ON ) );
+
+		expect(
+			await screen.findByText( 'Counts are updated every 5 minutes.' )
+		).toBeInTheDocument();
+	} );
+
+	it( 'has no accessibility violations with the panel', async () => {
+		const { container } = await renderTab( boot( BOTH_ON ) );
+		await screen.findByText( 'Editors: 2 of 5' );
+
+		expect( await axe( container ) ).toHaveNoViolations();
 	} );
 } );

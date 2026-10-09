@@ -6,7 +6,9 @@ import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
 import Switch from '../settings/Switch';
 import RolePolicyTable, { EITHER } from './RolePolicyTable';
+import TwoStepCoverage from './TwoStepCoverage';
 import TwoStepSection from './TwoStepSection';
+import WhatPeopleSee from './WhatPeopleSee';
 
 // The server defaults, for settings saved before the passwordless group existed.
 const DEFAULTS = {
@@ -74,9 +76,10 @@ function places( woocommerce ) {
 }
 
 /**
- * The Login tab: the passwordless login settings and the two-step login
- * settings, each while its feature is on. The tab itself shows only while
- * one of them is.
+ * The Login and security tab: the passwordless login settings and the
+ * two-step login settings, each while its feature is on, and beside them
+ * a live drawing of what people see at login and, with two-step login on,
+ * who has it. The tab itself shows only while one of the features is on.
  *
  * Nothing saves until "Save changes", which sends only the keys that
  * changed, inside the `passwordless` group. The two-step section has its
@@ -196,10 +199,16 @@ export default function LoginTab( { boot } ) {
 	};
 
 	const passwordlessOn = !! boot?.features?.passwordless;
+	const twoStepOn = !! boot?.features?.two_step;
 	const lifetime = Number( val( 'code_lifetime' ) );
+	// The drawing follows the form, saved or not.
+	const previewLink =
+		passwordlessOn && val( 'show_on.wp_login' )
+			? String( val( 'toggle_style' ) )
+			: '';
 
-	return (
-		<div className="ha-login">
+	const forms = (
+		<div className="ha-columns__main ha-login">
 			{ passwordlessOn && (
 				<section
 					className="ha-card"
@@ -341,7 +350,17 @@ export default function LoginTab( { boot } ) {
 					</form>
 				</section>
 			) }
-			{ !! boot?.features?.two_step && <TwoStepSection boot={ boot } /> }
+			{ twoStepOn && <TwoStepSection boot={ boot } /> }
+		</div>
+	);
+
+	return (
+		<div className="ha-columns">
+			{ forms }
+			<div className="ha-side">
+				<WhatPeopleSee link={ previewLink } twoStep={ twoStepOn } />
+				{ twoStepOn && <TwoStepCoverage /> }
+			</div>
 		</div>
 	);
 }
