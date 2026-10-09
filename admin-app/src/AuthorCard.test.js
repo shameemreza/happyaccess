@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -401,7 +403,7 @@ describe( 'AuthorCard rotation', () => {
 		);
 		await waitFor( () =>
 			expect( body( container ) ).toHaveTextContent(
-				'1 support pass is on right now. It ends in 1 hour.'
+				'1 support pass is on. It ends in 1 hour.'
 			)
 		);
 
@@ -416,7 +418,7 @@ describe( 'AuthorCard rotation', () => {
 			/>
 		);
 		expect( body( container ) ).toHaveTextContent(
-			'1 support pass is on right now. It ends in 1 hour.'
+			'1 support pass is on. It ends in 1 hour.'
 		);
 
 		// Emergency lock ended every pass, so that line stopped being true.
@@ -468,5 +470,43 @@ describe( 'AuthorCard rotation', () => {
 		} finally {
 			blocked.mockRestore();
 		}
+	} );
+} );
+
+describe( 'AuthorCard tips layout', () => {
+	/**
+	 * One block of the card styles, by selector, as written in the source.
+	 * The tests run without CSS, so the layout rules are checked here.
+	 *
+	 * @param {string} selector Selector that opens the block.
+	 * @return {string} The block's text up to its closing brace.
+	 */
+	const styleBlock = ( selector ) => {
+		const scss = readFileSync(
+			path.resolve( 'admin-app/src/style.scss' ),
+			'utf8'
+		);
+		const start = scss.indexOf( selector + ' {' );
+		return -1 === start
+			? ''
+			: scss.slice( start, scss.indexOf( '}', start ) );
+	};
+
+	it( 'is only as tall as the cut-out needs, with the links under the text', () => {
+		const card = styleBlock( '.ha-author--tips' );
+		expect( card ).toMatch( /box-sizing: border-box;/ );
+		expect( card ).toMatch( /min-height: 124px;/ );
+
+		const foot = styleBlock( '.ha-author--tips .ha-author__foot' );
+		expect( foot ).toMatch( /min-height: 0;/ );
+		expect( foot ).toMatch( /justify-content: flex-start;/ );
+
+		// The text keeps the same clearance from the cut-out as the foot.
+		const clear =
+			'padding-inline-end: calc(var(--ha-author-notch) - var(--ha-author-pad) + 10px);';
+		expect( styleBlock( '.ha-author--tips .ha-author__body' ) ).toContain(
+			clear
+		);
+		expect( styleBlock( '.ha-author__foot' ) ).toContain( clear );
 	} );
 } );

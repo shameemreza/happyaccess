@@ -42,14 +42,17 @@ describe( 'tipLines', () => {
 			'admins',
 			'two-step-admins',
 			'device-alerts',
+			'emergency-lock',
 			'suspend',
 			'activity',
 			'protected',
 			'woo-passwordless',
 			'require-admins',
 			'backup-codes',
+			'device-alerts-tip',
 			'own-accounts',
 			'unused-admins',
+			'woo-api-keys',
 			'registration',
 		] );
 	} );
@@ -67,7 +70,12 @@ describe( 'tipLines', () => {
 				},
 				passes: [ { status: 'active', expires_at: NOW + HOUR } ],
 			} )
-		).toEqual( [ 'own-accounts', 'unused-admins', 'registration' ] );
+		).toEqual( [
+			'own-accounts',
+			'unused-admins',
+			'woo-api-keys',
+			'registration',
+		] );
 	} );
 
 	it( 'counts passes that are on, with the next end, in the singular and the plural', () => {
@@ -83,7 +91,7 @@ describe( 'tipLines', () => {
 			'passes-on'
 		);
 		expect( one.text ).toBe(
-			'1 support pass is on right now. It ends in 2 days 4 hours.'
+			'1 support pass is on. It ends in 2 days 4 hours.'
 		);
 
 		const two = line(
@@ -97,7 +105,7 @@ describe( 'tipLines', () => {
 			'passes-on'
 		);
 		expect( two.text ).toBe(
-			'2 support passes are on right now. The next one ends in 45 minutes.'
+			'2 support passes are on. The next one ends in 45 minutes.'
 		);
 
 		expect(
@@ -183,6 +191,39 @@ describe( 'tipLines', () => {
 				facts: { woocommerce: true },
 			} )
 		).toContain( 'woo-passwordless' );
+	} );
+
+	it( 'names where Emergency lock is only while temporary access is on', () => {
+		expect( ids( { features: {} } ) ).not.toContain( 'emergency-lock' );
+		expect(
+			line( { features: { support_access: true } }, 'emergency-lock' )
+				.text
+		).toBe( 'Emergency lock, top right, ends every support pass at once.' );
+	} );
+
+	it( 'explains new device alerts only while two-step login is on', () => {
+		expect( ids( { features: {} } ) ).not.toContain( 'device-alerts-tip' );
+		expect(
+			line( { features: { two_step: true } }, 'device-alerts-tip' ).text
+		).toBe(
+			"New device alerts email an admin when their account logs in from a browser it hasn't seen."
+		);
+	} );
+
+	it( 'shows the REST API keys tip only with WooCommerce', () => {
+		expect( ids( { facts: {} } ) ).not.toContain( 'woo-api-keys' );
+		expect(
+			line( { facts: { woocommerce: true } }, 'woo-api-keys' ).text
+		).toBe(
+			'WooCommerce REST API keys work like passwords. Remove old ones under WooCommerce, Settings, Advanced, REST API keys.'
+		);
+	} );
+
+	it( 'never says right now in the passes line', () => {
+		const passes = [ { status: 'active', expires_at: NOW + HOUR } ];
+		expect(
+			line( { features: ALL_ON, passes }, 'passes-on' ).text
+		).not.toMatch( /right now/ );
 	} );
 
 	it( 'leaves the sign-up tip out on a network', () => {

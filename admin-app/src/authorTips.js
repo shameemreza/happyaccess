@@ -9,7 +9,7 @@ import { durationWords } from './support/Ring';
 export const TIP_BUCKET = 3 * 3600;
 
 /**
- * Passes that let someone in right now: not suspended and not over.
+ * Passes that let someone in: not suspended and not over.
  *
  * @param {Array}  passes Passes from the list route.
  * @param {number} now    Unix time in seconds.
@@ -46,8 +46,8 @@ function siteLines( { features, facts, passes, now } ) {
 				text: sprintf(
 					/* translators: 1: number of support passes that are on. 2: time until the next one ends, like "2 days 4 hours". */
 					_n(
-						'%1$d support pass is on right now. It ends in %2$s.',
-						'%1$d support passes are on right now. The next one ends in %2$s.',
+						'%1$d support pass is on. It ends in %2$s.',
+						'%1$d support passes are on. The next one ends in %2$s.',
 						on.length,
 						'happyaccess'
 					),
@@ -139,6 +139,13 @@ function tips( { features, facts } ) {
 	if ( features.support_access ) {
 		list.push(
 			{
+				id: 'emergency-lock',
+				text: __(
+					'Emergency lock, top right, ends every support pass at once.',
+					'happyaccess'
+				),
+			},
+			{
 				id: 'suspend',
 				text: __(
 					'Suspend a pass to pause it. Resume it later and the same link works again.',
@@ -186,6 +193,13 @@ function tips( { features, facts } ) {
 					'Keep your two-step backup codes somewhere safe. Each code works once.',
 					'happyaccess'
 				),
+			},
+			{
+				id: 'device-alerts-tip',
+				text: __(
+					"New device alerts email an admin when their account logs in from a browser it hasn't seen.",
+					'happyaccess'
+				),
 			}
 		);
 	}
@@ -205,6 +219,15 @@ function tips( { features, facts } ) {
 			),
 		}
 	);
+	if ( facts.woocommerce ) {
+		list.push( {
+			id: 'woo-api-keys',
+			text: __(
+				'WooCommerce REST API keys work like passwords. Remove old ones under WooCommerce, Settings, Advanced, REST API keys.',
+				'happyaccess'
+			),
+		} );
+	}
 	// On a network the sign-up switch is in the network settings instead.
 	if ( ! facts.multisite ) {
 		list.push( {

@@ -228,6 +228,23 @@
 		padding-inline-end: calc(var(--ha-author-notch) - var(--ha-author-pad) + 10px);
 	}
 
+	// A tip is often one line, so the card is only as tall as the cut-out
+	// with the Hide button above it, and the links follow the text. The
+	// text keeps clear of the cut-out the same way the foot does.
+	.ha-author--tips {
+		box-sizing: border-box;
+		min-height: 124px;
+	}
+
+	.ha-author--tips .ha-author__body {
+		padding-inline-end: calc(var(--ha-author-notch) - var(--ha-author-pad) + 10px);
+	}
+
+	.ha-author--tips .ha-author__foot {
+		justify-content: flex-start;
+		min-height: 0;
+	}
+
 	.ha-author__tip {
 		display: flex;
 		align-items: flex-start;
