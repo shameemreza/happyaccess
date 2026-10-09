@@ -150,6 +150,16 @@ final class Challenge {
 	private static $reset_users = array();
 
 	/**
+	 * Ids of users who need the second step and whose password a bare
+	 * wp_authenticate() call checked in this browser request. If code then
+	 * makes an auth cookie for one of them, the cookie is held and the user
+	 * goes to the step. True until that redirect has run.
+	 *
+	 * @var array<int,bool>
+	 */
+	private static $checked_users = array();
+
+	/**
 	 * The sanitized login wp_signon() is about to check, set on its
 	 * wp_authenticate action and used up by the authenticate call that
 	 * follows. Null when no wp_signon() is under way.
@@ -327,7 +337,9 @@ final class Challenge {
 	 * so wp_signon() never sets the auth cookie and never fires wp_login.
 	 *
 	 * A bare wp_authenticate() call in a browser request, such as another
-	 * plugin checking a password, is returned as it is.
+	 * plugin checking a password, is returned as it is. If the same request
+	 * then makes an auth cookie for that user, drop_reset_session() holds
+	 * it and sends the user to the step.
 	 *
 	 * @param \WP_User|\WP_Error|null $user     Authentication result.
 	 * @param string                  $username Username or email typed.
@@ -340,6 +352,7 @@ final class Challenge {
 			return $user;
 		}
 		if ( 'browser' === self::context() && ! self::is_login_request( $user, $signon ) ) {
+			self::note_bare_check( $user, $signon );
 			return $user;
 		}
 		self::forget_stale_grace( $user );
@@ -359,6 +372,28 @@ final class Challenge {
 
 		// Reached only when a redirector set for tests returns instead of ending the request.
 		return new \WP_Error( 'happyaccess_twostep_pending', esc_html__( 'Finish logging in with your two-step login code.', 'happyaccess' ) );
+	}
+
+	/**
+	 * Remembers a bare password check of a user who needs the second step,
+	 * so an auth cookie made for them later in the request is held. A user
+	 * already logged in as that account passed the step before, and a
+	 * sign-on that the login request filter turned away is the filter
+	 * owner's call, so neither is held.
+	 *
+	 * @param \WP_User $user   The user whose password passed.
+	 * @param bool     $signon Whether wp_signon() made this call.
+	 * @return void
+	 */
+	private static function note_bare_check( \WP_User $user, $signon ) {
+		if ( $signon ) {
+			unset( self::$checked_users[ (int) $user->ID ] );
+			return;
+		}
+		if ( isset( self::$checked_users[ (int) $user->ID ] ) || get_current_user_id() === (int) $user->ID || ! self::applies( $user ) ) {
+			return;
+		}
+		self::$checked_users[ (int) $user->ID ] = true;
 	}
 
 	/**
@@ -421,16 +456,19 @@ final class Challenge {
 	}
 
 	/**
-	 * When code logs in a user right after their password reset and before
-	 * the second step, drops the session that wp_set_auth_cookie() just made
-	 * and the current user. hold_reset_cookie() keeps the cookie back.
+	 * When code makes an auth cookie for a user who still owes the second
+	 * step, drops the session that wp_set_auth_cookie() just made and the
+	 * current user. hold_reset_cookie() keeps the cookie back. That covers
+	 * a login right after the user's password reset, and one after a bare
+	 * wp_authenticate() check of their password.
 	 *
 	 * After WooCommerce's My Account reset form, the user goes to the step,
 	 * or setup, from here and the request ends. Core's reset on wp-login.php
-	 * never logs in, and other code gets no session and no redirect.
+	 * never logs in, and other code after a reset gets no session and no
+	 * redirect. After a bare check, the user goes to the step, or setup.
 	 *
 	 * @param string $cookie     Cookie value.
-	 * @param int    $expire     Cookie expiry.
+	 * @param int    $expire     Cookie expiry, 0 for a session cookie.
 	 * @param int    $expiration Session expiry.
 	 * @param int    $user_id    User id.
 	 * @param string $scheme     Cookie scheme.
@@ -438,9 +476,9 @@ final class Challenge {
 	 * @return void
 	 */
 	public static function drop_reset_session( $cookie, $expire = 0, $expiration = 0, $user_id = 0, $scheme = '', $token = '' ) {
-		unset( $cookie, $expire, $expiration, $scheme );
+		unset( $cookie, $expiration, $scheme );
 		$user_id = (int) $user_id;
-		if ( ! isset( self::$reset_users[ $user_id ] ) ) {
+		if ( ! isset( self::$reset_users[ $user_id ] ) && ! isset( self::$checked_users[ $user_id ] ) ) {
 			return;
 		}
 		if ( is_string( $token ) && '' !== $token ) {
@@ -451,11 +489,43 @@ final class Challenge {
 		}
 
 		$user = get_userdata( $user_id );
-		if ( true === self::$reset_users[ $user_id ] && $user instanceof \WP_User ) {
-			// One redirect per reset, even if the redirect returns.
-			self::$reset_users[ $user_id ] = false;
-			self::woo_reset_step( $user );
+		if ( ! $user instanceof \WP_User ) {
+			return;
 		}
+		if ( isset( self::$reset_users[ $user_id ] ) ) {
+			if ( true === self::$reset_users[ $user_id ] ) {
+				// One redirect per reset, even if the redirect returns.
+				self::$reset_users[ $user_id ] = false;
+				self::woo_reset_step( $user );
+			}
+			return;
+		}
+		if ( true === self::$checked_users[ $user_id ] ) {
+			// One redirect per check, even if the redirect returns.
+			self::$checked_users[ $user_id ] = false;
+			self::checked_step( $user, 0 < (int) $expire );
+		}
+	}
+
+	/**
+	 * Sends a user whose password a bare check passed, and whom code then
+	 * tried to log in, to the second step, or setup, and ends the request.
+	 *
+	 * @param \WP_User $user     The user.
+	 * @param bool     $remember Whether the held cookie was a lasting one.
+	 * @return void
+	 */
+	private static function checked_step( \WP_User $user, $remember ) {
+		self::forget_stale_grace( $user );
+		$carry = self::carry_from_login();
+		if ( $remember ) {
+			$carry['rememberme'] = 1;
+		}
+		$url = self::begin( $user, self::PURPOSE, $carry );
+		if ( is_wp_error( $url ) ) {
+			$url = self::login_url( 'unavailable', $carry );
+		}
+		self::redirect( $url );
 	}
 
 	/**
@@ -493,8 +563,9 @@ final class Challenge {
 	}
 
 	/**
-	 * Holds back the auth cookie of a user whose password was reset in this
-	 * request and who has not passed the second step.
+	 * Holds back the auth cookie of a user who has not passed the second
+	 * step and whose password was reset, or checked by a bare
+	 * wp_authenticate() call, in this request.
 	 *
 	 * @param bool $send       Whether to send the cookies.
 	 * @param int  $expire     Cookie expiry.
@@ -504,7 +575,8 @@ final class Challenge {
 	 */
 	public static function hold_reset_cookie( $send, $expire = 0, $expiration = 0, $user_id = 0 ) {
 		unset( $expire, $expiration );
-		return isset( self::$reset_users[ (int) $user_id ] ) ? false : $send;
+		$user_id = (int) $user_id;
+		return isset( self::$reset_users[ $user_id ] ) || isset( self::$checked_users[ $user_id ] ) ? false : $send;
 	}
 
 	/**
@@ -802,6 +874,7 @@ final class Challenge {
 	public static function reset() {
 		self::$app_password_users = array();
 		self::$reset_users        = array();
+		self::$checked_users      = array();
 		self::$redirector         = null;
 		self::$context            = null;
 		self::$signon_login       = null;
@@ -1499,7 +1572,7 @@ final class Challenge {
 	 * @return array
 	 */
 	private static function succeed( \WP_User $user, array $pending, array $carry, $passed = true ) {
-		unset( self::$reset_users[ (int) $user->ID ] );
+		unset( self::$reset_users[ (int) $user->ID ], self::$checked_users[ (int) $user->ID ] );
 		RateLimiter::clear( self::CODE_ACTION, 'ip', RateLimiter::ip_subject() );
 		self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
 		if ( 'backup' === $carry['method'] ) {

@@ -1455,6 +1455,161 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( array( true ), $seen );
 	}
 
+	/**
+	 * A bare password check, then the auth cookie, the way a theme's own
+	 * login handler often logs a user in.
+	 *
+	 * @param WP_User $user User.
+	 * @param array   $post Posted fields.
+	 * @param bool    $remember Remember me.
+	 * @return array url when the browser was sent somewhere, result otherwise.
+	 */
+	private function bare_check_then_cookie( WP_User $user, array $post = array(), $remember = false ) {
+		$res = $this->third_party_check( $user, $post );
+		$this->assertNull( $res['url'], 'The check itself is left alone.' );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+
+		$_POST    = $post;
+		$_REQUEST = $post;
+		try {
+			wp_set_auth_cookie( $res['result']->ID, $remember );
+			wp_set_current_user( $res['result']->ID );
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			return array(
+				'url'    => $stop->url,
+				'result' => null,
+			);
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+		return array(
+			'url'    => null,
+			'result' => $res['result'],
+		);
+	}
+
+	public function test_a_bare_check_that_then_sets_the_auth_cookie_goes_to_the_step() {
+		$made = $this->app_user();
+		$res  = $this->bare_check_then_cookie( $made['user'], array( 'redirect_to' => admin_url( 'edit.php' ) ), true );
+
+		$this->assertNotNull( $res['url'], 'The cookie sends the browser to the second step.' );
+		$args = $this->query( $res['url'] );
+		$this->assertSame( 'twostep', $args['step'] );
+		$this->assertSame( admin_url( 'edit.php' ), $args['redirect_to'] );
+		$this->assertSame( '1', $args['rememberme'] );
+		$this->assertCount( 1, $this->pending_rows() );
+		$this->assertSame( array( $made['user']->ID ), $this->auth, 'The handler tried to log the user in.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+
+		$done = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $done['type'] );
+		$this->assertSame( array( $made['user']->ID, $made['user']->ID ), $this->auth );
+		$this->assertSame( 1, $this->wp_login_count, 'The step logs the user in.' );
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $made['user']->ID )->get_all(), 'The session made after the step is kept.' );
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertTrue( apply_filters( 'send_auth_cookies', true, 0, 0, $made['user']->ID, 'auth', '' ), 'The auth cookie goes out after the step.' );
+		add_filter( 'send_auth_cookies', '__return_false' );
+	}
+
+	public function test_a_bare_check_that_sets_the_cookie_twice_redirects_once() {
+		$made = $this->app_user();
+		$this->assertNotNull( $this->bare_check_then_cookie( $made['user'] )['url'] );
+
+		wp_set_auth_cookie( $made['user']->ID );
+		$this->assertCount( 1, $this->pending_rows(), 'One pending login per check.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+	}
+
+	public function test_a_bare_check_alone_changes_nothing() {
+		$made = $this->app_user();
+		$res  = $this->third_party_check( $made['user'], array( 'confirm_password' => 'x' ) );
+
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( array(), $this->pending_rows() );
+		$this->assertSame( array(), $this->auth );
+		$this->assertSame( array(), $this->cookies );
+		$this->assertSame( 0, $this->wp_login_count );
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertTrue( apply_filters( 'send_auth_cookies', true, 0, 0, 0, 'auth', '' ), 'Other cookies are left alone.' );
+		add_filter( 'send_auth_cookies', '__return_false' );
+	}
+
+	public function test_a_bare_check_by_the_logged_in_user_keeps_their_session() {
+		$made = $this->app_user();
+		wp_set_current_user( $made['user']->ID );
+		$res = $this->bare_check_then_cookie( $made['user'], array( 'confirm_password' => 'x' ) );
+
+		$this->assertNull( $res['url'], 'A user who is already in passed the step before.' );
+		$this->assertSame( array(), $this->pending_rows() );
+		$this->assertSame( $made['user']->ID, get_current_user_id() );
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $made['user']->ID )->get_all() );
+	}
+
+	public function test_a_bare_check_of_a_user_without_two_step_logs_in_as_before() {
+		$user = self::factory()->user->create_and_get(
+			array(
+				'role'      => 'editor',
+				'user_pass' => self::PASSWORD,
+			)
+		);
+		$res  = $this->bare_check_then_cookie( $user );
+
+		$this->assertNull( $res['url'] );
+		$this->assertSame( $user->ID, get_current_user_id() );
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $user->ID )->get_all() );
+	}
+
+	public function test_a_sign_on_after_a_bare_check_still_goes_to_the_step_once() {
+		$made = $this->app_user();
+		$this->third_party_check( $made['user'], array() );
+		$res = $this->password_login( $made['user'] );
+
+		$this->assertNotNull( $res['url'] );
+		$this->assertSame( 'twostep', $this->query( $res['url'] )['step'] );
+		$this->assertCount( 1, $this->pending_rows() );
+		$this->assertSame( array(), $this->auth );
+	}
+
+	public function test_the_login_request_filter_still_skips_the_step_for_a_sign_on_after_a_bare_check() {
+		$made = $this->app_user();
+		$this->third_party_check( $made['user'], array() );
+		add_filter( 'happyaccess_twostep_login_request', '__return_false' );
+		$res = $this->password_login( $made['user'] );
+		remove_filter( 'happyaccess_twostep_login_request', '__return_false' );
+
+		$this->assertNull( $res['url'] );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	/**
+	 * A wp_authenticate callback added after HappyAccess's that swaps the
+	 * login for the account's email.
+	 *
+	 * @param string $login Login, by reference.
+	 * @return void
+	 */
+	public function swap_login_for_email( &$login ) {
+		$user = get_user_by( 'login', $login );
+		if ( $user instanceof WP_User ) {
+			$login = $user->user_email;
+		}
+	}
+
+	public function test_a_sign_on_whose_login_is_rewritten_after_the_note_still_goes_to_the_step() {
+		$made = $this->app_user();
+		add_action( 'wp_authenticate', array( $this, 'swap_login_for_email' ), PHP_INT_MAX, 1 );
+		$res = $this->password_login( $made['user'] );
+		remove_action( 'wp_authenticate', array( $this, 'swap_login_for_email' ), PHP_INT_MAX );
+
+		$this->assertNotNull( $res['url'], 'The auth cookie wp_signon() makes is held instead.' );
+		$this->assertSame( 'twostep', $this->query( $res['url'] )['step'] );
+		$this->assertCount( 1, $this->pending_rows() );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+	}
+
 	public function test_a_third_party_check_outside_the_browser_is_still_refused() {
 		$made = $this->app_user();
 		Challenge::set_context( 'api' );

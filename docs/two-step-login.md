@@ -82,7 +82,7 @@ They get an email, and they can set it up again from their profile or My Account
 
 ## Which logins get the second step
 
-Every login through WordPress's own sign-in function, `wp_signon()`, gets the second step. That covers the WordPress login page, WooCommerce's login form and any other login form built on it. In a browser request, code that only checks a password with `wp_authenticate()`, for example before a sensitive change, is left alone.
+Every login through WordPress's own sign-in function, `wp_signon()`, gets the second step. That covers the WordPress login page, WooCommerce's login form and any other login form built on it. In a browser request, code that only checks a password with `wp_authenticate()`, for example before a sensitive change, is left alone. If that code then logs the person in with `wp_set_auth_cookie()`, HappyAccess holds the login back and sends them to the second step.
 
 A login form that checks the password itself and then sets the login cookie skips the step. Its developer can send it to the step with the [`happyaccess_twostep_login_request`](developers.md#happyaccess_twostep_login_request) filter.
 
