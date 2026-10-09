@@ -829,46 +829,29 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( 'Too many wrong codes. Log in again.', $errors->get_error_message() );
 	}
 
-	public function test_the_site_cap_trips_at_one_hundred_wrong_codes_from_many_ips() {
-		$made = $this->app_user();
-		for ( $login = 0; $login < 20; $login++ ) {
-			$_SERVER['REMOTE_ADDR'] = '198.51.' . $login . '.7';
-			$this->password_login( $made['user'] );
-			$cookie = $this->pending_cookie();
-			for ( $try = 0; $try < 5; $try++ ) {
-				$this->post_code( $cookie, '000000' );
-			}
+	/**
+	 * Logs in with the password and types five wrong codes, which cancels the pending login.
+	 *
+	 * @param WP_User $user User.
+	 * @return array The last response.
+	 */
+	private function five_wrong_codes( WP_User $user ) {
+		$this->password_login( $user );
+		$cookie = $this->pending_cookie();
+		$res    = array();
+		for ( $try = 0; $try < 5; $try++ ) {
+			$res = $this->post_code( $cookie, '000000' );
 		}
-		$this->mails = array();
-
-		$_SERVER['REMOTE_ADDR'] = '192.0.2.200';
-		$this->password_login( $made['user'] );
-		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
-		$this->assertSame( 'render', $res['type'] );
-		$this->assertSame( 'locked', $res['errors']->get_error_code() );
-		$this->assertSame( 0, $this->wp_login_count );
-
-		$this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
-		$owner = array_filter(
-			$this->mails,
-			static function ( $mail ) {
-				return get_option( 'admin_email' ) === $mail['to'];
-			}
-		);
-		$this->assertCount( 0, $owner, 'The owner had the email when the cap tripped, not again.' );
+		return $res;
 	}
 
-	public function test_the_owner_gets_one_email_when_the_site_cap_trips() {
-		$made = $this->app_user();
-		for ( $login = 0; $login < 20; $login++ ) {
-			$_SERVER['REMOTE_ADDR'] = '198.51.' . $login . '.7';
-			$this->password_login( $made['user'] );
-			$cookie = $this->pending_cookie();
-			for ( $try = 0; $try < 5; $try++ ) {
-				$this->post_code( $cookie, '000000' );
-			}
-		}
-		$owner = array_values(
+	/**
+	 * Mails sent to the site owner.
+	 *
+	 * @return array
+	 */
+	private function owner_mails() {
+		return array_values(
 			array_filter(
 				$this->mails,
 				static function ( $mail ) {
@@ -876,8 +859,146 @@ class ChallengeTest extends WP_UnitTestCase {
 				}
 			)
 		);
+	}
+
+	public function test_ten_wrong_codes_lock_the_account_across_ips_and_logins() {
+		$made                   = $this->app_user();
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.1';
+		$this->five_wrong_codes( $made['user'] );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.2';
+		$this->five_wrong_codes( $made['user'] );
+		$this->mails = array();
+
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.200';
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( 'locked', $res['errors']->get_error_code() );
+		$this->assertStringContainsString( '60 minutes', $res['errors']->get_error_message() );
+		$this->assertSame( 0, $this->wp_login_count, 'A right code waits until the pause ends.' );
+
+		$locks = array_values(
+			array_filter(
+				$this->log_rows( 'twostep_locked' ),
+				static function ( $row ) {
+					return isset( $row['meta']['reason'] ) && 'account_cap' === $row['meta']['reason'];
+				}
+			)
+		);
+		$this->assertCount( 1, $locks );
+		$this->assertSame( $made['user']->ID, (int) $locks[0]['user_id'] );
+
+		Clock::freeze( Clock::now() + HOUR_IN_SECONDS + 1 );
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count, 'The pause ends after an hour.' );
+	}
+
+	public function test_the_user_gets_one_email_when_their_account_locks() {
+		$made        = $this->app_user();
+		$this->mails = array();
+		$this->five_wrong_codes( $made['user'] );
+		$this->assertCount( 0, $this->mails );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.2';
+		$this->five_wrong_codes( $made['user'] );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.3';
+		$this->password_login( $made['user'] );
+		$this->post_code( $this->pending_cookie(), '000000' );
+
+		$this->assertCount( 1, $this->mails );
+		$this->assertSame( $made['user']->user_email, $this->mails[0]['to'] );
+		$this->assertStringContainsString( 'Two-step login is paused for your account', $this->mails[0]['message'] );
+		$this->assertStringNotContainsString( '000000', $this->mails[0]['message'] );
+	}
+
+	public function test_the_account_lock_doubles_when_it_trips_again() {
+		$made = $this->app_user();
+		$this->five_wrong_codes( $made['user'] );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.2';
+		$this->five_wrong_codes( $made['user'] );
+
+		Clock::freeze( Clock::now() + HOUR_IN_SECONDS + 1 );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.3';
+		$this->five_wrong_codes( $made['user'] );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.4';
+		$this->five_wrong_codes( $made['user'] );
+
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.200';
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'locked', $res['errors']->get_error_code() );
+		$this->assertStringContainsString( '120 minutes', $res['errors']->get_error_message() );
+
+		Clock::freeze( Clock::now() + HOUR_IN_SECONDS + 1 );
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'locked', $res['errors']->get_error_code(), 'Still paused after one hour.' );
+		$this->assertSame( 0, $this->wp_login_count );
+	}
+
+	public function test_a_password_reset_ends_the_account_lock() {
+		$made = $this->app_user();
+		$this->five_wrong_codes( $made['user'] );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.2';
+		$this->five_wrong_codes( $made['user'] );
+
+		$pass = wp_generate_password( 24, false );
+		reset_password( $made['user'], $pass );
+		$user = get_userdata( $made['user']->ID );
+
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.200';
+		$this->password_login( $user, array(), $pass );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'account', Challenge::account_subject( $user->ID ), DAY_IN_SECONDS ) );
+	}
+
+	public function test_one_ip_cycling_its_own_account_cannot_lock_other_accounts() {
+		$own  = $this->email_user();
+		$made = $this->app_user( 'administrator' );
+
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+		for ( $round = 0; $round < 20; $round++ ) {
+			$this->password_login( $own );
+			$cookie = $this->pending_cookie();
+			for ( $try = 0; $try < 5; $try++ ) {
+				$this->post_code( $cookie, '000000', 'email' );
+			}
+		}
+
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.200';
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count, 'The admin with a right app code logs in.' );
+	}
+
+	public function test_one_hundred_wrong_codes_on_the_site_alert_the_owner_once_and_lock_nobody() {
+		for ( $n = 0; $n < 10; $n++ ) {
+			$other                  = $this->app_user();
+			$_SERVER['REMOTE_ADDR'] = '198.51.' . $n . '.7';
+			$this->five_wrong_codes( $other['user'] );
+			$_SERVER['REMOTE_ADDR'] = '198.51.' . $n . '.8';
+			$this->five_wrong_codes( $other['user'] );
+		}
+		$owner = $this->owner_mails();
 		$this->assertCount( 1, $owner );
-		$this->assertStringContainsString( 'Two-step login is paused', $owner[0]['message'] );
+		$this->assertStringContainsString( 'Many wrong two-step login codes', $owner[0]['message'] );
+		$this->assertCount( 1, $this->log_rows( 'twostep_site_alert' ) );
+
+		$this->mails            = array();
+		$made                   = $this->app_user( 'administrator' );
+		$_SERVER['REMOTE_ADDR'] = '192.0.2.200';
+		$this->password_login( $made['user'] );
+		$res = $this->post_code( $this->pending_cookie(), '000000' );
+		$this->assertSame( 'happyaccess_invalid_code', $res['errors']->get_error_code(), 'Codes are still checked.' );
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertCount( 0, $this->owner_mails(), 'One alert an hour.' );
+		$this->assertCount( 1, $this->log_rows( 'twostep_site_alert' ) );
 	}
 
 	public function test_a_missing_or_expired_cookie_goes_back_to_the_login() {

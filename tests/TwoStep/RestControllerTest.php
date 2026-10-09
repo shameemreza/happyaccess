@@ -435,31 +435,85 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 		$this->assertTrue( UserState::email_enabled( $user->ID ), 'Nothing changed.' );
 	}
 
-	public function test_a_wrong_recheck_fires_wp_login_failed_and_a_wrong_code_counts_on_the_site_cap() {
-		$user   = $this->editor();
+	public function test_a_wrong_recheck_fires_wp_login_failed_and_a_wrong_code_counts_on_the_account() {
+		$user = $this->editor();
+		UserState::enable_email( $user->ID );
+		BackupCodes::generate( $user->ID );
 		$failed = array();
 		$record = static function ( $login, $error ) use ( &$failed ) {
 			$failed[] = array( $login, $error instanceof WP_Error ? $error->get_error_code() : '' );
 		};
 		add_action( 'wp_login_failed', $record, 10, 2 );
-		$site = static function () {
-			return RateLimiter::count( Challenge::CODE_ACTION, 'site', 'site', HOUR_IN_SECONDS );
+		$count = static function ( $scope, $subject ) {
+			return RateLimiter::count( Challenge::CODE_ACTION, $scope, $subject, HOUR_IN_SECONDS );
 		};
 
 		try {
 			$this->assertSame( 403, $this->call( 'recheck', array( 'password' => 'wrong' ) )->get_status() );
 			$this->assertSame( array( array( $user->user_login, 'happyaccess_recheck_failed' ) ), $failed );
-			$this->assertSame( 0, $site(), 'A wrong password is not a code.' );
+			$this->assertSame( 0, $count( 'account', Challenge::account_subject( $user->ID ) ), 'A wrong password is not a code.' );
 
 			$this->assertSame( 403, $this->call( 'recheck', array( 'code' => 'ABCDE-FGHIJ' ) )->get_status() );
 			$this->assertCount( 2, $failed );
-			$this->assertSame( 1, $site(), 'A wrong code counts on the site cap.' );
+			$this->assertSame( 1, $count( 'account', Challenge::account_subject( $user->ID ) ), 'A wrong code counts on the account.' );
+			$this->assertSame( 0, $count( 'site', 'site' ), 'The re-check leaves the site count alone.' );
 
 			$this->recheck();
 			$this->assertCount( 2, $failed, 'A pass fires nothing.' );
+			$this->assertSame( 1, $count( 'account', Challenge::account_subject( $user->ID ) ), 'A right password keeps the code tries.' );
 		} finally {
 			remove_action( 'wp_login_failed', $record, 10 );
 		}
+	}
+
+	public function test_a_code_recheck_without_two_step_is_refused_before_anything_counts() {
+		$user = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $user->ID );
+		$this->start_session( $user->ID );
+
+		$response = $this->call( 'recheck', array( 'code' => '000000' ) );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_no_method', $this->code_of( $response ) );
+		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'account', Challenge::account_subject( $user->ID ), HOUR_IN_SECONDS ) );
+		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'site', 'site', HOUR_IN_SECONDS ) );
+		$this->assertSame( 0, RateLimiter::count( RestController::RECHECK_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ) );
+	}
+
+	public function test_recheck_codes_lock_the_account_even_when_a_right_password_comes_between() {
+		$user   = $this->editor();
+		$secret = Totp::new_secret();
+		UserState::enable_app( $user->ID, $secret );
+
+		$wrong = 0;
+		for ( $round = 0; $round < 3 && $wrong < 10; $round++ ) {
+			for ( $try = 0; $try < 4 && $wrong < 10; $try++ ) {
+				$this->assertSame( 403, $this->call( 'recheck', array( 'code' => '000000' ) )->get_status() );
+				++$wrong;
+			}
+			$this->recheck();
+		}
+		$this->assertSame( 10, $wrong );
+
+		$response = $this->call( 'recheck', array( 'code' => $this->app_code( $secret ) ) );
+		$this->assertSame( 429, $response->get_status(), 'The account is paused, so a right code waits.' );
+		$this->assertSame( 'happyaccess_locked', $this->code_of( $response ) );
+	}
+
+	public function test_a_logged_in_user_cannot_lock_other_accounts_through_the_recheck() {
+		$sub = self::factory()->user->create_and_get( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $sub->ID );
+		$this->start_session( $sub->ID );
+		for ( $i = 0; $i < 120; $i++ ) {
+			$this->assertSame( 400, $this->call( 'recheck', array( 'code' => '000000' ) )->get_status() );
+		}
+
+		$admin  = self::factory()->user->create_and_get( array( 'role' => 'administrator' ) );
+		$secret = Totp::new_secret();
+		UserState::enable_app( $admin->ID, $secret );
+		wp_set_current_user( $admin->ID );
+		$this->start_session( $admin->ID );
+		$response = $this->call( 'recheck', array( 'code' => $this->app_code( $secret ) ) );
+		$this->assertSame( 200, $response->get_status() );
 	}
 
 	public function test_two_disables_at_once_cannot_both_pass_the_last_method_check() {

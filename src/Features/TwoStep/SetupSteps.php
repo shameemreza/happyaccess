@@ -267,7 +267,7 @@ final class SetupSteps {
 			return self::screen( $user, $pending, $hash, $state, $carry, new \WP_Error( 'happyaccess_setup_expired', esc_html__( 'The setup key expired. Scan the new QR code and try again.', 'happyaccess' ) ) );
 		}
 
-		$attempts = Challenge::gate( $pending['id'] );
+		$attempts = Challenge::gate( $pending['id'], $user );
 		if ( is_wp_error( $attempts ) ) {
 			return self::screen( $user, $pending, $hash, $state, $carry, $attempts );
 		}
@@ -302,7 +302,7 @@ final class SetupSteps {
 	 * @return array
 	 */
 	private static function confirm_email( \WP_User $user, array $pending, $hash, array $state, array $carry, $code ) {
-		$attempts = Challenge::gate( $pending['id'] );
+		$attempts = Challenge::gate( $pending['id'], $user );
 		if ( is_wp_error( $attempts ) ) {
 			return self::screen( $user, $pending, $hash, $state, $carry, $attempts, '1' );
 		}

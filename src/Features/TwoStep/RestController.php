@@ -164,8 +164,10 @@ final class RestController {
 
 	/**
 	 * POST twostep/recheck: the current password, an app code or a backup
-	 * code. Every try counts on the IP limit before anything is checked,
-	 * and a pass clears only the IP scope.
+	 * code. A code is refused when the user has no two-step login. Every try
+	 * counts on the IP limit before anything is checked, and a pass clears
+	 * only the IP scope. A wrong code also counts on the account, the same
+	 * count as the login step's, which no pass clears.
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -181,6 +183,10 @@ final class RestController {
 		if ( '' === $session ) {
 			return new \WP_Error( 'happyaccess_no_session', __( 'Log in again to change two-step login.', 'happyaccess' ), array( 'status' => 403 ) );
 		}
+		$by_code = '' === $password;
+		if ( $by_code && ! UserState::is_enabled( $user->ID ) ) {
+			return new \WP_Error( 'happyaccess_no_method', __( 'Enter your password. Codes work once two-step login is on.', 'happyaccess' ), array( 'status' => 400 ) );
+		}
 
 		$wait = RateLimiter::attempt(
 			self::RECHECK_ACTION,
@@ -190,27 +196,20 @@ final class RestController {
 			(int) Settings::get( 'security.attempt_window' ),
 			(int) Settings::get( 'security.lockout_duration' )
 		);
+		if ( $wait < 1 && $by_code ) {
+			$wait = Challenge::account_wait( $user->ID );
+		}
 		if ( $wait > 0 ) {
-			$minutes = max( 1, (int) ceil( $wait / MINUTE_IN_SECONDS ) );
-			return new \WP_Error(
-				'happyaccess_locked',
-				sprintf(
-					/* translators: %d: minutes. */
-					_n( 'Too many attempts. Try again in %d minute.', 'Too many attempts. Try again in %d minutes.', $minutes, 'happyaccess' ),
-					$minutes
-				),
-				array( 'status' => 429 )
-			);
+			return self::locked_error( $wait );
 		}
 
-		$passed = '' !== $password
-			? wp_check_password( $password, $user->user_pass, $user->ID )
-			: self::check_code( $user->ID, $code );
+		$passed = $by_code
+			? self::check_code( $user->ID, $code )
+			: wp_check_password( $password, $user->user_pass, $user->ID );
 		if ( ! $passed ) {
 			$error = new \WP_Error( 'happyaccess_recheck_failed', __( "That password or code didn't work.", 'happyaccess' ), array( 'status' => 403 ) );
-			// A wrong code also counts on the site-wide cap of the login step.
-			if ( '' === $password ) {
-				Challenge::count_wrong_code();
+			if ( $by_code ) {
+				Challenge::count_account_wrong_code( $user );
 			}
 			do_action( 'wp_login_failed', $user->user_login, $error ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so security plugins see a wrong re-check as a failed login of this account.
 			return $error;
@@ -499,6 +498,25 @@ final class RestController {
 	 */
 	private static function role_requires() {
 		return new \WP_Error( 'happyaccess_role_requires', __( 'Your role needs two-step login.', 'happyaccess' ), array( 'status' => 403 ) );
+	}
+
+	/**
+	 * The 429 for a re-check that has to wait.
+	 *
+	 * @param int $wait Seconds.
+	 * @return \WP_Error
+	 */
+	private static function locked_error( $wait ) {
+		$minutes = max( 1, (int) ceil( $wait / MINUTE_IN_SECONDS ) );
+		return new \WP_Error(
+			'happyaccess_locked',
+			sprintf(
+				/* translators: %d: minutes. */
+				_n( 'Too many attempts. Try again in %d minute.', 'Too many attempts. Try again in %d minutes.', $minutes, 'happyaccess' ),
+				$minutes
+			),
+			array( 'status' => 429 )
+		);
 	}
 
 	/**

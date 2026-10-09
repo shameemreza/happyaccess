@@ -75,16 +75,34 @@ final class Challenge {
 	const SEND_LIMIT = 3;
 
 	/**
-	 * Wrong codes allowed on the whole site inside SITE_WINDOW, then the step
-	 * locks for SITE_WINDOW. Only failures count.
+	 * Wrong codes one account may get inside ACCOUNT_WINDOW, counted across
+	 * every IP, pending login and the profile re-check. The next one pauses
+	 * the account's code step for ACCOUNT_LOCK, doubled for each pause in the
+	 * last day, up to ACCOUNT_LOCK_MAX. Only failures count.
+	 */
+	const ACCOUNT_CODE_CAP = 10;
+	const ACCOUNT_WINDOW   = 3600;
+	const ACCOUNT_LOCK     = 3600;
+	const ACCOUNT_LOCK_MAX = 57600;
+
+	/**
+	 * Rate limit action that records each pause of an account, so the next
+	 * one can last twice as long.
+	 */
+	const LOCK_ACTION = 'twostep_lock';
+
+	/**
+	 * Wrong codes on the whole site inside SITE_WINDOW that email the owner
+	 * and write one log row. It never locks anyone: a site-wide lock would
+	 * let one account pause two-step login for every other.
 	 */
 	const SITE_CODE_CAP = 100;
 	const SITE_WINDOW   = 3600;
 
 	/**
-	 * Set while the owner already has the email about a site-wide pause.
+	 * Set while the owner already has the email about many wrong codes.
 	 */
-	const SITE_LOCK_TRANSIENT = 'happyaccess_ts_site_lock_alerted';
+	const SITE_ALERT_TRANSIENT = 'happyaccess_ts_site_alerted';
 
 	/**
 	 * Prefix of the transient that holds a backup code count to show after login.
@@ -129,6 +147,7 @@ final class Challenge {
 	 */
 	public static function register() {
 		Router::add_step( self::STEP, array( __CLASS__, 'run_step' ) );
+		add_action( 'after_password_reset', array( __CLASS__, 'end_account_lock' ), 10, 1 );
 		add_filter( 'authenticate', array( __CLASS__, 'filter_authenticate' ), 50, 3 );
 		add_filter( 'authenticate', array( __CLASS__, 'finish_authenticate' ), PHP_INT_MAX, 3 );
 		add_action( 'application_password_did_authenticate', array( __CLASS__, 'note_application_password' ), 10, 1 );
@@ -398,7 +417,7 @@ final class Challenge {
 			return self::code_screen( $allowed, $carry, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
-		$attempts = self::gate( $pending['id'] );
+		$attempts = self::gate( $pending['id'], $user );
 		if ( is_wp_error( $attempts ) ) {
 			return self::code_screen( $allowed, $carry, $attempts );
 		}
@@ -915,8 +934,8 @@ final class Challenge {
 	}
 
 	/**
-	 * A wrong code: counts it on the site cap. The try is already counted on
-	 * the pending login, and the fifth one cancels it.
+	 * A wrong code: counts it on the account and the site. The try is
+	 * already counted on the pending login, and the fifth one cancels it.
 	 *
 	 * @param \WP_User $user     The user.
 	 * @param array    $pending  Pending login row.
@@ -934,23 +953,89 @@ final class Challenge {
 	}
 
 	/**
-	 * Counts one wrong code on the site-wide cap, and tells the owner once
-	 * when the cap pauses the step. The profile re-check counts its wrong
-	 * codes here too.
+	 * Counts one wrong code on the account. The tenth inside the window
+	 * pauses the account's code step, emails the user and writes a log row.
+	 * The profile re-check counts its wrong codes here too. Only a password
+	 * reset or the end of the window clears the count; a right password or
+	 * code doesn't.
+	 *
+	 * @param \WP_User $user The user the code was for.
+	 * @return void
+	 */
+	public static function count_account_wrong_code( \WP_User $user ) {
+		$subject = self::account_subject( $user->ID );
+		RateLimiter::hit( self::CODE_ACTION, 'account', $subject );
+		if ( self::account_wait( $user->ID ) > 0 ) {
+			return;
+		}
+		if ( RateLimiter::count( self::CODE_ACTION, 'account', $subject, self::ACCOUNT_WINDOW ) < self::ACCOUNT_CODE_CAP ) {
+			return;
+		}
+		// The pause is one row on its own action, and the next pause needs ten new wrong codes.
+		RateLimiter::hit( self::LOCK_ACTION, 'account', $subject );
+		RateLimiter::clear( self::CODE_ACTION, 'account', $subject );
+		self::account_lock_alert( $user, self::account_wait( $user->ID ) );
+	}
+
+	/**
+	 * Seconds until the account's code step takes codes again, 0 when it
+	 * isn't paused. Each pause in the last day doubles the length.
+	 *
+	 * @param int $user_id User id.
+	 * @return int
+	 */
+	public static function account_wait( $user_id ) {
+		$subject = self::account_subject( $user_id );
+		$pauses  = RateLimiter::count( self::LOCK_ACTION, 'account', $subject, DAY_IN_SECONDS );
+		if ( $pauses < 1 ) {
+			return 0;
+		}
+		$length = (int) min( self::ACCOUNT_LOCK_MAX, self::ACCOUNT_LOCK * pow( 2, min( 10, $pauses - 1 ) ) );
+		return RateLimiter::retry_after( self::LOCK_ACTION, 'account', $subject, 1, $length, $length );
+	}
+
+	/**
+	 * Ends a pause and forgets the wrong codes after a password reset: the
+	 * person who reset it has the mailbox, and the old password is gone.
+	 *
+	 * @param \WP_User $user The user whose password was reset.
+	 * @return void
+	 */
+	public static function end_account_lock( $user ) {
+		if ( ! $user instanceof \WP_User ) {
+			return;
+		}
+		$subject = self::account_subject( $user->ID );
+		RateLimiter::clear( self::CODE_ACTION, 'account', $subject );
+		RateLimiter::clear( self::LOCK_ACTION, 'account', $subject );
+	}
+
+	/**
+	 * Rate limit subject of an account.
+	 *
+	 * @param int $user_id User id.
+	 * @return string
+	 */
+	public static function account_subject( $user_id ) {
+		return 'u:' . (int) $user_id;
+	}
+
+	/**
+	 * Counts one wrong code on the site and tells the owner once an hour when
+	 * there are many. It never locks anyone.
 	 *
 	 * @return void
 	 */
-	public static function count_wrong_code() {
+	private static function count_site_wrong_code() {
 		// Only a wrong code counts on the site scope, and it is never cleared.
 		RateLimiter::hit( self::CODE_ACTION, 'site', 'site' );
-		$wait = self::site_wait();
-		if ( $wait > 0 ) {
-			self::site_lock_alert( $wait );
+		if ( RateLimiter::count( self::CODE_ACTION, 'site', 'site', self::SITE_WINDOW ) >= self::SITE_CODE_CAP ) {
+			self::site_alert();
 		}
 	}
 
 	/**
-	 * Counts a wrong code on the site cap and logs it. The try is already
+	 * Counts a wrong code on the account and the site and logs it. The try is already
 	 * counted on the pending login, and the fifth one cancels it. The setup
 	 * step uses this for its codes too.
 	 *
@@ -961,7 +1046,8 @@ final class Challenge {
 	 * @return array|null The redirect to the login when the pending login was cancelled, else null.
 	 */
 	public static function wrong_code( \WP_User $user, array $pending, array $carry, $attempts ) {
-		self::count_wrong_code();
+		self::count_account_wrong_code( $user );
+		self::count_site_wrong_code();
 
 		if ( $attempts >= self::MAX_ATTEMPTS ) {
 			self::cancel( $pending['id'] );
@@ -987,22 +1073,22 @@ final class Challenge {
 	}
 
 	/**
-	 * The checks before any code is looked at: the IP limit, the site-wide
-	 * cap, then one try counted on the pending login, so parallel requests
+	 * The checks before any code is looked at: the IP limit, the account's
+	 * pause, then one try counted on the pending login, so parallel requests
 	 * can't check more than MAX_ATTEMPTS codes.
 	 *
-	 * @param int $pending_id Pending login id.
+	 * @param int      $pending_id Pending login id.
+	 * @param \WP_User $user       The user of the pending login.
 	 * @return int|\WP_Error Checks counted, this one included, or 0 when the
 	 *                       pending login is gone. A lock error is made safe for the screen.
 	 */
-	public static function gate( $pending_id ) {
+	public static function gate( $pending_id, \WP_User $user ) {
 		$wait = self::ip_wait();
 		if ( $wait > 0 ) {
 			return self::screen_error( self::locked_error( $wait ) );
 		}
-		$wait = self::site_wait();
+		$wait = self::account_wait( $user->ID );
 		if ( $wait > 0 ) {
-			self::site_lock_alert( $wait );
 			return self::screen_error( self::locked_error( $wait ) );
 		}
 		return self::count_check( $pending_id );
@@ -1470,54 +1556,76 @@ final class Challenge {
 	}
 
 	/**
-	 * Seconds until the site-wide cap lets codes through again. Reads only;
-	 * a wrong code adds the hit.
+	 * Emails the site owner about many wrong codes and writes one log row, at
+	 * most once per SITE_WINDOW.
 	 *
-	 * @return int
-	 */
-	private static function site_wait() {
-		return RateLimiter::retry_after( self::CODE_ACTION, 'site', 'site', self::SITE_CODE_CAP, self::SITE_WINDOW, self::SITE_WINDOW );
-	}
-
-	/**
-	 * Emails the site owner once per pause and writes one log row.
-	 *
-	 * @param int $wait Seconds the pause lasts.
 	 * @return void
 	 */
-	private static function site_lock_alert( $wait ) {
+	private static function site_alert() {
 		// Transient calls can add or delete an option, so they run inside the bypass.
 		$alerted = Internal::run(
 			static function () {
-				return get_transient( self::SITE_LOCK_TRANSIENT );
+				return get_transient( self::SITE_ALERT_TRANSIENT );
 			}
 		);
 		if ( $alerted ) {
 			return;
 		}
-
-		$wait = max( 60, (int) $wait );
 		Internal::run(
-			static function () use ( $wait ) {
-				set_transient( self::SITE_LOCK_TRANSIENT, 1, $wait );
+			static function () {
+				set_transient( self::SITE_ALERT_TRANSIENT, 1, self::SITE_WINDOW );
 			}
 		);
 
 		AuditLog::add(
-			'twostep_locked',
+			'twostep_site_alert',
 			array(
 				'feature' => 'two_step',
 				'user_id' => 0,
-				'summary' => __( 'Two-step login paused for the whole site after too many wrong codes', 'happyaccess' ),
+				'summary' => __( 'Many wrong two-step login codes on the site in the last hour', 'happyaccess' ),
 				'meta'    => array( 'reason' => 'site_cap' ),
 			)
 		);
 
 		Mailer::send(
 			(string) get_option( 'admin_email' ),
-			__( 'Two-step login is paused', 'happyaccess' ),
-			'twostep-lock',
-			array( 'minutes' => (int) ceil( $wait / MINUTE_IN_SECONDS ) )
+			__( 'Many wrong two-step login codes', 'happyaccess' ),
+			'twostep-site-alert',
+			array( 'count' => self::SITE_CODE_CAP )
+		);
+	}
+
+	/**
+	 * Emails the user once when their account's code step pauses, and
+	 * writes one log row.
+	 *
+	 * @param \WP_User $user The user.
+	 * @param int      $wait Seconds the pause lasts.
+	 * @return void
+	 */
+	private static function account_lock_alert( \WP_User $user, $wait ) {
+		$minutes = max( 1, (int) ceil( $wait / MINUTE_IN_SECONDS ) );
+		AuditLog::add(
+			'twostep_locked',
+			array(
+				'feature' => 'two_step',
+				'user_id' => (int) $user->ID,
+				'summary' => __( 'Two-step login paused for this account after too many wrong codes', 'happyaccess' ),
+				'meta'    => array(
+					'reason'  => 'account_cap',
+					'minutes' => $minutes,
+				),
+			)
+		);
+
+		Mailer::send(
+			(string) $user->user_email,
+			__( 'Two-step login is paused for your account', 'happyaccess' ),
+			'twostep-account-lock',
+			array(
+				'minutes'   => $minutes,
+				'reset_url' => wp_lostpassword_url(),
+			)
 		);
 	}
 
