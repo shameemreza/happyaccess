@@ -228,7 +228,7 @@ describe( 'tipLines', () => {
 			line( { features: { support_access: true } }, 'emergency-lock' )
 				.text
 		).toBe(
-			'Emergency lock, top right, ends every support pass at once. Use it if a link or code ever reaches the wrong person.'
+			'Emergency lock, at the top of this page, ends every support pass at once. Use it if a link or code ever reaches the wrong person.'
 		);
 	} );
 
