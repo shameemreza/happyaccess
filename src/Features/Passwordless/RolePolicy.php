@@ -197,7 +197,10 @@ final class RolePolicy {
 	 * translation, for what was typed. A right password on an email-only
 	 * account gets the same error as a wrong one, and neither says the
 	 * account uses email codes, so the error never confirms the policy.
-	 * The "Email me a login code" link under the form stays.
+	 * The "Email me a login code" link under the form stays. The strings
+	 * are core's own and so carry no text domain on purpose. The lost
+	 * password URL is escaped, which matches core's output for any URL
+	 * without characters that need escaping.
 	 *
 	 * @param mixed $username Username or email typed, as core passed it.
 	 * @return \WP_Error
@@ -214,7 +217,7 @@ final class RolePolicy {
 			/* translators: %s: User name. */
 			$text = __( '<strong>Error:</strong> The password you entered for the username %s is incorrect.' );
 		}
-		$text = sprintf( $text, '<strong>' . esc_html( $typed ) . '</strong>' ) . ' <a href="' . wp_lostpassword_url() . '">' . __( 'Lost your password?' ) . '</a>';
+		$text = sprintf( $text, '<strong>' . esc_html( $typed ) . '</strong>' ) . ' <a href="' . esc_url( wp_lostpassword_url() ) . '">' . __( 'Lost your password?' ) . '</a>';
 		// phpcs:enable WordPress.WP.I18n.MissingArgDomain
 		return new \WP_Error( 'incorrect_password', $text );
 	}

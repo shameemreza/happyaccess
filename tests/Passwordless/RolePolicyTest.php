@@ -163,6 +163,20 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'plescape&lt;b&gt;', $error->get_error_message() );
 	}
 
+	public static function odd_lost_password_url() {
+		return 'https://example.org/lost?a=1&b="><script>x</script>';
+	}
+
+	public function test_the_refusal_escapes_the_lost_password_url() {
+		add_filter( 'lostpassword_url', array( __CLASS__, 'odd_lost_password_url' ) );
+		$error = RolePolicy::filter_authenticate( $this->make_user( 'subscriber', 'plurl' ), 'plurl', 'correct-horse-battery' );
+		remove_filter( 'lostpassword_url', array( __CLASS__, 'odd_lost_password_url' ) );
+
+		$this->assertWPError( $error );
+		$this->assertStringNotContainsString( '<script>', $error->get_error_message() );
+		$this->assertStringContainsString( 'href="' . esc_url( self::odd_lost_password_url() ) . '"', $error->get_error_message() );
+	}
+
 	public function test_a_wp_error_or_null_passes_through_unchanged() {
 		$error = new WP_Error( 'other', 'Other.' );
 		$this->assertSame( $error, RolePolicy::filter_authenticate( $error, 'x', 'y' ) );
