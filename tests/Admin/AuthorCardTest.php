@@ -347,20 +347,21 @@ class AuthorCardTest extends WP_UnitTestCase {
 
 	public function test_the_two_step_count_reads_the_kept_coverage_when_there_is_one() {
 		Features::set( 'two_step', true );
-		set_transient(
-			Coverage::TRANSIENT,
-			array(
-				'roles' => array(
-					array(
-						'slug'    => 'administrator',
-						'enabled' => 3,
-						'total'   => 5,
-					),
+		$kept = array(
+			'roles' => array(
+				array(
+					'slug'    => 'administrator',
+					'enabled' => 3,
+					'total'   => 5,
 				),
-				'large' => false,
 			),
-			60
+			'large' => false,
 		);
+		if ( is_multisite() ) {
+			// On a network the kept counts carry the generation they were made with.
+			$kept[ Coverage::GEN_KEY ] = (string) get_site_option( Coverage::NETWORK_GEN, '' );
+		}
+		set_transient( Coverage::TRANSIENT, $kept, 60 );
 
 		$this->assertSame(
 			array(

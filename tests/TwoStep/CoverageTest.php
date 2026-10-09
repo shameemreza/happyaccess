@@ -260,6 +260,8 @@ class CoverageTest extends WP_UnitTestCase {
 		$this->rows();
 		$kept = get_transient( Coverage::TRANSIENT );
 		$this->assertIsArray( $kept );
+		// On a network the kept counts carry their generation, which the answer leaves out.
+		unset( $kept[ Coverage::GEN_KEY ] );
 
 		// A write that skips UserState, and so the clear, is not seen until the cache goes.
 		update_user_meta( $user, UserState::META_STATE, array( 'email' => true ) );
