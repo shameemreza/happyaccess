@@ -235,18 +235,20 @@ final class Privacy {
 		$tokens  = Installer::table( 'tokens' );
 		$items   = array();
 
+		// $events is only "%s" placeholders, one per ADMIN_EVENTS value.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom tables; the IN list has one placeholder per ADMIN_EVENTS value.
 		$events     = self::admin_event_placeholders();
 		$log_rows   = (array) $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$logs} WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND event_type NOT IN ( {$events} ) ) ) ORDER BY id ASC LIMIT %d OFFSET %d",
-				array_merge( array( $user_id, $user_id, $email ), self::ADMIN_EVENTS, array( self::PER_PAGE, $offset ) )
+				"SELECT * FROM %i WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM %i WHERE recipient_email = %s ) AND event_type NOT IN ( {$events} ) ) ) ORDER BY id ASC LIMIT %d OFFSET %d",
+				array_merge( array( $logs, $user_id, $user_id, $tokens, $email ), self::ADMIN_EVENTS, array( self::PER_PAGE, $offset ) )
 			),
 			ARRAY_A
 		);
 		$grant_rows = (array) $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$tokens} WHERE ( ( %d > 0 AND created_by = %d ) OR recipient_email = %s ) ORDER BY id ASC LIMIT %d OFFSET %d",
+				'SELECT * FROM %i WHERE ( ( %d > 0 AND created_by = %d ) OR recipient_email = %s ) ORDER BY id ASC LIMIT %d OFFSET %d',
+				$tokens,
 				$user_id,
 				$user_id,
 				$email,
@@ -486,12 +488,13 @@ final class Privacy {
 
 		$scrubbed = self::end_and_scrub_grants( $email );
 
+		// $events is only "%s" placeholders, one per ADMIN_EVENTS value.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom tables; the IN list has one placeholder per ADMIN_EVENTS value.
 		$events    = self::admin_event_placeholders();
 		$log_count = (int) $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$logs} SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM {$tokens} WHERE recipient_email = %s ) AND event_type NOT IN ( {$events} ) AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
-				array_merge( array( $user_id, '0.0.0.0', '', $user_id, $user_id, $email ), self::ADMIN_EVENTS, array( '0.0.0.0', self::PER_PAGE ) )
+				"UPDATE %i SET user_id = IF( user_id = %d, 0, user_id ), ip_address = %s, user_agent = %s WHERE ( ( %d > 0 AND user_id = %d ) OR ( token_id IN ( SELECT id FROM %i WHERE recipient_email = %s ) AND event_type NOT IN ( {$events} ) AND COALESCE( ip_address, '' ) <> %s ) ) LIMIT %d",
+				array_merge( array( $logs, $user_id, '0.0.0.0', '', $user_id, $user_id, $tokens, $email ), self::ADMIN_EVENTS, array( '0.0.0.0', self::PER_PAGE ) )
 			)
 		);
 		// phpcs:enable
@@ -501,8 +504,8 @@ final class Privacy {
 		if ( $log_count < self::PER_PAGE ) {
 			$grant_count = self::clear_grants( $email );
 			if ( $user_id ) {
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-				$created_count = (int) $wpdb->query( $wpdb->prepare( "UPDATE {$tokens} SET created_by = 0 WHERE created_by = %d LIMIT %d", $user_id, self::PER_PAGE ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				$created_count = (int) $wpdb->query( $wpdb->prepare( 'UPDATE %i SET created_by = 0 WHERE created_by = %d LIMIT %d', $tokens, $user_id, self::PER_PAGE ) );
 			}
 			Grants::flush_cache();
 		}
@@ -542,8 +545,8 @@ final class Privacy {
 		$tokens = Installer::table( 'tokens' );
 		$logs   = Installer::table( 'logs' );
 		// Grants with an empty label that already ended have nothing left to do.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$ids = (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$tokens} WHERE recipient_email = %s AND ( revoked_at IS NULL OR label <> %s ) ORDER BY id ASC LIMIT %d", $email, '', self::PER_PAGE ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$ids = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT id FROM %i WHERE recipient_email = %s AND ( revoked_at IS NULL OR label <> %s ) ORDER BY id ASC LIMIT %d', $tokens, $email, '', self::PER_PAGE ) );
 
 		$complete = true;
 		foreach ( $ids as $id ) {
@@ -558,10 +561,10 @@ final class Privacy {
 			// Summaries end with the label ("Support access granted to Acme"). Only that trailing part is replaced, and short labels are skipped because they could match other text.
 			if ( mb_strlen( $grant['label'] ) >= 3 ) {
 				$suffix = ' ' . $grant['label'];
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-				$wpdb->query( $wpdb->prepare( "UPDATE {$logs} SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND RIGHT( summary, CHAR_LENGTH( %s ) ) = %s", $suffix, ' [removed]', $grant['id'], $suffix, $suffix ) );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-				$left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND summary LIKE %s", $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%' ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				$wpdb->query( $wpdb->prepare( 'UPDATE %i SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND RIGHT( summary, CHAR_LENGTH( %s ) ) = %s', $logs, $suffix, ' [removed]', $grant['id'], $suffix, $suffix ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				$left = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE token_id = %d AND summary LIKE %s', $logs, $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%' ) );
 				if ( $left > 0 ) {
 					$complete = false;
 				}
@@ -594,8 +597,8 @@ final class Privacy {
 		global $wpdb;
 
 		$tokens = Installer::table( 'tokens' );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, restrictions FROM {$tokens} WHERE recipient_email = %s ORDER BY id ASC LIMIT %d", $email, self::PER_PAGE ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, restrictions FROM %i WHERE recipient_email = %s ORDER BY id ASC LIMIT %d', $tokens, $email, self::PER_PAGE ), ARRAY_A );
 
 		$count = 0;
 		foreach ( $rows as $row ) {

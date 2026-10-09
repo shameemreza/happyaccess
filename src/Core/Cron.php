@@ -94,8 +94,15 @@ final class Cron {
 	 * @return int Rows deleted.
 	 */
 	private static function purge_ended_grants( $days ) {
+		global $wpdb;
+		$table  = Installer::table( 'tokens' );
 		$cutoff = Clock::mysql( Clock::now() - max( 1, (int) $days ) * DAY_IN_SECONDS );
-		return self::delete_in_batches( Installer::table( 'tokens' ), 'revoked_at IS NOT NULL AND revoked_at < %s AND ( user_id IS NULL OR user_id = 0 )', array( $cutoff ) );
+		return self::delete_in_batches(
+			static function () use ( $wpdb, $table, $cutoff ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				return $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE revoked_at IS NOT NULL AND revoked_at < %s AND ( user_id IS NULL OR user_id = 0 ) LIMIT %d', $table, $cutoff, self::BATCH_SIZE ) );
+			}
+		);
 	}
 
 	/**
@@ -104,25 +111,29 @@ final class Cron {
 	 * @return int Rows deleted.
 	 */
 	private static function purge_challenges() {
-		return self::delete_in_batches( Installer::table( 'challenges' ), 'expires_at < %s', array( Clock::mysql( Clock::now() - DAY_IN_SECONDS ) ) );
+		global $wpdb;
+		$table  = Installer::table( 'challenges' );
+		$cutoff = Clock::mysql( Clock::now() - DAY_IN_SECONDS );
+		return self::delete_in_batches(
+			static function () use ( $wpdb, $table, $cutoff ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				return $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE expires_at < %s LIMIT %d', $table, $cutoff, self::BATCH_SIZE ) );
+			}
+		);
 	}
 
 	/**
-	 * Deletes matching rows in batches, so one run never holds a long lock.
-	 * What a capped run leaves behind goes in the next one.
+	 * Runs a delete of up to BATCH_SIZE rows again and again, so one run
+	 * never holds a long lock. What a capped run leaves behind goes in the
+	 * next one.
 	 *
-	 * @param string $table Table name.
-	 * @param string $where WHERE clause with placeholders. Fixed strings only.
-	 * @param array  $args  Values for the placeholders.
+	 * @param callable $delete_batch Deletes one batch and returns the row count.
 	 * @return int Rows deleted.
 	 */
-	private static function delete_in_batches( $table, $where, array $args ) {
-		global $wpdb;
-
+	private static function delete_in_batches( $delete_batch ) {
 		$total = 0;
 		for ( $i = 0; $i < self::MAX_BATCHES; $i++ ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Custom table; $where is a fixed string with placeholders.
-			$deleted = (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE {$where} LIMIT %d", array_merge( $args, array( self::BATCH_SIZE ) ) ) );
+			$deleted = (int) call_user_func( $delete_batch );
 			$total  += $deleted;
 			if ( $deleted < self::BATCH_SIZE ) {
 				break;

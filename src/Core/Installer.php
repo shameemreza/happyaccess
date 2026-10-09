@@ -106,7 +106,7 @@ final class Installer {
 	public static function table_exists( $name ) {
 		global $wpdb;
 		$suppress = $wpdb->suppress_errors( true );
-		$columns  = $wpdb->get_results( 'SHOW COLUMNS FROM ' . self::table( $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Table name from $wpdb->prefix.
+		$columns  = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i', self::table( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema check on a plugin table.
 		$wpdb->suppress_errors( $suppress );
 		return ! empty( $columns );
 	}
@@ -384,7 +384,7 @@ final class Installer {
 		global $wpdb;
 		foreach ( self::REQUIRED_COLUMNS as $name => $columns ) {
 			$suppress = $wpdb->suppress_errors( true );
-			$found    = $wpdb->get_col( 'SHOW COLUMNS FROM ' . self::table( $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Table name from $wpdb->prefix.
+			$found    = $wpdb->get_col( $wpdb->prepare( 'SHOW COLUMNS FROM %i', self::table( $name ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema check on plugin tables.
 			$wpdb->suppress_errors( $suppress );
 			if ( empty( $found ) ) {
 				return 'missing_table:' . $name;

@@ -163,12 +163,13 @@ final class AuditLog {
 		$page     = max( 1, (int) $f['page'] );
 		$table    = Installer::table( 'logs' );
 
+		// $where_sql is joined only from the fixed strings in where(), and every value in it is a placeholder.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom table; WHERE parts are fixed strings with placeholders.
-		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}", $params ) );
+		$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM %i WHERE {$where_sql}", array_merge( array( $table ), $params ) ) );
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d",
-				array_merge( $params, array( $per_page, ( $page - 1 ) * $per_page ) )
+				"SELECT * FROM %i WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d",
+				array_merge( array( $table ), $params, array( $per_page, ( $page - 1 ) * $per_page ) )
 			),
 			ARRAY_A
 		);
@@ -198,11 +199,12 @@ final class AuditLog {
 		$limit = max( 1, min( 5000, (int) $limit ) );
 		$table = Installer::table( 'logs' );
 
+		// $where_sql is joined only from the fixed strings in where(), and every value in it is a placeholder.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Custom table; WHERE parts are fixed strings with placeholders.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d",
-				array_merge( $params, array( $limit ) )
+				"SELECT * FROM %i WHERE {$where_sql} ORDER BY id DESC LIMIT %d",
+				array_merge( array( $table ), $params, array( $limit ) )
 			),
 			ARRAY_A
 		);
