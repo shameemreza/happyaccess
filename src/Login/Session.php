@@ -18,8 +18,11 @@ defined( 'ABSPATH' ) || exit;
  * whose grant can't be found is logged out. Three hooks cover the ways in:
  * enforce() on init handles cookie sessions, the determine_current_user
  * filter handles re-resolution after init such as REST, and the authenticate
- * filter keeps temp users out of core's password, application password and
- * XML-RPC logins entirely.
+ * filter keeps temp users out of every login that runs through
+ * wp_authenticate(), such as wp-login.php, other plugins' forms and XML-RPC.
+ * Application passwords are not this class's job:
+ * CapabilityGuard::filter_app_passwords() turns them off for temp users,
+ * and core checks them outside the authenticate chain on REST requests.
  */
 final class Session {
 
@@ -63,9 +66,12 @@ final class Session {
 	}
 
 	/**
-	 * Keeps temp users out of core's authenticate chain (password, application
-	 * password, wp-login.php, XML-RPC). They sign in through the HappyAccess
-	 * link or code flow, which sets the auth cookie directly.
+	 * Keeps temp users out of core's authenticate chain: wp-login.php,
+	 * wp_signon() from other plugins and XML-RPC. They sign in through the
+	 * HappyAccess link or code flow, which sets the auth cookie directly.
+	 * Application passwords are refused by
+	 * CapabilityGuard::filter_app_passwords(), since a REST request checks
+	 * them without this filter.
 	 *
 	 * @param \WP_User|\WP_Error|null $user Authentication result.
 	 * @return \WP_User|\WP_Error|null

@@ -72,6 +72,40 @@ class SettingsTest extends WP_UnitTestCase {
 		$this->assertFalse( Features::is_enabled( 'made_up' ) );
 	}
 
+	/**
+	 * Keeps the stored settings as they were, like a write that failed.
+	 *
+	 * @param mixed $value     New value.
+	 * @param mixed $old_value Stored value.
+	 * @return mixed
+	 */
+	public function keep_old_settings( $value, $old_value ) {
+		unset( $value );
+		return $old_value;
+	}
+
+	public function test_features_set_says_whether_the_switch_was_saved() {
+		Settings::update( array( 'features' => array( 'two_step' => false ) ) );
+		add_filter( 'pre_update_option_' . Settings::OPTION, array( $this, 'keep_old_settings' ), 10, 2 );
+		$saved = Features::set( 'two_step', true );
+		remove_filter( 'pre_update_option_' . Settings::OPTION, array( $this, 'keep_old_settings' ), 10 );
+		Settings::flush_cache();
+
+		$this->assertFalse( $saved, 'A write that did not happen is not reported as done.' );
+		$this->assertFalse( Features::is_enabled( 'two_step' ) );
+
+		$this->assertTrue( Features::set( 'two_step', false ), 'Setting the value it already has is a success.' );
+	}
+
+	public function test_features_set_is_false_for_a_temp_user() {
+		$temp = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		update_user_meta( $temp, 'happyaccess_temp_user', 1 );
+		wp_set_current_user( $temp );
+
+		$this->assertFalse( Features::set( 'passwordless', true ) );
+		$this->assertFalse( Settings::get( 'features.passwordless' ) );
+	}
+
 	public function test_temp_user_cannot_update_settings() {
 		$temp = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		update_user_meta( $temp, 'happyaccess_temp_user', 1 );

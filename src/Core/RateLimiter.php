@@ -15,9 +15,22 @@ defined( 'ABSPATH' ) || exit;
  * emails or codes. The ip_address column is a separate field: it holds the
  * client IP as is, unless the anonymize_ip privacy setting is on.
  *
- * Callers use attempt() before every verification and only verify when it
- * returns 0. On a success they call clear() for the "ip" and "account"
- * scopes, never for "site", so a valid guess can't wipe the site-wide count.
+ * It is used two ways:
+ *
+ * - As a gate. attempt() counts a try and returns the seconds to wait, and
+ *   the caller only verifies when it returns 0. Every login step runs it
+ *   on the "ip" scope before it checks anything, Support Access codes also
+ *   on the "site" scope, and email sends on the "account" scope.
+ * - As a count of wrong codes. hit() records one, count() reads how many
+ *   fell inside a window, and retry_after() says whether a lock still
+ *   runs without counting a try. Two-step login counts wrong codes per
+ *   account and per site this way, and Passwordless per site.
+ *
+ * On a success callers clear() the "ip" scope only. The "site" scope is
+ * never cleared, so a valid guess can't wipe the site-wide count. The
+ * "account" scope isn't cleared on a success either: two-step login's
+ * wrong-code count ends with its window, when it turns into a pause, or
+ * with a password reset, and send limits run out with their window.
  */
 final class RateLimiter {
 

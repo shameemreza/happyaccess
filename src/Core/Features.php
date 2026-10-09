@@ -36,18 +36,20 @@ final class Features {
 	}
 
 	/**
-	 * Turns a feature on or off.
+	 * Turns a feature on or off on this site.
 	 *
 	 * @param string $feature Feature key.
 	 * @param bool   $enabled New state.
-	 * @return bool False for an unknown feature.
+	 * @return bool Whether the stored switch now has the new state. False for
+	 *              an unknown feature, a temp user, or a write that failed.
 	 */
 	public static function set( $feature, $enabled ) {
 		if ( ! in_array( $feature, self::ALL, true ) ) {
 			return false;
 		}
 		Settings::update( array( 'features' => array( $feature => (bool) $enabled ) ) );
-		return true;
+		$stored = true === Settings::get( 'features.' . $feature );
+		return $stored === (bool) $enabled;
 	}
 
 	/**
