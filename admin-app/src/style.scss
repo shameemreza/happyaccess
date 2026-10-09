@@ -61,9 +61,10 @@
 		flex-shrink: 0;
 		align-items: center;
 		justify-content: center;
-		width: 44px;
-		height: 44px;
-		border-radius: 12px;
+		// As tall as the title and subtitle together.
+		inline-size: 56px;
+		block-size: 56px;
+		border-radius: 14px;
 		// The logo keeps the brand green on every admin color scheme.
 		// Controls follow the scheme.
 		background: #0e8a5f;

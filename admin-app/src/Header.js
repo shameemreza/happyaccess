@@ -13,12 +13,12 @@ export default function Header( { onLocked } ) {
 		<header className="ha-header">
 			<div className="ha-logo" aria-hidden="true">
 				<svg
-					width="30"
-					height="30"
+					width="36"
+					height="36"
 					viewBox="0 0 64 64"
 					fill="none"
 					stroke="currentColor"
-					strokeWidth="4.6"
+					strokeWidth="4.2"
 					strokeLinecap="round"
 					strokeLinejoin="round"
 					focusable="false"
