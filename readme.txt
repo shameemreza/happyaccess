@@ -182,7 +182,9 @@ Yes, in Login and security. A password login for that role gets the same message
 
 Authenticator secrets are encrypted with your site's keys. New keys mean the old secrets can't be read, so app codes stop working. Two-step login stays on, and people can still log in with an email code or a backup code, then set up the app again from their profile.
 
-The same happens when the HappyAccess site key is lost. It's the `happyaccess_secret` option in the database, and a site move or a database cleanup plugin can leave it out. HappyAccess then makes a new key, and current passes and codes already sent stop working too. Copy the whole options table when you move a site.
+New keys also stop current support passes. WordPress logs the support person out, and the pass's link and code stop working. Select New link and code on a pass to send working ones. Login codes and links already emailed stop working too, so people ask for a new one.
+
+The same happens when the HappyAccess site key is lost, except WordPress doesn't log anyone out. The key is the `happyaccess_secret` option in the database, and a site move or a database cleanup plugin can leave it out. HappyAccess then makes a new key. Copy the whole options table when you move a site.
 
 = Why did I get a new device alert from a browser I always use? =
 
