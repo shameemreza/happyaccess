@@ -217,9 +217,11 @@ The QR code on the two-step setup screen is drawn by [qrcode-generator](https://
 
 ## Why I made it
 
-I'm Shameem Reza, and I've spent years helping people fix their WordPress sites. Getting into the site was always the messy part. Someone makes an admin account, sends the password in an email, and promises to delete the account later. Most people forget, and the account stays.
+I'm Shameem Reza, a Happiness Engineer at Automattic, where I help WooCommerce store owners every day. Getting into the site was always the messy part. Someone makes an admin account, sends the password in an email, and promises to delete the account later. Most people forget, and the account stays.
 
 HappyAccess started as my fix for that. You give support a link or a code instead of a password. The access ends when the time is up, and the account goes with it.
+
+HappyAccess is my personal project. It isn't made or endorsed by Automattic.
 
 ## Links
 
