@@ -307,6 +307,13 @@ class AuditLogTest extends WP_UnitTestCase {
 		}
 	}
 
+	public function test_the_masked_106_code_digits_are_redacted_as_otp() {
+		AuditLog::add( 'login', array( 'user_id' => 1, 'meta' => array( 'otp' => '12****', 'OTP' => '34****' ) ) );
+		$meta = AuditLog::query()['items'][0]['meta'];
+		$this->assertSame( '[redacted]', $meta['otp'] );
+		$this->assertSame( '[redacted]', $meta['OTP'] );
+	}
+
 	public function test_a_redacted_array_value_is_replaced_whole() {
 		AuditLog::add( 'login', array( 'user_id' => 1, 'meta' => array( 'secret' => array( 'a' => 'b' ) ) ) );
 		$this->assertSame( '[redacted]', AuditLog::query()['items'][0]['meta']['secret'] );

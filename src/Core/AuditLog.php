@@ -35,7 +35,7 @@ final class AuditLog {
 	 * whole and without regard to case. A key such as "keys", which lists
 	 * setting names, is not on the list and keeps its value.
 	 */
-	const SECRET_META_KEYS = array( 'code', 'key', 'token', 'secret' );
+	const SECRET_META_KEYS = array( 'code', 'key', 'token', 'secret', 'otp' );
 
 	/**
 	 * What a redacted value becomes.

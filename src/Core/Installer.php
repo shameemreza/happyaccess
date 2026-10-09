@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Installer {
 
-	const DB_VERSION = '1.1.0';
+	const DB_VERSION = '1.1.1';
 
 	const LOCK_OPTION = 'happyaccess_migration_lock';
 
@@ -35,6 +35,17 @@ final class Installer {
 	 * to carry. Later DB_VERSION bumps must not carry it again.
 	 */
 	const LEGACY_BELOW = '1.1.0';
+
+	/**
+	 * A site whose stored DB version is below this one may still have log
+	 * rows from 1.0.x with two digits of a code in meta.otp.
+	 */
+	const OTP_META_BELOW = '1.1.1';
+
+	/**
+	 * Log rows read at a time while meta.otp is removed.
+	 */
+	const OTP_META_BATCH = 500;
 
 	const LEGACY_CRON_HOOKS = array( 'happyaccess_cleanup_expired', 'happyaccess_cleanup_attempts' );
 
@@ -340,6 +351,11 @@ final class Installer {
 			'failed'  => false,
 			'changed' => array(),
 		);
+		// Codes hashed with a key that isn't stored could never be matched again, and their plain copies are removed after.
+		if ( version_compare( $previous, self::LEGACY_BELOW, '<' ) && ! Secrets::is_persisted() ) {
+			return 'secret_missing';
+		}
+
 		// The 1.0.x flags and options stay behind, so carrying them on a later bump would undo what the merchant changed since.
 		if ( version_compare( $previous, self::LEGACY_BELOW, '<' ) ) {
 			$result = self::hash_legacy_codes();
@@ -354,6 +370,9 @@ final class Installer {
 			if ( $options['failed'] ) {
 				$result['failed'] = true;
 			}
+		}
+		if ( version_compare( $previous, self::OTP_META_BELOW, '<' ) && self::strip_legacy_otp_meta() ) {
+			$result['failed'] = true;
 		}
 		self::backfill_blog_ids();
 
@@ -592,6 +611,39 @@ final class Installer {
 			'hashed' => $hashed,
 			'failed' => $failed,
 		);
+	}
+
+	/**
+	 * Removes meta.otp from log rows. 1.0.x kept the first two digits of a
+	 * code there, and that is still part of a secret. Reads the rows in
+	 * batches by id, so a long log doesn't load at once.
+	 *
+	 * @return bool Whether any write failed.
+	 */
+	private static function strip_legacy_otp_meta() {
+		global $wpdb;
+		$table   = self::table( 'logs' );
+		$like    = '%' . $wpdb->esc_like( '"otp"' ) . '%';
+		$last_id = 0;
+		$failed  = false;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
+			$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT id, metadata FROM {$table} WHERE id > %d AND metadata LIKE %s ORDER BY id ASC LIMIT %d", $last_id, $like, self::OTP_META_BATCH ), ARRAY_A );
+			$read = count( $rows );
+			foreach ( $rows as $row ) {
+				$last_id = (int) $row['id'];
+				$meta    = json_decode( (string) $row['metadata'], true );
+				if ( ! is_array( $meta ) || ! array_key_exists( 'otp', $meta ) ) {
+					continue;
+				}
+				unset( $meta['otp'] );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+				if ( false === $wpdb->update( $table, array( 'metadata' => empty( $meta ) ? null : wp_json_encode( $meta ) ), array( 'id' => $last_id ) ) ) {
+					$failed = true;
+				}
+			}
+		} while ( self::OTP_META_BATCH === $read );
+		return $failed;
 	}
 
 	/**
@@ -991,6 +1043,7 @@ final class Installer {
 				PRIMARY KEY  (id),
 				KEY user_purpose (user_id,purpose),
 				KEY link_hash (link_hash),
+				KEY request_key_hash (request_key_hash),
 				KEY expires_at (expires_at)
 			) {$collate};",
 		);

@@ -9,6 +9,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\Notifications;
@@ -980,6 +981,123 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertNull( $row['suspended_at'], 'The old 1.0.6 flag must not suspend the pass again.' );
 		$this->assertSame( '', $row['label'], 'The old note must not come back.' );
 		$this->assertSame( 8, Settings::get( 'security.max_attempts' ), 'Legacy options are not read again.' );
+	}
+
+	/**
+	 * A 1.0.6 log row with the masked code digits.
+	 *
+	 * @param array $meta Metadata.
+	 * @return int Row id.
+	 */
+	private function insert_legacy_log( array $meta ) {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->prefix . 'happyaccess_logs',
+			array(
+				'token_id'   => 1,
+				'event_type' => 'token_created',
+				'metadata'   => wp_json_encode( $meta ),
+			)
+		);
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Stored metadata of a log row.
+	 *
+	 * @param int $id Row id.
+	 * @return mixed
+	 */
+	private function log_meta( $id ) {
+		global $wpdb;
+		return json_decode( (string) $wpdb->get_var( $wpdb->prepare( "SELECT metadata FROM {$wpdb->prefix}happyaccess_logs WHERE id = %d", $id ) ), true );
+	}
+
+	/**
+	 * Index names on the challenges table.
+	 *
+	 * @return string[]
+	 */
+	private function challenge_indexes() {
+		global $wpdb;
+		return array_unique( wp_list_pluck( $wpdb->get_results( 'SHOW INDEX FROM ' . Installer::table( 'challenges' ) ), 'Key_name' ) );
+	}
+
+	public function test_the_106_masked_code_digits_are_removed_from_old_log_rows() {
+		$with    = $this->insert_legacy_log(
+			array(
+				'otp'  => '12****',
+				'role' => 'administrator',
+			)
+		);
+		$without = $this->insert_legacy_log( array( 'role' => 'editor' ) );
+
+		Installer::migrate();
+
+		$this->assertSame( array( 'role' => 'administrator' ), $this->log_meta( $with ) );
+		$this->assertSame( array( 'role' => 'editor' ), $this->log_meta( $without ) );
+	}
+
+	public function test_the_digits_are_removed_past_the_first_batch() {
+		$ids = array();
+		for ( $i = 0; $i <= Installer::OTP_META_BATCH; $i++ ) {
+			$ids[] = $this->insert_legacy_log( array( 'otp' => '12****' ) );
+		}
+
+		Installer::migrate();
+
+		$this->assertNull( $this->log_meta( $ids[0] ) );
+		$this->assertNull( $this->log_meta( end( $ids ) ), 'The row after the first batch is cleaned too.' );
+	}
+
+	public function test_the_challenges_table_has_an_index_on_the_request_key() {
+		Installer::migrate();
+		$this->assertContains( 'request_key_hash', $this->challenge_indexes() );
+	}
+
+	public function test_a_site_already_on_1_1_0_strips_the_digits_and_gains_the_index() {
+		global $wpdb;
+		Installer::migrate();
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+
+		// The state a site had after the 1.1.0 migration, before this one.
+		$id = $this->insert_legacy_log(
+			array(
+				'otp'      => '65****',
+				'duration' => '1 day',
+			)
+		);
+		$wpdb->query( 'ALTER TABLE ' . Installer::table( 'challenges' ) . ' DROP INDEX request_key_hash' );
+		update_option( 'happyaccess_db_version', '1.1.0' );
+		$this->assertNotContains( 'request_key_hash', $this->challenge_indexes() );
+
+		Installer::maybe_upgrade();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( array( 'duration' => '1 day' ), $this->log_meta( $id ) );
+		$this->assertContains( 'request_key_hash', $this->challenge_indexes() );
+		$summaries = wp_list_pluck( AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['items'], 'summary' );
+		$this->assertContains( 'Upgraded from 1.1.0 to ' . Installer::DB_VERSION, $summaries );
+	}
+
+	public function test_legacy_codes_are_not_hashed_with_a_site_key_that_is_not_stored() {
+		add_filter( 'pre_option_' . Secrets::OPTION, '__return_empty_string' );
+		Secrets::reset_cache();
+
+		Installer::migrate();
+
+		remove_filter( 'pre_option_' . Secrets::OPTION, '__return_empty_string' );
+		Secrets::reset_cache();
+		$this->assertSame( 'secret_missing', get_transient( Installer::FAILED_TRANSIENT ) );
+		$this->assertSame( '1.0.4', get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( '123456', $this->token( 'a' )['otp_code'], 'The plain code stays until a stored key can hash it.' );
+		$this->assertTrue( Installer::table_exists( 'magic_links' ) );
+
+		delete_transient( Installer::FAILED_TRANSIENT );
+		Installer::migrate();
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertNull( $this->token( 'a' )['otp_code'] );
+		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'], Codes::PURPOSE_SUPPORT ) );
 	}
 
 	public function test_the_upgrade_from_1_0_x_notes_the_install_time() {
