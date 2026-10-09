@@ -59,6 +59,17 @@ final class Installer {
 	 */
 	const OTP_META_BATCH = 500;
 
+	/**
+	 * Set while old log rows still hold 1.0.6 code digits after a failed
+	 * cleanup. The cleanup retries on its own, so it never holds logins.
+	 */
+	const OTP_STRIP_OPTION = 'happyaccess_otp_strip_pending';
+
+	/**
+	 * Transient that spaces out the cleanup retries.
+	 */
+	const OTP_STRIP_WAIT = 'happyaccess_otp_strip_wait';
+
 	const LEGACY_CRON_HOOKS = array( 'happyaccess_cleanup_expired', 'happyaccess_cleanup_attempts' );
 
 	const NETWORK_HOOK = 'happyaccess_network_upgrade';
@@ -69,6 +80,19 @@ final class Installer {
 	const NETWORK_OPTION = 'happyaccess_network_db_version';
 
 	const NETWORK_BATCH = 20;
+
+	/**
+	 * Sites the network loop looks at in one run.
+	 */
+	const NETWORK_PAGE = 50;
+
+	/**
+	 * Network option with the loop's place in the current pass: the DB
+	 * version it works toward, the last site id handled, whether a site was
+	 * left behind or moved forward in this pass, and how many passes in a
+	 * row moved no site.
+	 */
+	const NETWORK_STATE_OPTION = 'happyaccess_network_upgrade_state';
 
 	/**
 	 * Columns 1.1.0 needs that 1.0.6 didn't have, by short table name. A table
@@ -170,7 +194,34 @@ final class Installer {
 		}
 		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
 			self::migrate();
+			return;
 		}
+		self::maybe_retry_otp_strip();
+	}
+
+	/**
+	 * Retries the cleanup of 1.0.6 code digits in old log rows after a run
+	 * that failed, at most once every 15 minutes.
+	 *
+	 * @return void
+	 */
+	private static function maybe_retry_otp_strip() {
+		if ( ! get_option( self::OTP_STRIP_OPTION ) ) {
+			return;
+		}
+		// Transient and option calls run inside the bypass, like the migration's own.
+		Internal::run(
+			static function () {
+				if ( false !== get_transient( self::OTP_STRIP_WAIT ) ) {
+					return;
+				}
+				if ( self::strip_legacy_otp_meta() ) {
+					set_transient( self::OTP_STRIP_WAIT, 1, 15 * MINUTE_IN_SECONDS );
+					return;
+				}
+				delete_option( self::OTP_STRIP_OPTION );
+			}
+		);
 	}
 
 	/**
@@ -241,9 +292,15 @@ final class Installer {
 	}
 
 	/**
-	 * The network upgrade event. Migrates up to NETWORK_BATCH sites that are
-	 * behind, then schedules itself again while any site is still behind. A
-	 * run that moved no site forward waits out the failure backoff first.
+	 * The network upgrade event. Looks at the next NETWORK_PAGE live sites
+	 * after the last one handled and migrates up to NETWORK_BATCH that are
+	 * behind, then schedules itself again. Archived, spam and deleted sites
+	 * are left out; each migrates on its own if it comes back.
+	 *
+	 * A pass ends when no site is left after the cursor. With every site
+	 * current, the network is marked done. Otherwise a new pass starts after
+	 * the failure backoff, and each pass in a row that moved no site waits
+	 * twice as long as the last one, up to a day.
 	 *
 	 * @return void
 	 */
@@ -252,43 +309,109 @@ final class Installer {
 			return;
 		}
 
+		$state    = self::network_state();
+		$site_ids = self::network_page( $state['cursor'] );
 		$migrated = 0;
-		$moved    = 0;
-		$behind   = 0;
-		foreach ( get_sites(
-			array(
-				'fields' => 'ids',
-				'number' => 0,
-			)
-		) as $site_id ) {
-			switch_to_blog( (int) $site_id );
+		$stopped  = false;
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( $site_id );
 			try {
 				if ( self::DB_VERSION !== get_option( 'happyaccess_db_version' ) ) {
 					if ( self::migration_failed() ) {
 						// Backing off. It stays behind, and it doesn't take a slot from a site that can move.
-						++$behind;
-						continue;
-					}
-					if ( $migrated < self::NETWORK_BATCH ) {
+						$state['behind'] = true;
+					} elseif ( $migrated >= self::NETWORK_BATCH ) {
+						$stopped = true;
+					} else {
 						++$migrated;
 						self::maybe_upgrade();
-					}
-					if ( self::DB_VERSION === get_option( 'happyaccess_db_version' ) ) {
-						++$moved;
-					} else {
-						++$behind;
+						if ( self::DB_VERSION === get_option( 'happyaccess_db_version' ) ) {
+							$state['moved'] = true;
+						} else {
+							$state['behind'] = true;
+						}
 					}
 				}
 			} finally {
 				restore_current_blog();
 			}
+			if ( $stopped ) {
+				break;
+			}
+			$state['cursor'] = $site_id;
 		}
 
-		if ( $behind > 0 ) {
-			wp_schedule_single_event( time() + ( $moved > 0 ? 0 : 15 * MINUTE_IN_SECONDS ), self::NETWORK_HOOK );
+		if ( $stopped || self::NETWORK_PAGE === count( $site_ids ) ) {
+			update_site_option( self::NETWORK_STATE_OPTION, $state );
+			wp_schedule_single_event( time(), self::NETWORK_HOOK );
 			return;
 		}
+
+		if ( $state['behind'] ) {
+			$idle = $state['moved'] ? 0 : $state['idle'] + 1;
+			$wait = min( DAY_IN_SECONDS, 15 * MINUTE_IN_SECONDS * ( 2 ** max( 0, $idle - 1 ) ) );
+			update_site_option( self::NETWORK_STATE_OPTION, self::new_network_pass( $idle ) );
+			wp_schedule_single_event( time() + $wait, self::NETWORK_HOOK );
+			return;
+		}
+		delete_site_option( self::NETWORK_STATE_OPTION );
 		update_site_option( self::NETWORK_OPTION, self::DB_VERSION );
+	}
+
+	/**
+	 * The loop's place in the current pass. A pass left from another DB
+	 * version, or a malformed one, starts over.
+	 *
+	 * @return array{version:string,cursor:int,behind:bool,moved:bool,idle:int}
+	 */
+	private static function network_state() {
+		$state = get_site_option( self::NETWORK_STATE_OPTION );
+		if ( ! is_array( $state ) || ! isset( $state['version'] ) || self::DB_VERSION !== $state['version'] ) {
+			return self::new_network_pass( 0 );
+		}
+		return array(
+			'version' => self::DB_VERSION,
+			'cursor'  => isset( $state['cursor'] ) ? max( 0, (int) $state['cursor'] ) : 0,
+			'behind'  => ! empty( $state['behind'] ),
+			'moved'   => ! empty( $state['moved'] ),
+			'idle'    => isset( $state['idle'] ) ? max( 0, (int) $state['idle'] ) : 0,
+		);
+	}
+
+	/**
+	 * A fresh pass from the first site.
+	 *
+	 * @param int $idle Passes in a row that moved no site.
+	 * @return array
+	 */
+	private static function new_network_pass( $idle ) {
+		return array(
+			'version' => self::DB_VERSION,
+			'cursor'  => 0,
+			'behind'  => false,
+			'moved'   => false,
+			'idle'    => (int) $idle,
+		);
+	}
+
+	/**
+	 * Ids of the next live sites of this network after a site id, lowest first.
+	 *
+	 * @param int $after Last site id handled.
+	 * @return int[]
+	 */
+	private static function network_page( $after ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- get_sites() has no "id greater than" argument, and a cursor read must not be cached.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT blog_id FROM {$wpdb->blogs} WHERE site_id = %d AND blog_id > %d AND archived = 0 AND spam = 0 AND deleted = 0 ORDER BY blog_id ASC LIMIT %d",
+				get_current_network_id(),
+				(int) $after,
+				self::NETWORK_PAGE
+			)
+		);
+		return array_map( 'intval', (array) $ids );
 	}
 
 	/**
@@ -394,8 +517,10 @@ final class Installer {
 				$result['failed'] = true;
 			}
 		}
+		// The digits are masked and their codes are hashed by now, so a failed cleanup retries later instead of holding logins.
 		if ( version_compare( $previous, self::OTP_META_BELOW, '<' ) && self::strip_legacy_otp_meta() ) {
-			$result['failed'] = true;
+			update_option( self::OTP_STRIP_OPTION, 1, false );
+			set_transient( self::OTP_STRIP_WAIT, 1, 15 * MINUTE_IN_SECONDS );
 		}
 		self::backfill_blog_ids();
 
@@ -569,6 +694,8 @@ final class Installer {
 			switch_to_blog( get_main_site_id() );
 			try {
 				self::migrate();
+				// A pass left from an earlier activation could skip sites made since.
+				delete_site_option( self::NETWORK_STATE_OPTION );
 				// Core marks the plugin network active only after this hook, so maybe_schedule_network_upgrade() would skip it here.
 				if ( ! wp_next_scheduled( self::NETWORK_HOOK ) ) {
 					wp_schedule_single_event( time(), self::NETWORK_HOOK );

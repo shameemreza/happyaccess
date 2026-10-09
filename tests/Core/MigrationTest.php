@@ -1050,6 +1050,32 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertNull( $this->log_meta( end( $ids ) ), 'The row after the first batch is cleaned too.' );
 	}
 
+	public function test_a_failed_digit_cleanup_does_not_hold_the_upgrade_and_retries_later() {
+		$id     = $this->insert_legacy_log(
+			array(
+				'otp'  => '12****',
+				'role' => 'administrator',
+			)
+		);
+		$filter = $this->break_statements( 'UPDATE', 'happyaccess_logs' );
+
+		Installer::migrate();
+
+		remove_filter( 'query', $filter );
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ), 'Logins work while the cleanup waits.' );
+		$this->assertSame( 0, Installer::failed_runs() );
+		$this->assertSame( '12****', $this->log_meta( $id )['otp'] );
+		$this->assertNotEmpty( get_option( Installer::OTP_STRIP_OPTION ) );
+
+		Installer::maybe_upgrade();
+		$this->assertSame( '12****', $this->log_meta( $id )['otp'], 'The retry waits out its backoff.' );
+
+		delete_transient( Installer::OTP_STRIP_WAIT );
+		Installer::maybe_upgrade();
+		$this->assertSame( array( 'role' => 'administrator' ), $this->log_meta( $id ) );
+		$this->assertFalse( get_option( Installer::OTP_STRIP_OPTION ) );
+	}
+
 	public function test_the_challenges_table_has_an_index_on_the_request_key() {
 		Installer::migrate();
 		$this->assertContains( 'request_key_hash', $this->challenge_indexes() );

@@ -24,6 +24,7 @@ class MultisiteBootTest extends WP_UnitTestCase {
 		Installer::install();
 		update_option( 'happyaccess_db_version', Installer::DB_VERSION );
 		delete_site_option( Installer::NETWORK_OPTION );
+		delete_site_option( Installer::NETWORK_STATE_OPTION );
 		wp_clear_scheduled_hook( Installer::NETWORK_HOOK );
 	}
 
@@ -208,6 +209,100 @@ class MultisiteBootTest extends WP_UnitTestCase {
 		$this->assertSame( 0, $this->migrated( $failed ) );
 		$this->assertSame( 20, $this->migrated( $healthy ) );
 		$this->assertNotSame( Installer::DB_VERSION, get_site_option( Installer::NETWORK_OPTION ) );
+	}
+
+	/**
+	 * Site ids switch_to_blog() visited.
+	 *
+	 * @var int[]
+	 */
+	private $visited = array();
+
+	/**
+	 * Notes each switch_to_blog() call.
+	 *
+	 * @param int $site_id Site switched to.
+	 * @return void
+	 */
+	public function note_switch( $site_id ) {
+		$this->visited[] = (int) $site_id;
+	}
+
+	public function test_a_run_visits_one_page_of_sites_and_picks_up_where_it_stopped() {
+		$site_ids = self::factory()->blog->create_many( Installer::NETWORK_PAGE + 10 );
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( $site_id );
+			Installer::install();
+			update_option( 'happyaccess_db_version', Installer::DB_VERSION );
+			restore_current_blog();
+		}
+		$this->activate_network_wide();
+		$this->visited = array();
+		add_action( 'switch_blog', array( $this, 'note_switch' ), 10, 1 );
+
+		Installer::network_upgrade();
+		$first         = array_unique( $this->visited );
+		$this->visited = array();
+		$this->run_network_event();
+		$second = array_unique( $this->visited );
+
+		remove_action( 'switch_blog', array( $this, 'note_switch' ), 10 );
+		$this->assertLessThanOrEqual( Installer::NETWORK_PAGE + 1, count( $first ), 'One page per run, plus the switch back.' );
+		$this->assertSame( array(), array_intersect( array_diff( $first, array( get_main_site_id() ) ), array_diff( $second, array( get_main_site_id() ) ) ), 'The second run starts after the first.' );
+		$this->assertSame( Installer::DB_VERSION, get_site_option( Installer::NETWORK_OPTION ), 'The whole network is current after two runs.' );
+		$this->assertFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+	}
+
+	public function test_archived_spam_and_deleted_sites_are_skipped() {
+		$live    = self::factory()->blog->create();
+		$skipped = self::factory()->blog->create_many( 3 );
+		update_blog_status( $skipped[0], 'archived', 1 );
+		update_blog_status( $skipped[1], 'spam', 1 );
+		update_blog_status( $skipped[2], 'deleted', 1 );
+		$this->activate_network_wide();
+
+		Installer::network_upgrade();
+
+		$this->assertSame( 1, $this->migrated( array( $live ) ) );
+		$this->assertSame( 0, $this->migrated( $skipped ) );
+		$this->assertSame( Installer::DB_VERSION, get_site_option( Installer::NETWORK_OPTION ), 'A site that is not live does not keep the loop going.' );
+		$this->assertFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+	}
+
+	public function test_a_site_that_keeps_failing_spaces_out_the_passes() {
+		$site_id = self::factory()->blog->create();
+		$this->mark_failed( $site_id );
+		$this->activate_network_wide();
+
+		Installer::network_upgrade();
+		$first = wp_next_scheduled( Installer::NETWORK_HOOK );
+		$this->assertNotFalse( $first );
+		$this->assertGreaterThanOrEqual( time() + 15 * MINUTE_IN_SECONDS - 5, $first );
+
+		wp_clear_scheduled_hook( Installer::NETWORK_HOOK );
+		Installer::network_upgrade();
+		$second = wp_next_scheduled( Installer::NETWORK_HOOK );
+		$this->assertGreaterThanOrEqual( time() + 30 * MINUTE_IN_SECONDS - 5, $second, 'A pass that moved no site waits twice as long.' );
+		$this->assertSame( 0, $this->migrated( array( $site_id ) ) );
+	}
+
+	public function test_a_pass_left_from_an_older_version_starts_over() {
+		$site_ids = self::factory()->blog->create_many( 2 );
+		$this->activate_network_wide();
+		update_site_option(
+			Installer::NETWORK_STATE_OPTION,
+			array(
+				'version' => '0.0.1',
+				'cursor'  => max( $site_ids ),
+				'behind'  => false,
+				'moved'   => false,
+				'idle'    => 0,
+			)
+		);
+
+		Installer::network_upgrade();
+
+		$this->assertSame( 2, $this->migrated( $site_ids ) );
 	}
 
 	public function test_the_loop_is_scheduled_even_when_this_site_is_backing_off() {
