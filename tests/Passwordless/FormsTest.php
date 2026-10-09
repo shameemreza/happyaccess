@@ -7,12 +7,15 @@
 
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\Feature;
 use HappyAccess\Features\Passwordless\Forms;
 use HappyAccess\Login\Router;
 
 class PasswordlessFormsTest extends WP_UnitTestCase {
+
+	use HappyAccess_Test_Recaptcha;
 
 	public function set_up() {
 		parent::set_up();
@@ -82,6 +85,23 @@ class PasswordlessFormsTest extends WP_UnitTestCase {
 		$this->assertSame( array(), $script->deps, 'No jQuery or other dependency.' );
 		$inline = implode( "\n", (array) wp_scripts()->get_data( 'happyaccess-login', 'before' ) );
 		$this->assertStringContainsString( wp_json_encode( rest_url( 'happyaccess/v1/passwordless/' ) ), $inline );
+	}
+
+	public function test_the_recaptcha_settings_and_script_load_only_while_it_is_on() {
+		$this->boot();
+		Forms::render( array( 'context' => 'shortcode' ) );
+		$inline = implode( "\n", array_filter( (array) wp_scripts()->get_data( 'happyaccess-login', 'before' ), 'is_string' ) );
+		$this->assertStringNotContainsString( 'happyaccessRecaptcha', $inline );
+		$this->assertFalse( wp_script_is( Recaptcha::HANDLE, 'registered' ) );
+
+		$this->reset_assets();
+		$this->turn_on_recaptcha();
+		Forms::render( array( 'context' => 'shortcode' ) );
+		$inline = implode( "\n", array_filter( (array) wp_scripts()->get_data( 'happyaccess-login', 'before' ), 'is_string' ) );
+		$this->assertStringContainsString( 'var happyaccessRecaptcha = {"key":"test-site-key","field":"happyaccess_recaptcha"};', $inline );
+		$this->assertTrue( wp_script_is( Recaptcha::HANDLE, 'enqueued' ) );
+		$this->assertSame( array(), wp_scripts()->registered['happyaccess-login']->deps, 'login.js still loads on its own.' );
+		$this->assertSame( array(), array_filter( (array) wp_scripts()->get_data( Recaptcha::HANDLE, 'after' ), 'is_string' ), 'The inline forms send the token themselves.' );
 	}
 
 	public function test_two_forms_add_the_settings_once_and_get_their_own_ids() {

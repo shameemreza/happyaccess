@@ -13,15 +13,40 @@
 		return;
 	}
 
+	// While reCAPTCHA is on, each request carries a token made for its
+	// step. Without Google's script the request goes without one, and the
+	// server answers with its reload message.
+	function token( path ) {
+		var captcha = window.happyaccessRecaptcha;
+		var google = window.grecaptcha;
+		if ( ! captcha || ! google ) {
+			return Promise.resolve( '' );
+		}
+		return new Promise( function ( resolve ) {
+			google.ready( function () {
+				google
+					.execute( captcha.key, { action: 'pl_' + path } )
+					.then( resolve, function () {
+						resolve( '' );
+					} );
+			} );
+		} );
+	}
+
 	function post( path, data ) {
 		var headers = { 'Content-Type': 'application/json' };
 		headers[ config.header ] = '1';
-		return window
-			.fetch( config.url + path, {
-				method: 'POST',
-				credentials: 'same-origin',
-				headers: headers,
-				body: JSON.stringify( data ),
+		return token( path )
+			.then( function ( value ) {
+				if ( value ) {
+					data[ window.happyaccessRecaptcha.field ] = value;
+				}
+				return window.fetch( config.url + path, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: headers,
+					body: JSON.stringify( data ),
+				} );
 			} )
 			.then( function ( response ) {
 				return response

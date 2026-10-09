@@ -78,6 +78,8 @@ final class EventLabels {
 			'admin_account_changed'      => __( 'Administrator login details changed', 'happyaccess' ),
 			'admin_role_granted'         => __( 'Role given admin-level permissions', 'happyaccess' ),
 			'plugin_upgraded'            => __( 'HappyAccess updated', 'happyaccess' ),
+			'captcha_unavailable'        => __( "Security check couldn't reach Google", 'happyaccess' ),
+			'captcha_failed'             => __( "Security check didn't pass", 'happyaccess' ),
 			'passwordless_requested'     => __( 'Login code requested', 'happyaccess' ),
 			'passwordless_login'         => __( 'Logged in without a password', 'happyaccess' ),
 			'passwordless_failed'        => __( 'Passwordless login failed', 'happyaccess' ),

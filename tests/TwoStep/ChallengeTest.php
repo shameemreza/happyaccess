@@ -38,6 +38,8 @@ class HappyAccess_Test_TwoStep_Redirect extends Error {
 
 class ChallengeTest extends WP_UnitTestCase {
 
+	use HappyAccess_Test_Recaptcha;
+
 	const PASSWORD = 'correct horse battery';
 
 	/**
@@ -428,6 +430,67 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( 'redirect', $again['type'] );
 		$this->assertSame( 'expired', $this->query( $again['url'] )['happyaccess_ts'] );
 		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_the_code_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$made   = $this->app_user();
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+
+		$res = $this->post_code( $cookie, $this->app_code( $made['secret'] ) );
+
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 'The security check didn&#039;t pass. Reload the page and try again.', $res['errors']->get_error_message() );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( 0, (int) $this->pending_rows()[0]['attempts'], 'The pending login counts only checks that passed reCAPTCHA.' );
+		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ) );
+
+		$res = $this->post_code( $cookie, $this->app_code( $made['secret'] ), 'app', $this->captcha_field( 'twostep' ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_sending_an_email_code_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$made = $this->app_user();
+		UserState::enable_email( $made['user']->ID );
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		EmailMethod::flush_queue();
+		$send = array(
+			'method'   => 'email',
+			'send'     => '1',
+			'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
+		);
+
+		$res = Challenge::handle( 'POST', array(), $send, array( Challenge::COOKIE => $cookie ) );
+		EmailMethod::flush_queue();
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( array(), $this->mails );
+
+		$res = Challenge::handle( 'POST', array(), $send + $this->captcha_field( 'twostep' ), array( Challenge::COOKIE => $cookie ) );
+		EmailMethod::flush_queue();
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertCount( 1, $this->mails );
+	}
+
+	public function test_the_code_step_skips_the_check_while_recaptcha_is_off() {
+		$this->watch_recaptcha();
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+
+		$this->assertSame( 'redirect', $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) )['type'] );
+		$this->assertSame( 0, $this->captcha_calls );
+	}
+
+	public function test_the_code_screen_names_its_recaptcha_action() {
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+		$screen = Challenge::handle( 'GET', array(), array(), array( Challenge::COOKIE => $this->pending_cookie() ) );
+		$this->assertSame( 'twostep', $screen['captcha'] );
+		$this->assertArrayNotHasKey( 'captcha', Challenge::unavailable() );
 	}
 
 	public function test_a_replayed_app_code_is_refused() {

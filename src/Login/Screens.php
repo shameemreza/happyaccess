@@ -7,6 +7,8 @@
 
 namespace HappyAccess\Login;
 
+use HappyAccess\Core\Recaptcha;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -34,7 +36,7 @@ final class Screens {
 	/**
 	 * Sends a handler response: redirects or renders, then stops.
 	 *
-	 * @param array $response Either type redirect with url, or type render with title, body, errors and message.
+	 * @param array $response Either type redirect with url, or type render with title, body, errors, message and, for a screen with a form, captcha.
 	 * @return void
 	 */
 	public static function respond( array $response ) {
@@ -45,6 +47,7 @@ final class Screens {
 			exit;
 		}
 
+		self::prepare( $response );
 		self::render(
 			isset( $response['title'] ) ? (string) $response['title'] : '',
 			isset( $response['body'] ) ? (string) $response['body'] : '',
@@ -52,5 +55,18 @@ final class Screens {
 			isset( $response['message'] ) ? (string) $response['message'] : ''
 		);
 		exit;
+	}
+
+	/**
+	 * Loads what a rendered screen needs before the page prints: the
+	 * reCAPTCHA script, for a screen with a form, named by its action.
+	 *
+	 * @param array $response Handler response.
+	 * @return void
+	 */
+	public static function prepare( array $response ) {
+		if ( isset( $response['type'], $response['captcha'] ) && 'render' === $response['type'] && is_string( $response['captcha'] ) ) {
+			Recaptcha::enqueue( $response['captcha'] );
+		}
 	}
 }

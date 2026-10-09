@@ -37,6 +37,8 @@ class HappyAccess_Test_TwoStep_Setup_Redirect extends Error {
 
 class SetupStepsTest extends WP_UnitTestCase {
 
+	use HappyAccess_Test_Recaptcha;
+
 	const PASSWORD = 'correct horse battery';
 
 	/**
@@ -344,6 +346,49 @@ class SetupStepsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Authenticator app', $screen['body'] );
 		$this->assertStringContainsString( 'Use email codes instead', $screen['body'] );
 		$this->assertStringContainsString( 'You can skip this 2 more times.', $screen['message'] );
+	}
+
+	public function test_the_setup_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$user   = $this->admin();
+		$cookie = $this->start_setup( $user );
+		$screen = $this->screen( $cookie );
+		$secret = $this->shown_secret( $screen['body'] );
+		$code   = Totp::code( $secret, Totp::step_for( Clock::now() ) );
+
+		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertFalse( UserState::app_enabled( $user->ID ) );
+
+		$res = $this->post( $cookie, 'later' );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, $this->wp_login_count );
+
+		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) + $this->captcha_field( 'twostep_setup' ) );
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertTrue( UserState::app_enabled( $user->ID ) );
+
+		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, $this->wp_login_count );
+
+		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) + $this->captcha_field( 'twostep_setup' ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_the_setup_step_skips_the_check_while_recaptcha_is_off() {
+		$this->watch_recaptcha();
+		$cookie = $this->start_setup( $this->admin() );
+
+		$this->assertSame( 'redirect', $this->post( $cookie, 'later' )['type'] );
+		$this->assertSame( 0, $this->captcha_calls );
+	}
+
+	public function test_the_setup_screens_name_their_recaptcha_action() {
+		$cookie = $this->start_setup( $this->admin() );
+		$this->assertSame( 'twostep_setup', $this->screen( $cookie )['captcha'] );
+		$this->assertSame( 'twostep_setup', $this->screen( $cookie, array( 'method' => 'email' ) )['captcha'] );
 	}
 
 	public function test_logins_one_to_three_offer_later_and_login_four_does_not() {

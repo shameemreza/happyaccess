@@ -12,6 +12,7 @@ use HappyAccess\Core\ClientIp;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\RateLimiter;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Router;
 use HappyAccess\Login\Screens;
@@ -120,8 +121,9 @@ final class LoginSteps {
 			return self::code_screen( self::code_error() );
 		}
 
-		if ( Settings::get( 'security.recaptcha_enabled', false ) && ! apply_filters( 'happyaccess_verify_captcha', true, 'code' ) ) {
-			return self::code_screen( self::code_error() );
+		$captcha = Recaptcha::check( self::text( $post, Recaptcha::FIELD ), 'code' );
+		if ( is_wp_error( $captcha ) ) {
+			return self::code_screen( self::captcha_error( $captcha ) );
 		}
 
 		$wait = RateLimiter::attempt(
@@ -184,6 +186,13 @@ final class LoginSteps {
 				return self::link_error();
 			}
 			return self::link_confirm( $stale, $key, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Select Log in again.', 'happyaccess' ) ) );
+		}
+
+		$captcha = Recaptcha::check( self::text( $post, Recaptcha::FIELD ), 'link' );
+		if ( is_wp_error( $captcha ) ) {
+			$key   = self::text( $post, 'k' );
+			$grant = self::grant_for_link( $key );
+			return null === $grant ? self::link_error() : self::link_confirm( $grant, $key, self::captcha_error( $captcha ) );
 		}
 
 		$wait = RateLimiter::attempt(
@@ -421,6 +430,16 @@ final class LoginSteps {
 	}
 
 	/**
+	 * The reCAPTCHA error made safe for the login screen.
+	 *
+	 * @param \WP_Error $error Error with a plain text message.
+	 * @return \WP_Error
+	 */
+	private static function captcha_error( \WP_Error $error ) {
+		return new \WP_Error( $error->get_error_code(), esc_html( $error->get_error_message() ) );
+	}
+
+	/**
 	 * Lock notice with minutes rounded up.
 	 *
 	 * @param int $wait Seconds.
@@ -469,6 +488,7 @@ final class LoginSteps {
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => '',
+			'captcha' => 'code',
 		);
 	}
 
@@ -501,6 +521,7 @@ final class LoginSteps {
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => '',
+			'captcha' => 'link',
 		);
 	}
 

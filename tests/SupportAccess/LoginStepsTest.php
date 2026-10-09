@@ -9,11 +9,14 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\RateLimiter;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\LoginSteps;
 
 class LoginStepsTest extends WP_UnitTestCase {
+
+	use HappyAccess_Test_Recaptcha;
 
 	public function set_up() {
 		parent::set_up();
@@ -26,12 +29,29 @@ class LoginStepsTest extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 	}
 
-	private function post_code( $code ) {
+	private function post_code( $code, array $extra = array() ) {
 		return LoginSteps::handle_code(
 			'POST',
-			array(
-				'pwd'      => $code,
-				'_wpnonce' => wp_create_nonce( 'happyaccess_code' ),
+			array_merge(
+				array(
+					'pwd'      => $code,
+					'_wpnonce' => wp_create_nonce( 'happyaccess_code' ),
+				),
+				$extra
+			)
+		);
+	}
+
+	private function post_link( $key, array $extra = array() ) {
+		return LoginSteps::handle_link(
+			'POST',
+			array(),
+			array_merge(
+				array(
+					'k'        => $key,
+					'_wpnonce' => wp_create_nonce( 'happyaccess_link' ),
+				),
+				$extra
 			)
 		);
 	}
@@ -314,13 +334,90 @@ class LoginStepsTest extends WP_UnitTestCase {
 	}
 
 	public function test_captcha_filter_can_reject_when_enabled() {
-		Settings::update( array( 'security' => array( 'recaptcha_enabled' => true ) ) );
+		$this->turn_on_recaptcha();
 		add_filter( 'happyaccess_verify_captcha', '__return_false' );
 		$made = Grants::create( array( 'label' => 'Acme' ) );
-		$res  = $this->post_code( $made['code'] );
+		$res  = $this->post_code( $made['code'], $this->captcha_field( 'code' ) );
 		remove_filter( 'happyaccess_verify_captcha', '__return_false' );
-		$this->assertSame( array( 'invalid_code' ), $res['errors']->get_error_codes() );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
 		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
+	}
+
+	public function test_the_code_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+
+		$res = $this->post_code( $made['code'] );
+
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 'The security check didn&#039;t pass. Reload the page and try again.', $res['errors']->get_error_message() );
+		$this->assertStringContainsString( 'name="pwd"', $res['body'], 'The form shows again for the next try.' );
+		$this->assertSame( 0, get_current_user_id() );
+		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
+		$this->assertSame( 0, RateLimiter::count( LoginSteps::CODE_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ), 'The rate limit counts only tries that passed the check.' );
+		$this->assertSame( 0, $this->captcha_calls, 'No token, no request to Google.' );
+	}
+
+	public function test_the_code_step_logs_in_with_a_passing_token() {
+		$this->turn_on_recaptcha();
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+
+		$this->assertSame( array( 'happyaccess_captcha' ), $this->post_code( $made['code'], $this->captcha_field( 'link' ) )['errors']->get_error_codes(), 'A token made on the link screen does not work here.' );
+		$res = $this->post_code( $made['code'], $this->captcha_field( 'code' ) );
+
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, Grants::get( $made['id'] )['login_count'] );
+		$this->assertSame( 2, $this->captcha_calls );
+	}
+
+	public function test_the_code_step_skips_the_check_while_recaptcha_is_off() {
+		$this->watch_recaptcha();
+		// Switched on but missing its keys counts as off, as Recaptcha::enabled() says.
+		Settings::update( array( 'security' => array( 'recaptcha_enabled' => true ) ) );
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+
+		$res = $this->post_code( $made['code'] );
+
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 0, $this->captcha_calls );
+	}
+
+	public function test_the_link_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+
+		$res = $this->post_link( $made['link_key'] );
+
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertStringContainsString( 'name="k"', $res['body'], 'The confirm form shows again for the next try.' );
+		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
+		$this->assertSame( 0, RateLimiter::count( LoginSteps::LINK_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ) );
+
+		$this->assertSame( 'redirect', $this->post_link( $made['link_key'], $this->captcha_field( 'link' ) )['type'] );
+		$this->assertSame( 1, Grants::get( $made['id'] )['login_count'] );
+	}
+
+	public function test_the_link_step_skips_the_check_while_recaptcha_is_off() {
+		$this->watch_recaptcha();
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+
+		$this->assertSame( 'redirect', $this->post_link( $made['link_key'] )['type'] );
+		$this->assertSame( 0, $this->captcha_calls );
+	}
+
+	public function test_the_screens_with_a_form_name_their_recaptcha_action() {
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		$this->assertSame( 'code', LoginSteps::handle_code( 'GET', array() )['captcha'] );
+		$this->assertSame( 'link', LoginSteps::handle_link( 'GET', array( 'k' => $made['link_key'] ), array() )['captcha'] );
+		$this->assertArrayNotHasKey( 'captcha', LoginSteps::handle_link( 'GET', array( 'k' => 'nope' ), array() ), 'An error with no form loads nothing.' );
+		$this->assertArrayNotHasKey( 'captcha', LoginSteps::handle_ended( array() ) );
 	}
 
 	public function test_site_cap_locks_all_ips_and_alerts_once() {

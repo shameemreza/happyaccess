@@ -12,6 +12,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Internal;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\AdminBar;
 use HappyAccess\Features\SupportAccess\Catalog;
@@ -27,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SettingsController {
 
-	const SECRET_OPTION = 'happyaccess_recaptcha_secret_key';
+	const SECRET_OPTION = Recaptcha::SECRET_OPTION;
 
 	/**
 	 * Setting groups a request may change.

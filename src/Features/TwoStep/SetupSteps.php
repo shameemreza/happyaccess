@@ -129,6 +129,10 @@ final class SetupSteps {
 		if ( ! self::nonce_ok( $post ) ) {
 			return self::screen( $user, $pending, $hash, $state, $carry, self::expired_page() );
 		}
+		$captcha = Challenge::check_captcha( $post, self::STEP );
+		if ( is_wp_error( $captcha ) ) {
+			return self::screen( $user, $pending, $hash, $state, $carry, $captcha );
+		}
 
 		$action = self::text( $post, self::FIELD );
 		if ( 'later' === $action ) {
@@ -193,6 +197,10 @@ final class SetupSteps {
 		}
 		if ( ! self::nonce_ok( $post ) ) {
 			return self::done_screen( $user, $carry, self::expired_page() );
+		}
+		$captcha = Challenge::check_captcha( $post, self::STEP );
+		if ( is_wp_error( $captcha ) ) {
+			return self::done_screen( $user, $carry, $captcha );
 		}
 		self::drop_state( $hash );
 		return Challenge::finish( $user, $pending, $carry );
@@ -413,6 +421,7 @@ final class SetupSteps {
 			'errors'  => $errors,
 			'message' => $message,
 			'assets'  => array( 'qr' => $qr ),
+			'captcha' => self::STEP,
 		);
 	}
 
@@ -594,6 +603,7 @@ final class SetupSteps {
 			'errors'  => null,
 			'message' => '<p class="message">' . esc_html__( 'Two-step login is on.', 'happyaccess' ) . '</p>',
 			'assets'  => array( 'qr' => false ),
+			'captcha' => self::STEP,
 		);
 	}
 
@@ -665,6 +675,7 @@ final class SetupSteps {
 			'errors'  => $errors,
 			'message' => '<p class="message">' . esc_html__( 'Two-step login is on.', 'happyaccess' ) . '</p>',
 			'assets'  => array( 'qr' => false ),
+			'captcha' => self::STEP,
 		);
 	}
 

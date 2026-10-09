@@ -9,12 +9,15 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\RateLimiter;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\LoginSteps;
 use HappyAccess\Features\Passwordless\Requests;
 use HappyAccess\Login\Router;
 
 class PasswordlessLoginStepsTest extends WP_UnitTestCase {
+
+	use HappyAccess_Test_Recaptcha;
 
 	/**
 	 * Mails caught before they are sent.
@@ -171,15 +174,19 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 	 *
 	 * @param string     $key     Link key.
 	 * @param array|null $confirm cookie and field, or null to open the page first.
+	 * @param array      $extra   Extra POST fields.
 	 * @return array
 	 */
-	private function post_link( $key, $confirm = null ) {
+	private function post_link( $key, $confirm = null, array $extra = array() ) {
 		if ( null === $confirm ) {
 			$confirm = $this->open_link( $key );
 		}
-		$post = array(
-			'k'        => $key,
-			'_wpnonce' => wp_create_nonce( 'happyaccess_pl_link' ),
+		$post = array_merge(
+			array(
+				'k'        => $key,
+				'_wpnonce' => wp_create_nonce( 'happyaccess_pl_link' ),
+			),
+			$extra
 		);
 		if ( null !== $confirm['field'] ) {
 			$post['c'] = $confirm['field'];
@@ -222,6 +229,73 @@ class PasswordlessLoginStepsTest extends WP_UnitTestCase {
 
 	private function log_rows( $event ) {
 		return AuditLog::query( array( 'event' => $event ) )['items'];
+	}
+
+	public function test_the_request_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$user = self::factory()->user->create_and_get( array( 'user_email' => 'real@example.org' ) );
+
+		$res = $this->post_request( $user->user_email );
+		LoginSteps::flush_queue();
+
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 'The security check didn&#039;t pass. Reload the page and try again.', $res['errors']->get_error_message() );
+		$this->assertSame( array(), $this->mails );
+		$this->assertSame( array(), $this->cookies );
+		$this->assertSame( 0, RateLimiter::count( LoginSteps::REQUEST_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ) );
+
+		$made = $this->request_as( $user, $this->captcha_field( 'pl_request' ) );
+		$this->assertSame( 'redirect', $made['response']['type'] );
+	}
+
+	public function test_the_verify_step_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$made = $this->request_as( $user, $this->captcha_field( 'pl_request' ) );
+
+		$res = $this->post_code( $made['code'], $made['cookie'] );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, get_current_user_id() );
+		$this->assertSame( 0, RateLimiter::count( LoginSteps::CODE_ACTION, 'ip', RateLimiter::ip_subject(), HOUR_IN_SECONDS ) );
+
+		$res = $this->post_code( $made['code'], $made['cookie'], $this->captcha_field( 'pl_verify' ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( $user->ID, get_current_user_id() );
+	}
+
+	public function test_the_link_confirm_refuses_a_post_without_a_token_while_recaptcha_is_on() {
+		$this->turn_on_recaptcha();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$made = $this->request_as( $user, $this->captcha_field( 'pl_request' ) );
+
+		$res = $this->post_link( $made['key'] );
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertStringContainsString( 'name="k"', $res['body'], 'The confirm form shows again for the next try.' );
+		$this->assertSame( 0, get_current_user_id() );
+
+		$res = $this->post_link( $made['key'], null, $this->captcha_field( 'pl_verify' ) );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( $user->ID, get_current_user_id() );
+	}
+
+	public function test_the_steps_skip_the_check_while_recaptcha_is_off() {
+		$this->watch_recaptcha();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$made = $this->request_as( $user );
+
+		$this->assertSame( 'redirect', $this->post_code( $made['code'], $made['cookie'] )['type'] );
+		$this->assertSame( 0, $this->captcha_calls );
+	}
+
+	public function test_the_screens_with_a_form_name_their_recaptcha_action() {
+		$user = self::factory()->user->create_and_get( array( 'role' => 'editor' ) );
+		$made = $this->request_as( $user );
+
+		$this->assertSame( 'pl_request', LoginSteps::handle_request( 'GET', array(), array() )['captcha'] );
+		$this->assertSame( 'pl_verify', LoginSteps::handle_verify( 'GET', array(), array(), array() )['captcha'] );
+		$this->assertSame( 'pl_verify', LoginSteps::handle_verify( 'GET', array( 'k' => $made['key'] ), array(), array() )['captcha'] );
+		$this->assertArrayNotHasKey( 'captcha', LoginSteps::handle_verify( 'GET', array( 'k' => 'nope' ), array(), array() ) );
 	}
 
 	public function test_requests_for_real_missing_support_and_limited_accounts_look_the_same() {

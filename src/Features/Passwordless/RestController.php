@@ -7,6 +7,7 @@
 
 namespace HappyAccess\Features\Passwordless;
 
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Rest\Routes;
 
 defined( 'ABSPATH' ) || exit;
@@ -21,7 +22,8 @@ defined( 'ABSPATH' ) || exit;
  * Origin (or, without one, a Referer) must name this site.
  *
  * Both routes run the same rules as the login screens through
- * LoginSteps::request_flow() and LoginSteps::verify_flow().
+ * LoginSteps::request_flow() and LoginSteps::verify_flow(), after the same
+ * reCAPTCHA check, with the token in the JSON body.
  */
 final class RestController {
 
@@ -52,11 +54,12 @@ final class RestController {
 				'callback'            => array( __CLASS__, 'request' ),
 				'permission_callback' => array( __CLASS__, 'has_header' ),
 				'args'                => array(
-					'login' => array(
+					'login'          => array(
 						'type'              => 'string',
 						'default'           => '',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
+					Recaptcha::FIELD => self::captcha_arg(),
 				),
 			)
 		);
@@ -69,23 +72,37 @@ final class RestController {
 				'callback'            => array( __CLASS__, 'verify' ),
 				'permission_callback' => array( __CLASS__, 'has_header' ),
 				'args'                => array(
-					'code'        => array(
+					'code'           => array(
 						'type'              => 'string',
 						'default'           => '',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
-					'remember'    => array(
+					'remember'       => array(
 						'type'              => 'boolean',
 						'default'           => false,
 						'sanitize_callback' => 'rest_sanitize_boolean',
 					),
-					'redirect_to' => array(
+					'redirect_to'    => array(
 						'type'              => 'string',
 						'default'           => '',
 						'sanitize_callback' => array( LoginSteps::class, 'valid_redirect' ),
 					),
+					Recaptcha::FIELD => self::captcha_arg(),
 				),
 			)
+		);
+	}
+
+	/**
+	 * The reCAPTCHA token argument of both routes.
+	 *
+	 * @return array
+	 */
+	private static function captcha_arg() {
+		return array(
+			'type'              => 'string',
+			'default'           => '',
+			'sanitize_callback' => 'sanitize_text_field',
 		);
 	}
 
@@ -150,6 +167,11 @@ final class RestController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function request( \WP_REST_Request $request ) {
+		$captcha = Recaptcha::check( $request->get_param( Recaptcha::FIELD ), 'pl_request' );
+		if ( is_wp_error( $captcha ) ) {
+			return self::error( $captcha );
+		}
+
 		$result = LoginSteps::request_flow( (string) $request->get_param( 'login' ) );
 		if ( is_wp_error( $result ) ) {
 			return self::error( $result );
@@ -171,6 +193,11 @@ final class RestController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function verify( \WP_REST_Request $request ) {
+		$captcha = Recaptcha::check( $request->get_param( Recaptcha::FIELD ), 'pl_verify' );
+		if ( is_wp_error( $captcha ) ) {
+			return self::error( $captcha );
+		}
+
 		$result = LoginSteps::verify_flow(
 			LoginSteps::request_key( wp_unslash( $_COOKIE ) ),
 			(string) $request->get_param( 'code' ),

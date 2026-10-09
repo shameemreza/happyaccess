@@ -7,6 +7,7 @@
 
 namespace HappyAccess\Features\Passwordless;
 
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Router;
 use HappyAccess\Rest\Routes;
@@ -166,7 +167,9 @@ final class Forms {
 
 	/**
 	 * Loads the script and stylesheet for this request, with the REST URL
-	 * and the strings the script needs. Adds the settings only once.
+	 * and the strings the script needs. Adds the settings only once. While
+	 * reCAPTCHA is on, Google's script loads too, and the script sends a
+	 * token with each request.
 	 *
 	 * @return void
 	 */
@@ -187,7 +190,17 @@ final class Forms {
 				'error'  => __( 'Something went wrong. Try again.', 'happyaccess' ),
 			),
 		);
-		wp_add_inline_script( self::HANDLE, 'var happyaccessLogin = ' . wp_json_encode( $settings ) . ';', 'before' );
+
+		$inline = 'var happyaccessLogin = ' . wp_json_encode( $settings ) . ';';
+		if ( Recaptcha::load_script() ) {
+			$inline .= ' var happyaccessRecaptcha = ' . wp_json_encode(
+				array(
+					'key'   => Recaptcha::site_key(),
+					'field' => Recaptcha::FIELD,
+				)
+			) . ';';
+		}
+		wp_add_inline_script( self::HANDLE, $inline, 'before' );
 	}
 
 	/**

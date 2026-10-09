@@ -16,6 +16,7 @@ use HappyAccess\Core\Installer;
 use HappyAccess\Core\Internal;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\RateLimiter;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\TwoStep\Challenge;
 use HappyAccess\Login\Router;
@@ -155,6 +156,11 @@ final class LoginSteps {
 			return self::request_screen( $redirect, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
 		}
 
+		$captcha = Recaptcha::check( self::text( $post, Recaptcha::FIELD ), 'pl_request' );
+		if ( is_wp_error( $captcha ) ) {
+			return self::request_screen( $redirect, self::screen_error( $captcha ) );
+		}
+
 		$result = self::request_flow( self::text( $post, 'log' ) );
 		if ( is_wp_error( $result ) ) {
 			return self::request_screen( $redirect, self::screen_error( $result ) );
@@ -251,6 +257,11 @@ final class LoginSteps {
 
 		if ( ! self::nonce_ok( $post, 'happyaccess_pl_verify' ) ) {
 			return self::verify_screen( $redirect, new \WP_Error( 'expired_page', esc_html__( 'This page expired. Try again.', 'happyaccess' ) ) );
+		}
+
+		$captcha = Recaptcha::check( self::text( $post, Recaptcha::FIELD ), 'pl_verify' );
+		if ( is_wp_error( $captcha ) ) {
+			return self::verify_screen( $redirect, self::screen_error( $captcha ) );
 		}
 
 		$result = self::verify_flow( self::request_key( $cookies ), self::text( $post, 'pwd' ), ! empty( $post['rememberme'] ), $redirect );
@@ -356,6 +367,12 @@ final class LoginSteps {
 				return self::link_error();
 			}
 			return self::link_error( new \WP_Error( 'confirm_missing', esc_html__( 'Open the link from your email again, then select Log in.', 'happyaccess' ) ) );
+		}
+
+		$captcha = Recaptcha::check( self::text( $post, Recaptcha::FIELD ), 'pl_verify' );
+		if ( is_wp_error( $captcha ) ) {
+			$user = self::user_for_link( $key );
+			return null === $user ? self::link_error() : self::link_confirm( $user, $key, self::screen_error( $captcha ) );
 		}
 
 		$wait = self::ip_wait( self::LINK_ACTION );
@@ -841,6 +858,7 @@ final class LoginSteps {
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => '',
+			'captcha' => 'pl_request',
 		);
 	}
 
@@ -868,6 +886,7 @@ final class LoginSteps {
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => null === $errors ? self::neutral_message() : '',
+			'captcha' => 'pl_verify',
 		);
 	}
 
@@ -904,6 +923,7 @@ final class LoginSteps {
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => '',
+			'captcha' => 'pl_verify',
 		);
 	}
 

@@ -7,12 +7,15 @@
 
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\Feature;
 use HappyAccess\Features\Passwordless\LoginSteps;
 use HappyAccess\Login\Router;
 
 class PasswordlessRestControllerTest extends WP_UnitTestCase {
+
+	use HappyAccess_Test_Recaptcha;
 
 	/**
 	 * Mails caught before they are sent.
@@ -455,6 +458,68 @@ class PasswordlessRestControllerTest extends WP_UnitTestCase {
 			$this->assertArrayHasKey( 'Cache-Control', $headers, (string) $i );
 			$this->assertStringContainsString( 'no-store', $headers['Cache-Control'], (string) $i );
 		}
+	}
+
+	/**
+	 * Posts JSON to a route, as assets/login.js does.
+	 *
+	 * @param string $path request or verify.
+	 * @param array  $data Body.
+	 * @return WP_REST_Response
+	 */
+	private function call_json( $path, array $data ) {
+		$request = new WP_REST_Request( 'POST', '/happyaccess/v1/passwordless/' . $path );
+		$request->set_header( 'X-HappyAccess-Login', '1' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( $data ) );
+		return rest_ensure_response( rest_do_request( $request ) );
+	}
+
+	public function test_both_routes_need_a_token_in_the_json_body_while_recaptcha_is_on() {
+		$this->boot();
+		$this->turn_on_recaptcha();
+		$user = self::factory()->user->create_and_get(
+			array(
+				'user_email' => 'real@example.org',
+				'role'       => 'editor',
+			)
+		);
+
+		$response = $this->call_json( 'request', array( 'login' => 'real@example.org' ) );
+		LoginSteps::flush_queue();
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_captcha', $response->get_data()['code'] );
+		$this->assertSame( "The security check didn't pass. Reload the page and try again.", $response->get_data()['message'] );
+		$this->assertCount( 0, $this->mails );
+		$this->assertCount( 0, $this->cookies );
+
+		$response = $this->call_json( 'request', array( 'login' => 'real@example.org' ) + $this->captcha_field( 'pl_request' ) );
+		LoginSteps::flush_queue();
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertCount( 1, $this->mails );
+		$this->assertSame( 1, preg_match( '/(\d{3}) (\d{3})/', $this->mails[0]['message'], $code ) );
+		$_COOKIE['happyaccess_pl_request'] = $this->cookies[0]['value'];
+
+		$response = $this->call_json( 'verify', array( 'code' => $code[1] . $code[2] ) );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'happyaccess_captcha', $response->get_data()['code'] );
+		$this->assertSame( 0, get_current_user_id() );
+
+		$response = $this->call_json( 'verify', array( 'code' => $code[1] . $code[2] ) + $this->captcha_field( 'pl_request' ) );
+		$this->assertSame( 400, $response->get_status(), 'A token made for the request step does not work here.' );
+
+		$response = $this->call_json( 'verify', array( 'code' => $code[1] . $code[2] ) + $this->captcha_field( 'pl_verify' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $user->ID, get_current_user_id() );
+	}
+
+	public function test_the_routes_skip_the_check_while_recaptcha_is_off() {
+		$this->boot();
+		$this->watch_recaptcha();
+		self::factory()->user->create( array( 'user_email' => 'real@example.org' ) );
+
+		$this->assertSame( 200, $this->call( 'request', array( 'login' => 'real@example.org' ) )->get_status() );
+		$this->assertSame( 0, $this->captcha_calls );
 	}
 
 	public function test_the_routes_are_public_and_take_typed_args() {
