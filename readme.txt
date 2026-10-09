@@ -1,6 +1,6 @@
-=== HappyAccess ===
+=== HappyAccess - Temporary Login, Passwordless Login and 2FA ===
 Contributors: shameemreza
-Tags: admin, temporary access, support, security, otp
+Tags: temporary login, passwordless login, two factor authentication, magic link, 2fa
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 7.4
@@ -8,361 +8,268 @@ Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
+Temporary admin access without sharing a password, login by email code or link, and two-step login with an authenticator app. Free.
 
 == Description ==
 
-HappyAccess simplifies the process of granting **temporary admin access** to support engineers, developers, and agencies - securely, transparently, and GDPR-compliantly.
+HappyAccess fixes the three login problems most WordPress and WooCommerce sites run into, in one light plugin:
 
-It removes the need for merchants to manually create/delete admin users or share passwords, while maintaining full control and audit visibility.
+* **Temporary login:** give a support person, developer or agency access to your site with a link or a code that ends by itself. No password shared, no account left behind.
+* **Passwordless login:** let customers and users log in with a 6-digit code or a login link sent to their email. It works on the WordPress login page, WooCommerce My Account and checkout.
+* **Two-step login (2FA):** ask for a code from an authenticator app, an email code or a backup code after the password, and require it for the roles you pick.
 
-= Key Features =
+On top of that, **new device alerts** email your administrators when their account logs in from a browser it hasn't seen before.
 
-**Access & Authentication**
+Each feature is a switch in Settings. Turn on only what you need. Anything you leave off adds no code to your pages.
 
-* **OTP-Based Authentication:** Generate secure 6-digit codes instead of sharing passwords.
-* **Magic Link Authentication:** One-click login links with short expiration (1-10 minutes), single-use.
-* **OTP Share Links:** Generate secure single-view links to share OTP codes safely with auto-expiry.
-* **Reusable Access Codes:** Support engineers can log in multiple times with the same code until it expires.
-* **One-Time Use Option:** Generate codes that automatically revoke after first use for maximum security.
-* **Role Selection:** Assign any WordPress role (Administrator, Editor, Shop Manager, or custom roles).
-* **Time-Limited Access:** Automatically expires after the set duration (1 hour to 30 days).
+= How to give temporary admin access without sharing a password =
 
-**Access Restrictions**
+Someone from support needs to look at your site. The usual way is to make them an admin account, send a password by email, and promise to delete the account later. Most people forget, and the account stays forever.
 
-* **Admin Menu & Submenu Restrictions:** Block temp users from specific admin pages with a visual picker. Supports top-level menus and individual sub-pages (WooCommerce tabs, EDD sections, BuddyPress, or any plugin).
-* **Direct URL Blocking:** Restricted pages are inaccessible even when accessed by typing the URL directly.
-* **Hide Admin Bar:** Option to hide the WordPress admin bar for temporary users.
-* **Main Admin Protection:** Temp users cannot see, edit, or delete the site owner. Dangerous bulk actions are blocked.
-* **Plugin Self-Protection:** HappyAccess is hidden from the plugins list for temp users.
-* **Activate/Deactivate Toggle:** Suspend a temp user's access without deleting them, and reactivate later with one click.
+With HappyAccess, you create a pass in Users > HappyAccess and send them the link or the 8-digit code. They log in with it. When the time you picked is up, their sessions end and their account is removed by itself.
 
-**Security**
+* **You pick how long:** 1 day, 3 days, 7 days or your own range, up to 30 days.
+* **You pick what they can do:**
+    * **Protected admin** (the default): a full admin who can't install plugins, create other admins or touch your account.
+    * **Custom access:** tick exactly the permissions they need.
+    * **Full admin:** no limits, with an email alert on every login and a warning if they create another admin.
+* **Safe links:** the login link opens a confirm screen first, so email and chat link scanners can't use it up.
+* **Your choice of limits:** one-time passes, an IP address allowlist, and an email when they log in.
+* **See what they changed:** the Activity tab lists every post, page, product, order, setting, plugin, theme and user they changed, with times and IP addresses. Export it as CSV.
+* **Stay in control:** suspend, extend or end a pass at any time. The Emergency lock in the admin bar ends every pass at once.
+* **Your account stays private:** their account can't see or edit yours, and HappyAccess is hidden from their plugin list.
+* **Their work stays:** posts they wrote move to your account when the access ends. Nothing they made is deleted.
+* **For agencies and hosts:** WP-CLI commands to create, list, extend and end passes from the terminal.
 
-* **reCAPTCHA v3 Protection:** Optional invisible bot protection for OTP login.
-* **IP Allowlist:** Optionally restrict access codes to specific IP addresses.
-* **Rate Limiting:** Failed attempt lockouts and IP tracking prevent brute force attacks.
-* **Emergency Lock:** One-click admin bar button to instantly revoke all active tokens.
-* **Session Management:** Logout all temp sessions without revoking tokens.
+= How to log in to WordPress without a password =
 
-**Monitoring & Compliance**
+Forgotten passwords are the most common login problem on any site with customers. Passwordless login lets people skip the password and log in with an email code or a magic login link instead.
 
-* **Full Audit Log:** Track all access, logins, restrictions, and actions with filterable event log and CSV export.
-* **Live Countdown Timer:** Real-time expiry countdown in the admin bar with auto-logout.
-* **Login Count Tracking:** See first login vs re-logins in the audit log.
-* **Active Token Management:** View all active codes, see usage status, generate magic links, and revoke anytime.
-* **Email Notifications:** Send access codes and magic links to admin or support email.
-* **Automatic Cleanup:** Temporary users and old logs are deleted automatically when access expires.
-* **GDPR Compliant:** Built-in consent workflow, privacy policy integration, and data export/erasure support.
-* **Native WordPress UI:** Clean interface matching WordPress and WooCommerce admin styles.
+1. They select "Email me a login code" on the login form and type their email or username.
+2. They get one email with a 6-digit code and a login link. Both work for 10 minutes by default (5 to 30, your choice).
+3. They type the code, or open the link on any device, and they're in.
 
-= How It Works =
+Where the option shows:
 
-1. Go to **Users → HappyAccess** in your WordPress admin.
-2. Click **Generate Access** tab.
-3. Choose duration (1 hour to 30 days) and role.
-4. Optionally enable email notification.
-5. Accept GDPR terms and click **Generate Access Code**.
-6. Share the 6-digit code with your support engineer.
-7. They enter the code at your login page - no username/password needed.
-8. Access automatically expires and user is deleted.
+* The WordPress login page (wp-login.php).
+* WooCommerce My Account and the classic WooCommerce checkout, inline with no page reload.
+* Any page, with the HappyAccess Login block or the `[happyaccess_login]` shortcode.
 
-= Perfect For =
+Built to be safe:
 
-* **Support Engineers** - Quick access without password hassles.
-* **Agencies** - Manage client access professionally.
-* **Store Owners** - Maintain security while getting help.
-* **Developers** - Troubleshoot without credential sharing.
+* The screen gives the same answer for an email that has an account and one that doesn't, so nobody can use it to find out who has an account.
+* A code only works in the browser that asked for it, with 5 tries before it's cancelled.
+* Login links can only be used once, and only from the confirm screen.
+* Per role, keep "Password or email code" or switch a role to "Email code only".
 
-= GDPR & Security =
+= How to add two-factor authentication to WordPress and WooCommerce =
 
-* All access must be disclosed in your Terms & Conditions.
-* Complete audit trail of all actions.
-* Data stored locally on your WordPress site.
-* Automatic data cleanup after 30 days.
-* Rate limiting prevents brute force attacks.
+Two-step login (also called two-factor authentication or 2FA) asks for a second code after the password. A stolen password alone isn't enough to get in.
 
-= Third-Party Services =
+* **Authenticator app:** works with any app that supports standard time-based codes (TOTP), like Google Authenticator, Microsoft Authenticator, Authy, 1Password and Bitwarden. Setup shows a QR code, drawn on your own site.
+* **Email codes:** a 6-digit code sent to the account's email.
+* **Backup codes:** 10 one-time codes for when the phone isn't around.
+* **Optional or required per role:** for example required for administrators and shop managers, optional for customers.
+* **A grace period** for required roles: a few logins or days to set it up, then it becomes part of their next login.
+* **Setup where people already are:** on their WordPress profile, or in WooCommerce My Account for customers.
+* **Never locked out:** an admin can turn it off from a user's profile, you can run `wp happyaccess twostep reset <user>`, or add one line to wp-config.php.
+* **Plays nicely with others:** if Two Factor, Wordfence Login Security, WP 2FA or Kadence Security already protects an account, HappyAccess skips that account, so nobody is asked twice.
 
-This plugin optionally connects to the following third-party service:
+= New device login alerts =
 
-**Google reCAPTCHA v3** (optional)
+When an administrator's account logs in from a browser it hasn't used before, they get an email with the time, the browser, the system and the IP address, and a link to change their password if it wasn't them. You can turn alerts on for other roles in Login and security.
 
-When enabled in Settings, HappyAccess loads Google reCAPTCHA v3 on the WordPress login page to protect the OTP field from automated attacks. This sends the user's IP address, browser information, and interaction data to Google for bot detection.
+= Light, private and secure =
 
-* Service URL: [https://www.google.com/recaptcha/](https://www.google.com/recaptcha/)
-* Terms of Service: [https://policies.google.com/terms](https://policies.google.com/terms)
-* Privacy Policy: [https://policies.google.com/privacy](https://policies.google.com/privacy)
+* **No outside services by default.** Optional Google reCAPTCHA v3 is the only one, and it's off until you add your own keys.
+* **Hashed and encrypted:** access codes, login links and email codes are stored as hashes, never in plain text. Authenticator secrets are encrypted.
+* **Rate limits:** wrong codes are limited per IP address and per account, and the owner gets an email if a site sees a lot of wrong codes.
+* **Compatible:** works with hidden login URL plugins like WPS Hide Login, with page cache plugins, and with security plugins.
+* **Multisite:** network activated or per site.
+* **Accessible:** the admin screens follow your admin color scheme and are tested with screen reader checks.
+* **Light:** the login form script needs no jQuery and loads only on pages that show a HappyAccess form.
 
-reCAPTCHA is **disabled by default** and must be explicitly enabled by an administrator. When disabled, no data is sent to Google.
+= For support teams, agencies and developers =
+
+If you support WordPress or WooCommerce sites, send this to a client when you need access. Copy it, change the names, and paste it into your ticket or email.
+
+> Hi! To look into this, I need to log in to your site. You don't have to send me a password or make me an account.
+>
+> 1. Install the free HappyAccess plugin from your Plugins screen.
+> 2. Go to Users > HappyAccess and create a pass. Three days is plenty.
+> 3. Send me the link it shows you.
+>
+> My access ends by itself when the time is up, and you can end it earlier from the same screen. You'll also see what I changed while I was in.
 
 == Installation ==
 
-1. Upload the `happyaccess` folder to `/wp-content/plugins/`.
-2. Activate the plugin through the 'Plugins' menu in WordPress.
-3. Go to **Users → HappyAccess** in your admin menu.
-4. Configure settings (optional) in the Settings tab.
-5. Start generating secure access codes!
-
-= Requirements =
-
-* WordPress 6.0 or higher.
-* PHP 7.4 or higher.
-* Administrator access to generate codes.
+1. In your dashboard, go to Plugins > Add New Plugin and search for "HappyAccess".
+2. Install and activate it.
+3. Go to Users > HappyAccess. Temporary access is on from the start.
+4. To add passwordless login or two-step login, turn them on in the Settings tab, then set them up in Login and security.
 
 == Frequently Asked Questions ==
 
-= Is this secure? =
+= How do I give someone temporary admin access to my WordPress site? =
 
-Yes! HappyAccess uses cryptographically secure token generation, rate limiting, and automatic cleanup to ensure maximum security. Unlike traditional methods (creating user accounts and sharing passwords), OTP codes cannot be reused after expiry and don't expose any real credentials.
-
-= Do I need to use tools like QuickForget to share passwords? =
-
-No! That's the beauty of HappyAccess. You generate a 6-digit code and share it directly with your support engineer. No passwords, no QuickForget, no complicated steps. The code is temporary and auto-expires.
-
-= Can support engineers log in multiple times with the same code? =
-
-Yes! By default, access codes can be reused unlimited times until they expire. This means your support engineer can log in, log out, and log in again without needing a new code.
-
-However, if you need maximum security, you can enable the "One-Time Use" option when generating the code. This will automatically revoke the code after the first successful login, limiting access to a single session.
-
-= What is "One-Time Use" and when should I use it? =
-
-One-Time Use is a security feature that automatically revokes the access code immediately after the first successful login. The support engineer gets only one session - if they log out, they cannot log back in with the same code.
-
-Use this when:
-* You only need a single support session
-* You want maximum security
-* You're granting access to sensitive admin areas
-* You want the code to self-destruct after use
+Go to Users > HappyAccess, type who it's for, pick how long it lasts and what they can do, and create the pass. Send them the login link or the 8-digit code. Their access ends by itself at the time you picked.
 
 = Can the support person see my password? =
 
-No. They never see or set any passwords. Authentication is handled entirely through the OTP system.
+No. They log in with their own link or code, and their account is separate from yours. They never see or need your password.
 
-= What happens when access expires? =
+= What happens when temporary access ends? =
 
-The temporary user is automatically deleted and can no longer log in. All audit logs are retained for your records.
+Their sessions end, they're logged out, and their temporary account is removed. Anything they wrote moves to your account and is never deleted. The activity log stays for as long as you keep logs (30 days by default).
 
-= Can I revoke access early? =
+= Can I end temporary access early? =
 
-Yes! You can revoke any active token from the Active Tokens page at any time. You can also use "Logout All Temp Sessions" to force logout without revoking the code.
+Yes. End or suspend any pass from the Temporary access tab. The Emergency lock button in the admin bar ends every pass at once.
 
-= Can I restrict access to specific IPs? =
+= Is a login link the same as a magic link? =
 
-Yes! When generating an access code, you can optionally specify an IP allowlist. Only connections from those IP addresses will be able to use the code.
+Yes. A login link (often called a magic link) logs someone in without a password. HappyAccess login links open a confirm screen first and only work once, so a link scanner in Outlook, Gmail or Slack can't use them up before the person does.
 
-= Is this GDPR compliant? =
+= How does passwordless login work with WooCommerce? =
 
-Yes, but you must disclose in your Privacy Policy or Terms & Conditions that you grant admin access to third parties for support purposes. The plugin includes a consent checkbox to remind you of this requirement.
+Turn on Passwordless login, and customers see "Email me a login code instead" under the login form on My Account and on the classic checkout. They type their email, get a 6-digit code, and log in without leaving the page. After logging in, they land back on My Account or the checkout.
 
-= What roles can I grant? =
+= Can I add the email code option to the WooCommerce block checkout? =
 
-Any WordPress role including Administrator, Editor, Author, Subscriber, and custom roles like Shop Manager.
+The block checkout doesn't let plugins add to its sign-in prompt yet. Add the HappyAccess Login block to your checkout page instead. The classic checkout and My Account get the option on their own.
 
-= What is a Magic Link? =
+= Which authenticator apps work with two-step login? =
 
-A Magic Link is a one-click login URL that authenticates the user without needing to enter an OTP code. It's useful when you want to provide the easiest possible login experience. Magic links are:
-* Extremely short-lived (1-10 minutes)
-* Single-use (automatically invalid after first click)
-* Tied to an existing access token
+Any app that supports standard time-based one-time codes (TOTP, RFC 6238). That includes Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden and most password managers.
 
-To generate a magic link, go to Active Tokens and click the "Magic Link" button next to any active token.
+= Can I require two-factor authentication for administrators only? =
 
-= Should I enable reCAPTCHA? =
+Yes. In Login and security, set each role to Off, Optional or Required. For example, Required for Administrator and Shop manager, and Optional for everyone else. Required roles get a grace period to set it up.
 
-reCAPTCHA v3 is optional but recommended if:
-* You're concerned about automated attacks on your login page
-* You want additional bot protection beyond rate limiting
-* You've seen suspicious login attempts in your audit logs
+= Someone is locked out of two-step login. What do I do? =
 
-reCAPTCHA v3 runs invisibly in the background - it won't interrupt legitimate users. To enable it, get your site key and secret key from Google reCAPTCHA Admin and add them in Settings.
+Pick whichever fits:
 
-= Can I restrict which admin pages a temp user can access? =
+* As an admin, open their profile and select "Turn off two-step login for this user".
+* Run `wp happyaccess twostep reset <user>`.
+* If you're locked out yourself, add `define( 'HAPPYACCESS_DISABLE_TWOSTEP', true );` to wp-config.php, log in, set it up again, then remove the line.
 
-Yes! When generating an access code, enable "Menu Restrictions" to see a full list of admin menus and submenus. You can block entire top-level menus (e.g., hide all of WooCommerce) or specific sub-pages (e.g., block WooCommerce Orders but allow Products). Blocked pages are hidden from navigation AND inaccessible by direct URL.
+= Can I make a role log in only with an email code? =
 
-= Can temp users modify my plugins or delete my admin account? =
+Yes, in Login and security. If email stops working on your site, add `define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );` to wp-config.php to get back in with a password.
 
-No. HappyAccess automatically protects the site owner: temp users cannot see your account in the users list, cannot edit your profile, and cannot delete you. The HappyAccess plugin itself is hidden from the plugins list so temp users cannot deactivate it.
+= I changed the security keys in wp-config.php. Why do people need to set up their app again? =
 
-= Can I temporarily suspend a temp user without deleting them? =
+Authenticator secrets are encrypted with your site's keys. New keys mean the old secrets can't be read, so app codes stop working. Two-step login stays on, and people can still log in with an email code or a backup code, then set up the app again from their profile.
 
-Yes! Use the Deactivate button in Active Tokens to instantly suspend access. The temp user will be logged out and unable to log in. You can reactivate them later with one click - no need to generate a new code.
+= Does it work with WPS Hide Login and other hidden login URL plugins? =
 
-= How long are logs kept? =
+Yes. Every HappyAccess screen is a step of the normal WordPress login page, so a hidden login URL plugin moves it along with everything else.
 
-By default, logs are kept for 30 days. You can configure this in Settings.
+= Does it work with Wordfence and other security plugins? =
+
+Yes. HappyAccess codes don't count as wrong passwords, so a brute force lockout won't lock anyone out over them. If Wordfence Login Security, Two Factor, WP 2FA or Kadence Security already adds two-step login to an account, HappyAccess skips that account.
+
+One thing to know: plugins that add their own checks to the password login, like user approval or country blocks, don't run on code and link logins.
+
+= Does it work with page cache plugins? =
+
+Yes. Every HappyAccess login screen tells caches not to store it.
+
+= Does it work on WordPress multisite? =
+
+Yes, network activated or per site. When it's network activated, two-step login follows the main site's settings on every site.
+
+= Does HappyAccess slow down my site? =
+
+No. Each feature loads only when it's on, and only on the pages that need it. Your other pages get no HappyAccess script or style.
+
+= Is HappyAccess free? =
+
+Yes. There's no paid version and no account to sign up for.
+
+= Where do I report a security issue? =
+
+Please report it privately through the security policy at https://github.com/shameemreza/happyaccess/security/policy, not in the support forum.
+
+== Privacy ==
+
+HappyAccess keeps everything on your site. With reCAPTCHA off, nothing is sent anywhere.
+
+What it stores:
+
+* The activity log: what temporary users did, with IP addresses and browser names. It's deleted after the number of days you set (30 by default).
+* For temporary access: the name and email you enter, kept until the access ends, plus the same number of days.
+* For two-step login: an encrypted authenticator secret, hashed backup codes and each user's settings.
+* For new device alerts: a list of the browsers each watched user has logged in from (random IDs, stored as hashes) with the last time each was seen.
+
+Cookies it sets, only during the login steps that need them:
+
+* `happyaccess_pl_request`: ties a passwordless code to the browser that asked for it. 30 minutes at most.
+* `happyaccess_pl_confirm`: protects the login link's confirm screen. 10 minutes.
+* `happyaccess_ts`: holds a login between the password and the two-step code. 10 minutes.
+* `happyaccess_dev`: a random ID that tells the site it has seen this browser before, for new device alerts. 1 year.
+
+WordPress's Export Personal Data and Erase Personal Data tools include HappyAccess data. Suggested text for your privacy policy is in Settings > Privacy.
+
+If you give admin access to people outside your business, your privacy policy should say so.
+
+== External services ==
+
+HappyAccess uses one outside service, and only when you turn it on.
+
+**Google reCAPTCHA v3** checks that a person, not a script, is using the HappyAccess access code screen, the login link screen and the email code forms. When it's on, those screens load Google's script, and each time someone submits one, Google gets the visitor's IP address, browser details and how they used the page. HappyAccess sends the answer to https://www.google.com/recaptcha/api/siteverify to check it. It's off by default, and it needs your own keys from Google. The two-step login screens don't use it, so a problem with Google never locks out someone who already entered their password.
+
+* Terms: https://policies.google.com/terms
+* Privacy: https://policies.google.com/privacy
 
 == Screenshots ==
 
-1. Generate Access - Simple form with duration, role, and email options.
-2. OTP Display - Clear 6-digit code with copy button and instructions.
-3. Active Tokens - Table showing all tokens with status and revoke options.
-4. Audit Logs - Filterable event log with CSV export button.
-5. Settings - Configure security and log retention options.
-6. Login Form - Clean OTP field integration with WordPress login.
-7. Emergency Lock - Admin bar button for instant revocation.
+1. Temporary access: give access in under a minute, and see who has access with a live countdown.
+2. The login link and 8-digit code to send, right after you create a pass.
+3. Activity: what the support person changed while they were in.
+4. What the support person sees: a confirm screen before the login link logs them in.
+5. Login and security: passwordless and two-step settings with a live preview.
+6. Passwordless login on WooCommerce My Account: "Email me a login code instead".
+7. Setting up two-step login from WooCommerce My Account with an authenticator app.
+8. The two-step code step after the password.
 
 == Changelog ==
 
+= 1.1.0 =
+HappyAccess is rebuilt from the ground up in this release.
+
+* New: Passwordless login with an email code or login link, on the login page, WooCommerce My Account and checkout, a block and a shortcode.
+* New: Two-step login (2FA) with an authenticator app, email codes and backup codes, optional or required per role.
+* New: New device login alerts for administrators, and any other role you pick.
+* New: A new admin screen with a live pass preview, the Activity tab and the Login and security tab.
+* New: Protected admin, Custom access and Full admin access levels.
+* New: Login links open a confirm screen, so link scanners can't use them up.
+* New: The Activity tab shows what temporary users changed, with CSV export.
+* New: WP-CLI commands for passes and two-step resets.
+* New: Multisite support, network activated or per site.
+* Security: codes and keys are stored as hashes, with rate limits per IP address and per account.
+* Security: the access code is now 8 digits.
+* Changed: temporary users' posts move to your account when access ends. They're never deleted.
+
+**Upgrading from 1.0.x:**
+
+* Your active access codes keep working on the new code screen, for up to 7 days from the upgrade.
+* There's no way back to 1.0.6 after upgrading, because the database changes.
+
 = 1.0.6 =
-* FIXED: OTP login failing on hosts with `mod_security` (Bluehost, HostGator, Newfold) that strip non-standard POST parameters from `wp-login.php`.
-* IMPROVED: Login JS now sets fallback sentinel values in standard username/password fields so the OTP reaches the server even when custom POST parameters are blocked.
-* IMPROVED: Server-side fallback detects sentinel username and extracts OTP from password field when primary POST parameter is unavailable.
-* IMPROVED: Core WordPress auth handlers are removed during fallback to prevent confusing "invalid username" errors.
-* IMPROVED: Login form sets `novalidate` when OTP is entered to prevent browser HTML5 validation from blocking submission with empty username/password.
-* IMPROVED: Fallback usage is logged as `otp_fallback_used` event for diagnosing hosting compatibility issues.
+* Fixed: code login on hosts with mod_security that strip extra fields from wp-login.php.
 
 = 1.0.5 =
-* NEW: Admin Menu Restrictions: Block temp users from specific admin pages with a visual picker.
-* NEW: Per-Plugin Submenu Restrictions: Granular control over sub-pages (WooCommerce tabs, EDD sections, any plugin).
-* NEW: Direct URL Access Blocking: Restricted pages are blocked even when accessed by direct URL.
-* NEW: Hide Admin Bar: Option to hide the WordPress admin bar for temporary users.
-* NEW: Main Admin Protection: Temp users cannot see, edit, or delete the token creator.
-* NEW: Plugin Self-Protection: HappyAccess is hidden from the plugins list for temp users.
-* NEW: User Bulk Action Protection: Temp users cannot bulk-delete or bulk-modify real admin accounts.
-* NEW: Activate/Deactivate Toggle: Suspend and reactivate temp user access without deleting.
-* NEW: Deactivation blocks all login paths (OTP, magic link) and destroys active sessions.
-* SECURITY: Magic link login now blocked for deactivated temp users.
-* SECURITY: OTP login now blocked for deactivated temp users.
-* SECURITY: Access guard enforces restrictions server-side with `current_screen` hook.
-* SECURITY: Complex submenu slugs with query strings (e.g., `edit.php?post_type=product`) are properly blocked.
-* SECURITY: All access denial attempts are logged with full URL for audit trail.
-* IMPROVED: Menu picker shows nested parent/child structure with auto-check-all behavior.
-* IMPROVED: Audit log auto-cleanup now also prunes old log entries (was only pruning tokens).
-* IMPROVED: IP allowlist parsing now trims whitespace consistently across OTP and magic link paths.
-* IMPROVED: All JS strings are fully localized for translation readiness.
-* FIXED: Missing `access_deactivated` error message in magic link redirect handler.
+* New: admin menu restrictions, hide the admin bar, protection for the site owner's account and suspend or reactivate access.
 
-= 1.0.4 =
-* SECURITY: Added nonce verification to CSV export to prevent CSRF attacks.
-* SECURITY: Hardened IP detection to prefer REMOTE_ADDR over spoofable proxy headers.
-* SECURITY: Added `happyaccess_client_ip` filter for sites behind load balancers.
-* SECURITY: Elevated capability requirement from `list_users` to `manage_options`.
-* SECURITY: Removed raw token hash from generate response.
-* SECURITY: Replaced inline JavaScript with `wp_add_inline_script()` for Emergency Lock.
-* SECURITY: Escaped all AJAX response messages with `esc_html__()` and `esc_html()`.
-* SECURITY: Rate limiter now keyed on IP only — prevents brute-force via per-OTP bypass.
-* SECURITY: Atomic UPDATE for token use_count prevents race condition on single-use tokens.
-* SECURITY: Fixed time()/current_time() timezone mismatch in magic link and share link hashes.
-* SECURITY: reCAPTCHA now fails closed when misconfigured or on network errors (no fake score 1.0).
-* SECURITY: Added rate limiting to OTP share link verification.
-* SECURITY: Atomic single-view marking on share links prevents double-view race condition.
-* IMPROVED: Centralized IP detection into single method (no more duplicate code).
-* IMPROVED: Added recursion depth limits to username and OTP generation.
-* IMPROVED: Refactored logger `get_logs()` with proper date range filters.
-* IMPROVED: Removed stale 1-hour cache on admin log display for real-time data.
-* IMPROVED: Database version check replaces `SHOW TABLES` on every request.
-* IMPROVED: OTP shares table creation uses version flag to avoid redundant checks.
-* IMPROVED: Added `index.php` to all subdirectories to prevent directory listing.
-* IMPROVED: Sanitized `settings-updated` GET parameter properly.
-* IMPROVED: Added Third-Party Services disclosure for reCAPTCHA in readme.
-* IMPROVED: OTP shares table now created during plugin activation (not lazy).
-* IMPROVED: GDPR eraser now anonymizes `created_by` in tokens table.
-* IMPROVED: Added missing `happyaccess_enable_email` and `happyaccess_gdpr_consent_text` to uninstall cleanup.
-* IMPROVED: AJAX error responses use `wp_send_json_error()` consistently (no more `wp_die()`).
-* FIXED: Hooked missing `happyaccess_cleanup_attempts` cron event with init fallback.
-* FIXED: Added `happyaccess_attempts` table to uninstall cleanup.
-* FIXED: Removed unnecessary `flush_rewrite_rules()` from activation/deactivation.
-* FIXED: Removed unused `happyaccess_activated` option.
-* SECURITY: All `$_POST`/`$_GET` superglobals now sanitized with `wp_unslash()` + `sanitize_text_field()`.
-* SECURITY: Role parameter validated against registered `wp_roles()` whitelist.
-* SECURITY: All `sprintf()` in AJAX responses wrapped with `esc_html()`.
-* SECURITY: Replaced all `current_time('mysql')` with `gmdate('Y-m-d H:i:s')` for UTC-consistent timestamps across 8 files.
-* IMPROVED: All JavaScript strings localized via `wp_localize_script()` for translation readiness.
-* IMPROVED: All conditions follow WordPress Yoda coding standards.
-* IMPROVED: Added `@return void` PHPDoc to void methods in main plugin file.
-* IMPROVED: Audit log table rows now highlight on hover (WooCommerce-style).
-* COMPATIBILITY: Tested with WordPress 7.0-beta5.
+Older versions: https://github.com/shameemreza/happyaccess/blob/main/CHANGELOG.md
 
-= 1.0.3 =
-* NEW: Magic Link Authentication - Generate secure one-click login links that expire in 1-10 minutes.
-* NEW: OTP Share Links - Generate secure links to view OTP codes (single-view, auto-expires).
-* NEW: Email Magic Link - Send magic links directly via email to support engineers.
-* NEW: reCAPTCHA v3 Integration - Optional invisible bot protection for OTP login.
-* NEW: Magic Link option in Generate Access form - Create OTP + magic link together.
-* NEW: Beautiful OTP reveal page - Branded, secure page for viewing shared OTP codes.
-* SECURITY: Magic links are single-use and automatically invalidated after access.
-* SECURITY: Only ONE magic link OR share link active per token at a time (previous links auto-invalidated).
-* SECURITY: reCAPTCHA prevents automated brute-force attacks on OTP field.
-* SECURITY: All links use HMAC-SHA256 with time-based validation.
-* IMPROVED: Active Tokens page now includes "Magic Link" button for quick link generation.
-* IMPROVED: Database tables auto-created on plugin update (no deactivation needed).
-* IMPROVED: Audit logs track magic link, share link creation, viewing, and email sending.
-* IMPROVED: reCAPTCHA scores are logged for security analysis.
-* FIXED: Rate limiter method calls in magic link verification.
+== Upgrade Notice ==
 
-= 1.0.2 =
-* NEW: One-Time Use option - Generate codes that automatically revoke after first successful login.
-* NEW: Clear All Logs button in Audit Logs tab for manual log management.
-* NEW: "Delete Data on Uninstall" option in Settings to control data cleanup.
-* SECURITY: All active tokens are now revoked when the plugin is deactivated.
-* SECURITY: All temporary users are cleaned up on plugin deactivation (no leftovers).
-* SECURITY: Single-use tokens auto-revoke immediately after login, preventing code reuse.
-* IMPROVED: Active Tokens page now shows status as "Unused (One-Time)" or "Active (One-Time)" for single-use codes.
-* IMPROVED: Email notifications now include one-time use warning when applicable.
-* IMPROVED: Audit logs now track single-use token creation and auto-revocation.
-* IMPROVED: Get Support link moved to plugin description row (next to author/plugin site).
-* FIXED: Complete cleanup on deactivation - no leftover tokens or users remain.
-* FIXED: Plugin deactivation now properly logs the action with count of revoked tokens.
+= 1.1.0 =
+A full rebuild with passwordless login, two-step login and new device alerts. Active access codes keep working for up to 7 days. You can't go back to 1.0.6 after upgrading.
 
-= 1.0.1 =
-* NEW: Plugin action links - Quick access to Settings and Support from plugins page.
-* NEW: Logout All Temp Sessions - Terminate active sessions without revoking tokens.
-* NEW: IP Allowlist - Restrict access codes to specific IP addresses.
-* NEW: Temp user logout link - Dropdown menu in admin bar with logout option.
-* NEW: Live countdown timer - Real-time updating with auto-logout on expiry.
-* NEW: Session duration tracking - Shows current session time in admin bar.
-* NEW: Temp user logout auditing - Logs logout events with session duration.
-* NEW: Login count tracking - Shows "First Login" vs "Login #2, #3" etc in audit log.
-* IMPROVED: Tooltips now positioned BEFORE fields (matching WooCommerce style).
-* IMPROVED: GDPR consent message is clearer with link to GDPR documentation.
-* IMPROVED: Audit logs show temp_username for OTP Verified events.
-* IMPROVED: Token Created logs now show masked OTP code (e.g., "12****").
-* IMPROVED: OTP Verified logs now show masked OTP code for traceability.
-* IMPROVED: Login Failed events now show masked attempted code.
-* FIXED: Reference Note not displaying in Active Tokens table.
-* IMPROVED: Duration now displays as human-readable (e.g., "7 days" instead of "604800").
-* IMPROVED: OTP codes can now be reused unlimited times until expiry.
-* FIXED: OTP reuse bug - existing valid OTPs now work for multiple logins.
-* FIXED: Audit log was reading wrong column (details vs metadata).
-* FIXED: Plugin Check security warning - escaped table names in SQL queries.
-* FIXED: Emergency Lock button now hidden from temporary users.
-* FIXED: Duplicate HappyAccess_Admin class instantiation.
-* ACCESSIBILITY: Enhanced OTP field with `inputmode="numeric"` and `autocomplete="one-time-code"`.
-* ACCESSIBILITY: Added proper scope attributes to table headers.
-* ACCESSIBILITY: Better screen reader support throughout the plugin.
+== Credits ==
 
-= 1.0.0 =
-* Initial release
-* OTP-based authentication system (6-digit codes)
-* Automatic user cleanup on expiry
-* Full audit logging with date/event filters
-* CSV export for audit logs
-* Email notifications to admin (optional)
-* Emergency Lock button in admin bar
-* Active tokens management dashboard
-* GDPR compliance with consent workflow
-* Rate limiting and IP lockout for security
-* WordPress native UI with helpful tooltips
-* WooCommerce HPOS compatibility declared
-* Support for all WordPress roles
-* Configurable token expiry (1 hour to 30 days)
-* Configurable log retention period
-
-== Privacy Policy ==
-
-HappyAccess stores access logs locally on your WordPress site. No data is sent to external services unless you enable optional integrations (see Third-Party Services above).
-
-The plugin collects:
-* IP addresses of users accessing with temporary codes.
-* Browser information (user agent).
-* Access times and durations.
-* Actions performed (audit log).
-
-This data is automatically deleted after 30 days unless configured otherwise.
-
-When Google reCAPTCHA v3 is enabled, the user's IP address, browser fingerprint, and interaction data are sent to Google for bot detection. See Google's [Privacy Policy](https://policies.google.com/privacy) for details.
-
-You must disclose in your Terms & Conditions that you may grant admin access to third parties for support purposes.
+The QR code on the two-step setup screen is drawn by qrcode-generator by Kazuhiko Arase, under the MIT license.
