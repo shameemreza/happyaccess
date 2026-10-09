@@ -68,7 +68,7 @@ final class LogText {
 				'plural' => _n_noop( 'Emergency lock ended %d grant.', 'Emergency lock ended %d grants.', 'happyaccess' ),
 				'count'  => 0,
 			),
-			/* translators: %s: label of the support pass. */
+			/* translators: %s: label of the support grant. */
 			'login_success'              => __( 'Temporary access used: %s', 'happyaccess' ),
 			'login_setup_failed'         => __( "Couldn't set up the support account", 'happyaccess' ),
 			/* translators: %s: user login. */
