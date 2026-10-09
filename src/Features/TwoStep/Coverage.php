@@ -43,12 +43,12 @@ final class Coverage {
 	const TRANSIENT = 'happyaccess_twostep_coverage';
 
 	/**
-	 * Network option bumped each time the counts are dropped on a network,
-	 * and the per-site transient that remembers the value the kept counts
-	 * were made with.
+	 * Network option that gets a fresh random value each time the counts are
+	 * dropped on a network. The kept counts hold the value they were made
+	 * with, under GEN_KEY, so they and the value can't part ways.
 	 */
 	const NETWORK_GEN = 'happyaccess_twostep_coverage_gen';
-	const SEEN_GEN    = 'happyaccess_twostep_coverage_seen';
+	const GEN_KEY     = 'gen';
 
 	const TTL = 300;
 
@@ -180,7 +180,8 @@ final class Coverage {
 		if ( ! is_multisite() ) {
 			return;
 		}
-		$next = self::network_gen() + 1;
+		// A fresh value, not the old one plus one, so two requests that drop the counts at once can't write the same value.
+		$next = wp_generate_uuid4();
 		// A temp user's role change lands here too, and the guards keep happyaccess_ options from them.
 		Internal::run(
 			static function () use ( $next ) {
@@ -200,10 +201,11 @@ final class Coverage {
 			return $kept;
 		}
 		$counts = self::compute();
-		set_transient( self::TRANSIENT, $counts, self::TTL );
+		$stored = $counts;
 		if ( is_multisite() ) {
-			set_transient( self::SEEN_GEN, self::network_gen(), self::TTL );
+			$stored[ self::GEN_KEY ] = self::network_gen();
 		}
+		set_transient( self::TRANSIENT, $stored, self::TTL );
 		return $counts;
 	}
 
@@ -218,22 +220,21 @@ final class Coverage {
 		if ( ! is_array( $kept ) || ! isset( $kept['roles'] ) || ! is_array( $kept['roles'] ) ) {
 			return null;
 		}
-		if ( is_multisite() ) {
-			$seen = get_transient( self::SEEN_GEN );
-			if ( false !== $seen && self::network_gen() !== (int) $seen ) {
-				return null;
-			}
+		if ( is_multisite() && ( ! isset( $kept[ self::GEN_KEY ] ) || self::network_gen() !== (string) $kept[ self::GEN_KEY ] ) ) {
+			return null;
 		}
+		unset( $kept[ self::GEN_KEY ] );
 		return $kept;
 	}
 
 	/**
-	 * How many times the counts were dropped on this network.
+	 * The value written the last time the counts were dropped on this
+	 * network. An empty string before the first time.
 	 *
-	 * @return int
+	 * @return string
 	 */
 	private static function network_gen() {
-		return (int) get_site_option( self::NETWORK_GEN, 0 );
+		return (string) get_site_option( self::NETWORK_GEN, '' );
 	}
 
 	/**

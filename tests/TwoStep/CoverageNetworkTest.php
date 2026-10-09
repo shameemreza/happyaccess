@@ -157,4 +157,39 @@ class CoverageNetworkTest extends WP_UnitTestCase {
 		$editors = wp_list_filter( Coverage::counts()['roles'], array( 'slug' => 'editor' ) );
 		$this->assertSame( 1, reset( $editors )['enabled'] );
 	}
+
+	public function test_kept_counts_are_dropped_after_a_forget_even_if_a_side_record_was_evicted() {
+		$this->on_second_site();
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		add_user_to_blog( $this->site, $editor, 'editor' );
+		Coverage::counts();
+		restore_current_blog();
+
+		UserState::enable_email( $editor );
+
+		switch_to_blog( $this->site );
+		// An object cache can evict any one key, such as a second transient that held the generation.
+		delete_transient( 'happyaccess_twostep_coverage_seen' );
+		$editors = wp_list_filter( Coverage::counts()['roles'], array( 'slug' => 'editor' ) );
+		$this->assertSame( 1, reset( $editors )['enabled'] );
+	}
+
+	public function test_two_forgets_never_write_the_same_generation() {
+		Coverage::forget();
+		$first = get_site_option( Coverage::NETWORK_GEN );
+		Coverage::forget();
+		$second = get_site_option( Coverage::NETWORK_GEN );
+
+		// Two requests that read the same value and both add one would collide; a fresh value never does.
+		update_site_option( Coverage::NETWORK_GEN, $first );
+		Coverage::forget();
+		$this->assertNotSame( $second, get_site_option( Coverage::NETWORK_GEN ) );
+		$this->assertNotSame( $first, get_site_option( Coverage::NETWORK_GEN ) );
+	}
+
+	public function test_the_kept_generation_is_not_part_of_the_answer() {
+		$this->on_second_site();
+		$this->assertArrayNotHasKey( 'gen', Coverage::counts() );
+		$this->assertArrayNotHasKey( 'gen', Coverage::counts(), 'Nor of the kept answer.' );
+	}
 }
