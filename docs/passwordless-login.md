@@ -85,7 +85,7 @@ The WordPress login page always shows a text link.
 Under "How each role logs in", pick one of two choices for each role:
 
 - **Password or email code:** the default. People can use either.
-- **Email code only:** a password login is refused, and the login page points them to "Email me a login code".
+- **Email code only:** a password login is refused with the same message as a wrong password, so the message never shows which accounts use email codes. Keep the login page switched on under "Show the email code option on", so people in that role see "Email me a login code" under the form.
 
 When a person has several roles, Email code only wins if any of their roles has it.
 

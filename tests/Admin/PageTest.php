@@ -74,33 +74,57 @@ class PageTest extends WP_UnitTestCase {
 		return ob_get_clean();
 	}
 
-	public function test_register_hooks_the_lock_notice_and_drops_its_query_arg() {
+	public function test_register_hooks_the_lock_notice() {
 		Page::register();
 
 		$this->assertNotFalse( has_action( 'admin_notices', array( Page::class, 'lock_notice' ) ) );
-		$this->assertContains( 'happyaccess_locked', wp_removable_query_args() );
 	}
 
 	public function test_lock_notice_says_how_many_passes_ended() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
-		$_GET['happyaccess_locked'] = '3';
+		Page::remember_lock( 3 );
 		$this->assertStringContainsString( 'Emergency lock ended 3 support passes.', $this->lock_notice() );
 
-		$_GET['happyaccess_locked'] = '1';
+		Page::remember_lock( 1 );
 		$this->assertStringContainsString( 'Emergency lock ended 1 support pass.', $this->lock_notice() );
+
+		Page::remember_lock( 0 );
+		$this->assertStringContainsString( 'Emergency lock ended 0 support passes.', $this->lock_notice() );
 	}
 
-	public function test_lock_notice_is_only_for_managers_and_needs_the_arg() {
+	public function test_lock_notice_shows_once() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		Page::remember_lock( 2 );
+
+		$this->assertStringContainsString( 'Emergency lock ended 2 support passes.', $this->lock_notice() );
+		$this->assertSame( '', $this->lock_notice(), 'A reload shows nothing.' );
+	}
+
+	public function test_lock_notice_ignores_a_count_in_the_address() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$_GET['happyaccess_locked'] = '999';
+		$this->assertSame( '', $this->lock_notice(), 'A link with a made-up count shows nothing.' );
+
+		Page::remember_lock( 2 );
+		$this->assertStringContainsString( 'Emergency lock ended 2 support passes.', $this->lock_notice() );
+	}
+
+	public function test_lock_notice_is_only_for_the_manager_who_locked() {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
 		$this->assertSame( '', $this->lock_notice() );
 
-		$_GET['happyaccess_locked'] = 'abc';
-		$this->assertSame( '', $this->lock_notice() );
+		Page::remember_lock( 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertSame( '', $this->lock_notice(), 'Another admin sees nothing.' );
 
-		$_GET['happyaccess_locked'] = '2';
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
 		$this->assertSame( '', $this->lock_notice() );
+
+		wp_set_current_user( $admin );
+		$this->assertStringContainsString( 'Emergency lock ended 2 support passes.', $this->lock_notice() );
 	}
 
 	public function test_register_hooks_the_menu_and_the_assets() {

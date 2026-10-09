@@ -600,7 +600,7 @@ final class Grants {
 	 * Session resolver keeps the user out.
 	 *
 	 * @param int    $id     Grant id.
-	 * @param string $reason Why it ended, for example revoked, expired or lockdown.
+	 * @param string $reason Why it ended, for example revoked, expired or emergency_lock.
 	 * @return bool False when the grant is unknown or already revoked.
 	 */
 	public static function revoke( $id, $reason = 'revoked' ) {

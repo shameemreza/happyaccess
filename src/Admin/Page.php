@@ -10,6 +10,7 @@ namespace HappyAccess\Admin;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
+use HappyAccess\Core\Internal;
 use HappyAccess\Core\OtherTwoFactor;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\MenuGuard;
@@ -43,6 +44,13 @@ final class Page {
 	const ACTIVITY_DEFAULT_DAYS = 7;
 
 	/**
+	 * Prefix of the per-user transient that holds an Emergency lock count
+	 * until the next admin screen shows it, and how long it waits.
+	 */
+	const LOCK_TRANSIENT = 'happyaccess_locked_';
+	const LOCK_TTL       = 300;
+
+	/**
 	 * Hook suffix returned by add_users_page().
 	 *
 	 * @var string
@@ -58,23 +66,56 @@ final class Page {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'lock_notice' ) );
-		add_filter( 'removable_query_args', array( __CLASS__, 'removable_query_args' ) );
 	}
 
 	/**
-	 * After the admin bar Emergency lock, says how many passes it ended. The
-	 * count comes from the happyaccess_locked query arg, which core then drops
-	 * from the address bar, so a reload doesn't show the notice again.
+	 * Keeps an Emergency lock count for the current user until the next
+	 * admin screen shows it. The count stays out of the address, so a link
+	 * can't make the notice say anything.
+	 *
+	 * @param int $count Passes the lock ended.
+	 * @return void
+	 */
+	public static function remember_lock( $count ) {
+		$user_id = get_current_user_id();
+		if ( $user_id < 1 ) {
+			return;
+		}
+		$name  = self::LOCK_TRANSIENT . $user_id;
+		$count = max( 0, (int) $count );
+		// Transient calls can add or delete an option, so they run inside the bypass.
+		Internal::run(
+			static function () use ( $name, $count ) {
+				set_transient( $name, $count, self::LOCK_TTL );
+			}
+		);
+	}
+
+	/**
+	 * After the admin bar Emergency lock, says how many passes it ended, once,
+	 * to the manager who pressed it.
 	 *
 	 * @return void
 	 */
 	public static function lock_notice() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only count for a notice; the lock itself checked its nonce.
-		$raw = isset( $_GET['happyaccess_locked'] ) ? sanitize_text_field( wp_unslash( $_GET['happyaccess_locked'] ) ) : '';
-		if ( '' === $raw || ! ctype_digit( $raw ) || ! current_user_can( Capabilities::MANAGE ) ) {
+		$user_id = get_current_user_id();
+		if ( $user_id < 1 || ! current_user_can( Capabilities::MANAGE ) ) {
 			return;
 		}
-		$count = (int) $raw;
+		$name  = self::LOCK_TRANSIENT . $user_id;
+		$count = Internal::run(
+			static function () use ( $name ) {
+				$value = get_transient( $name );
+				if ( false !== $value ) {
+					delete_transient( $name );
+				}
+				return $value;
+			}
+		);
+		if ( false === $count || ! is_numeric( $count ) ) {
+			return;
+		}
+		$count = (int) $count;
 		printf(
 			'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
 			esc_html(
@@ -85,17 +126,6 @@ final class Page {
 				)
 			)
 		);
-	}
-
-	/**
-	 * Adds happyaccess_locked to the query args core removes after load.
-	 *
-	 * @param array $args Removable query args.
-	 * @return array
-	 */
-	public static function removable_query_args( $args ) {
-		$args[] = 'happyaccess_locked';
-		return $args;
 	}
 
 	/**

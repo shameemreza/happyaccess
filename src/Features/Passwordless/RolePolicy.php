@@ -11,7 +11,6 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
-use HappyAccess\Login\Router;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -100,8 +99,9 @@ final class RolePolicy {
 	/**
 	 * Refuses a password login for an email-only account. A WP_User result
 	 * (the password was right) and an incorrect_password error (it was wrong)
-	 * both get the same refusal, so the message does not tell an attacker
-	 * whether a guessed password is correct. Other errors and null pass
+	 * both get core's wrong-password error, so the message tells an attacker
+	 * neither whether a guessed password is correct nor that the account
+	 * uses email codes. Other errors and null pass
 	 * through. Temp support users are left to Session::block_core_auth() at
 	 * priority 99, so they never see this message. A result with no password
 	 * is not a password login (the cookie reauth check, single sign-on
@@ -158,7 +158,7 @@ final class RolePolicy {
 			return $user;
 		}
 
-		return new \WP_Error( 'happyaccess_email_only', self::refusal_message() );
+		return self::refusal( $username );
 	}
 
 	/**
@@ -193,29 +193,29 @@ final class RolePolicy {
 	}
 
 	/**
-	 * The error text. login_header() prints errors raw, so the text is
-	 * escaped here and the link is built with esc_url().
+	 * Core's error for a wrong password, word for word and in core's own
+	 * translation, for what was typed. A right password on an email-only
+	 * account gets the same error as a wrong one, and neither says the
+	 * account uses email codes, so the error never confirms the policy.
+	 * The "Email me a login code" link under the form stays.
 	 *
-	 * @return string
+	 * @param mixed $username Username or email typed, as core passed it.
+	 * @return \WP_Error
 	 */
-	private static function refusal_message() {
-		$args = array();
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only; the value is validated before it is used.
-		$redirect = LoginSteps::valid_redirect( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ? esc_url_raw( wp_unslash( $_REQUEST['redirect_to'] ) ) : '' );
-		if ( '' !== $redirect ) {
-			$args['redirect_to'] = $redirect;
+	private static function refusal( $username ) {
+		$typed = is_string( $username ) ? $username : '';
+		// Same order as core: a match by login gets the username wording, else an email address gets the email wording.
+		$by_email = ! get_user_by( 'login', $typed ) && is_email( $typed );
+		// phpcs:disable WordPress.WP.I18n.MissingArgDomain -- Core's own strings, so the text matches core's in every language.
+		if ( $by_email ) {
+			/* translators: %s: Email address. */
+			$text = __( '<strong>Error:</strong> The password you entered for the email address %s is incorrect.' );
+		} else {
+			/* translators: %s: User name. */
+			$text = __( '<strong>Error:</strong> The password you entered for the username %s is incorrect.' );
 		}
-
-		$link = sprintf(
-			'<a href="%s">%s</a>',
-			esc_url( Router::url( 'request', $args ) ),
-			esc_html__( 'Email me a login code', 'happyaccess' )
-		);
-
-		return sprintf(
-			/* translators: %s: link with the text "Email me a login code". */
-			esc_html__( "This account logs in with an email code. Use '%s' below.", 'happyaccess' ),
-			$link
-		);
+		$text = sprintf( $text, '<strong>' . esc_html( $typed ) . '</strong>' ) . ' <a href="' . wp_lostpassword_url() . '">' . __( 'Lost your password?' ) . '</a>';
+		// phpcs:enable WordPress.WP.I18n.MissingArgDomain
+		return new \WP_Error( 'incorrect_password', $text );
 	}
 }

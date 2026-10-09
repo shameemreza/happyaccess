@@ -7,6 +7,7 @@
 
 namespace HappyAccess\Features\SupportAccess;
 
+use HappyAccess\Admin\Page;
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Clock;
@@ -188,10 +189,9 @@ final class AdminBar {
 		}
 		check_admin_referer( self::LOCK_ACTION );
 
-		$count    = self::emergency_lock();
-		$referer  = wp_get_referer();
-		$redirect = add_query_arg( 'happyaccess_locked', $count, $referer ? $referer : admin_url() );
-		wp_safe_redirect( $redirect );
+		Page::remember_lock( self::emergency_lock() );
+		$referer = wp_get_referer();
+		wp_safe_redirect( $referer ? $referer : admin_url() );
 		exit;
 	}
 

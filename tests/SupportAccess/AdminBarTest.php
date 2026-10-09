@@ -82,6 +82,39 @@ class AdminBarTest extends WP_UnitTestCase {
 		$this->assertFalse( Grants::has_current() );
 	}
 
+	/**
+	 * Stops wp_safe_redirect() so the handler's exit is never reached.
+	 *
+	 * @param string $location Where the browser goes.
+	 * @throws RuntimeException Always, with the location as the message.
+	 */
+	public function stop_redirect( $location ) {
+		throw new RuntimeException( $location );
+	}
+
+	public function test_the_lock_link_keeps_the_count_out_of_the_address() {
+		Grants::create( array( 'label' => 'a' ) );
+		Grants::create( array( 'label' => 'b' ) );
+		$_REQUEST['_wpnonce'] = wp_create_nonce( AdminBar::LOCK_ACTION );
+		add_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
+
+		$location = '';
+		try {
+			AdminBar::handle_emergency_lock();
+		} catch ( RuntimeException $stop ) {
+			$location = $stop->getMessage();
+		} finally {
+			remove_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
+			unset( $_REQUEST['_wpnonce'] );
+		}
+
+		$this->assertNotSame( '', $location );
+		$this->assertStringNotContainsString( 'happyaccess_locked', $location );
+		ob_start();
+		\HappyAccess\Admin\Page::lock_notice();
+		$this->assertStringContainsString( 'Emergency lock ended 2 support passes.', ob_get_clean() );
+	}
+
 	public function test_timer_carries_expiry_and_owner_has_no_timer() {
 		$made  = Grants::create( array( 'label' => 'Acme' ) );
 		$grant = Grants::get( $made['id'] );

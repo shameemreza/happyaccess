@@ -444,8 +444,8 @@ final class Notifications {
 				return __( 'Revoked by an administrator', 'happyaccess' );
 			case 'expired':
 				return __( 'Time ran out', 'happyaccess' );
-			case 'lockdown':
-				return __( 'Emergency Lock', 'happyaccess' );
+			case 'emergency_lock':
+				return __( 'Emergency lock', 'happyaccess' );
 			default:
 				return self::event_name( $reason );
 		}

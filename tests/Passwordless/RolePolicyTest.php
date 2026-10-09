@@ -51,12 +51,13 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 		$result = wp_authenticate( 'plsub', 'correct-horse-battery' );
 
 		$this->assertWPError( $result );
-		$this->assertSame( 'happyaccess_email_only', $result->get_error_code() );
+		$this->assertSame( 'incorrect_password', $result->get_error_code() );
 		$this->assertSame(
-			"This account logs in with an email code. Use 'Email me a login code' below.",
+			'Error: The password you entered for the username plsub is incorrect. Lost your password?',
 			html_entity_decode( wp_strip_all_tags( $result->get_error_message() ), ENT_QUOTES )
 		);
-		$this->assertStringContainsString( 'step=request', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'email code', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'step=request', $result->get_error_message() );
 		$this->assertSame( 'either', RolePolicy::for_user( $this->make_user( 'editor', 'pled' ) ) );
 		$this->assertSame( 'email_only', RolePolicy::for_user( $user ) );
 	}
@@ -129,16 +130,37 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 		$this->assertWPError( wp_authenticate( 'pltwo', 'correct-horse-battery' ) );
 	}
 
-	public function test_the_error_link_keeps_a_valid_redirect_and_drops_an_offsite_one() {
-		$this->make_user( 'subscriber', 'plredir' );
+	/**
+	 * Core's own error for a wrong password, with the policy filter off.
+	 *
+	 * @param string $login Username or email typed.
+	 * @return WP_Error
+	 */
+	private function core_wrong_password( $login ) {
+		remove_filter( 'authenticate', array( RolePolicy::class, 'filter_authenticate' ), 30 );
+		$error = wp_authenticate( $login, 'not-the-password' );
+		add_filter( 'authenticate', array( RolePolicy::class, 'filter_authenticate' ), 30, 3 );
+		return $error;
+	}
 
-		$_REQUEST['redirect_to'] = home_url( '/my-account/' );
-		$result                  = wp_authenticate( 'plredir', 'correct-horse-battery' );
-		$this->assertStringContainsString( 'redirect_to=', $result->get_error_message() );
+	public function test_the_refusal_is_core_s_wrong_password_error_so_it_does_not_reveal_the_policy() {
+		$user = $this->make_user( 'subscriber', 'plgeneric' );
 
-		$_REQUEST['redirect_to'] = 'https://evil.example/steal';
-		$result                  = wp_authenticate( 'plredir', 'correct-horse-battery' );
-		$this->assertStringNotContainsString( 'evil.example', $result->get_error_message() );
+		foreach ( array( 'plgeneric', $user->user_email ) as $login ) {
+			$core  = $this->core_wrong_password( $login );
+			$right = wp_authenticate( $login, 'correct-horse-battery' );
+			$wrong = wp_authenticate( $login, 'not-the-password' );
+
+			$this->assertSame( $core->get_error_codes(), $right->get_error_codes(), $login );
+			$this->assertSame( $core->get_error_message(), $right->get_error_message(), $login );
+			$this->assertSame( $core->get_error_message(), $wrong->get_error_message(), $login );
+		}
+	}
+
+	public function test_the_refusal_escapes_the_typed_name() {
+		$error = RolePolicy::filter_authenticate( $this->make_user( 'subscriber', 'plescape' ), 'plescape<b>', 'correct-horse-battery' );
+		$this->assertWPError( $error );
+		$this->assertStringContainsString( 'plescape&lt;b&gt;', $error->get_error_message() );
 	}
 
 	public function test_a_wp_error_or_null_passes_through_unchanged() {
@@ -209,10 +231,10 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 
 		$this->assertWPError( $wrong );
 		$this->assertWPError( $right );
-		$this->assertSame( 'happyaccess_email_only', $wrong->get_error_code() );
+		$this->assertSame( 'incorrect_password', $wrong->get_error_code() );
 		$this->assertSame( $right->get_error_code(), $wrong->get_error_code() );
 		$this->assertSame( $right->get_error_message(), $wrong->get_error_message() );
-		$this->assertSame( array( 'happyaccess_email_only' ), $wrong->get_error_codes() );
+		$this->assertSame( array( 'incorrect_password' ), $wrong->get_error_codes() );
 	}
 
 	public function test_a_wrong_password_by_email_gets_the_same_error_as_the_right_one() {
@@ -223,7 +245,7 @@ class PasswordlessRolePolicyTest extends WP_UnitTestCase {
 
 		$this->assertWPError( $wrong );
 		$this->assertWPError( $right );
-		$this->assertSame( 'happyaccess_email_only', $wrong->get_error_code() );
+		$this->assertSame( 'incorrect_password', $wrong->get_error_code() );
 		$this->assertSame( $right->get_error_code(), $wrong->get_error_code() );
 		$this->assertSame( $right->get_error_message(), $wrong->get_error_message() );
 	}

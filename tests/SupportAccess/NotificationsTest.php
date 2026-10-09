@@ -135,6 +135,23 @@ class NotificationsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Plugin aktiviert: Query Monitor', $last['body'] );
 	}
 
+	public function test_the_ended_email_names_the_emergency_lock_in_the_viewer_s_language() {
+		$made      = Grants::create( array( 'label' => 'Acme' ) );
+		$translate = static function ( $translation, $text, $domain ) {
+			return 'happyaccess' === $domain && 'Emergency lock' === $text ? 'Notfallsperre' : $translation;
+		};
+		Notifications::register();
+		add_filter( 'gettext', $translate, 10, 3 );
+		try {
+			Grants::revoke( $made['id'], 'emergency_lock' );
+		} finally {
+			remove_filter( 'gettext', $translate, 10 );
+		}
+		$sent = $this->sent();
+		$last = end( $sent );
+		$this->assertStringContainsString( 'Notfallsperre', $last['body'] );
+	}
+
 	public function test_the_emails_say_temporary_access() {
 		$made  = Grants::create( array( 'label' => 'Acme' ) );
 		$grant = Grants::get( $made['id'] );
