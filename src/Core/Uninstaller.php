@@ -278,9 +278,6 @@ final class Uninstaller {
 			self::delete_user( $user_id );
 			return;
 		}
-		if ( ! function_exists( 'wpmu_delete_user' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/ms.php';
-		}
 
 		TempUsers::destroy_sessions( $user_id );
 		$targets = array();
@@ -305,6 +302,11 @@ final class Uninstaller {
 			if ( is_wp_error( remove_user_from_blog( $user_id, $blog_id, $target ) ) ) {
 				return;
 			}
+		}
+
+		// Uninstall can run outside wp-admin, where the network user functions aren't loaded.
+		if ( ! function_exists( 'wpmu_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/ms.php';
 		}
 		wpmu_delete_user( $user_id );
 	}

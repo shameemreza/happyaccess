@@ -271,22 +271,24 @@ final class TempUsers {
 	 * @return bool
 	 */
 	public static function remove_user( $user_id, $reassign ) {
-		if ( ! function_exists( 'wp_delete_user' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-		}
-		if ( is_multisite() && ! function_exists( 'wpmu_delete_user' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/ms.php';
-		}
-
 		if ( is_multisite() ) {
 			$other_blogs = array_diff( array_keys( (array) get_blogs_of_user( $user_id ) ), array( get_current_blog_id() ) );
 			// Removing from the blog first reassigns posts and links; wpmu_delete_user alone would delete them.
 			$removed = remove_user_from_blog( $user_id, get_current_blog_id(), $reassign );
 			$deleted = ! is_wp_error( $removed );
 			if ( $deleted && empty( $other_blogs ) ) {
+				// Cron and front-end requests don't load the admin user functions.
+				if ( ! function_exists( 'wpmu_delete_user' ) ) {
+					require_once ABSPATH . 'wp-admin/includes/ms.php';
+				}
 				$deleted = wpmu_delete_user( $user_id );
 			}
 			return (bool) $deleted;
+		}
+
+		// Cron and front-end requests don't load the admin user functions.
+		if ( ! function_exists( 'wp_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
 		}
 		return (bool) wp_delete_user( $user_id, $reassign );
 	}
