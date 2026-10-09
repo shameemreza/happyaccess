@@ -48,6 +48,12 @@ For teams you fully trust, like your host or your developer. They can do anythin
 
 A few things stay off even here. The plugin and theme file editors and application passwords are blocked, and the account can't change HappyAccess settings or turn HappyAccess off. When a Full admin pass creates or changes an administrator account, you get an email and the Activity tab flags it.
 
+### It's your live site
+
+A pass logs them in to your live site, not a copy, so what they change is real. Your other plugins run as usual while they work.
+
+On Protected admin and Custom access passes, HappyAccess refuses role permission changes that a plugin tries on a page they load, unless it happens during a plugin activation or update. The Activity tab logs each refusal as "Role change blocked". On a Full admin pass, role changes go through and the Activity tab lists them.
+
 ## How long it lasts
 
 The form starts at your Default pass length setting, 3 days unless you changed it. Pick 1 day, 3 days or 7 days. Custom opens a date and time picker for anything from 1 hour to 30 days ahead. Times use your site's timezone, and the form names the timezone when it differs from your browser's.

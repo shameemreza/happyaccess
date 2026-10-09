@@ -51,7 +51,7 @@ The rest of the Settings tab waits for Save changes.
 
 - **Wrong codes before a pause:** how many wrong codes an IP address can try before it has to wait. The choices are 5 tries then 30 minutes (the default), 3 tries then 30 minutes, and 10 tries then 15 minutes.
 - **Keep activity for:** 30 days (the default), 90 days or 1 year. Older log entries are deleted once an hour.
-- **Visitor IP comes from:** leave it on Direct connection unless your site sits behind a proxy. Pick Cloudflare only when your server accepts traffic from Cloudflare alone.
+- **Visitor IP comes from:** leave it on Direct connection unless your site sits behind a proxy. Behind Cloudflare, pick Cloudflare. Behind another proxy or load balancer, pick the header it sets, X-Forwarded-For or X-Real-IP. Pick any of these only if your server accepts traffic from that proxy alone, or visitors can fake their IP address. HappyAccess reads X-Forwarded-For from the right, so the nearest public address wins.
 - **Default pass length:** how long a pass lasts when nothing else sets it, for example `wp happyaccess grant` without `--expires`. The form on the Temporary access tab starts at it too: on 1 day, 3 days or 7 days when it matches one, or on Custom with that length.
 - **Shorten IP addresses in the log:** stores 203.0.113.0 instead of 203.0.113.42, and cuts IPv6 addresses the same way.
 - **Keep a log:** turning it off also stops the record of what support people change.

@@ -128,6 +128,12 @@ Their sessions end, they're logged out, and their temporary account is removed. 
 
 Yes. End or suspend any pass from the Temporary access tab. The Emergency lock button in the admin bar ends every pass at once.
 
+= Does a support pass work on a copy of my site? =
+
+No. A pass logs them in to your live site, and what they change is real. The access level sets what they can do, and the Activity tab shows what they did.
+
+Your other plugins run as usual while they work. On Protected admin and Custom access passes, if a plugin tries to change role permissions on a page they load, outside a plugin activation or update, HappyAccess refuses the change and logs it as "Role change blocked".
+
 = Is a login link the same as a magic link? =
 
 Yes. A login link (often called a magic link) logs someone in without a password. HappyAccess login links open a confirm screen first and only work once, so a link scanner in Outlook, Gmail or Slack can't use them up before the person does.
@@ -140,6 +146,10 @@ Turn on Passwordless login, and customers see "Email me a login code instead" un
 
 The block checkout doesn't let plugins add to its sign-in prompt yet. Add the HappyAccess Login block to your checkout page instead. The classic checkout and My Account get the option on their own.
 
+= Why does the login shortcode show as plain text on my page? =
+
+Passwordless login is off. The `[happyaccess_login]` shortcode works only while it's on. Turn it back on in Settings, or take the shortcode off your pages. The HappyAccess Login block shows nothing while Passwordless login is off.
+
 = Which authenticator apps work with two-step login? =
 
 Any app that supports standard time-based one-time codes (TOTP, RFC 6238). That includes Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden and most password managers.
@@ -147,6 +157,14 @@ Any app that supports standard time-based one-time codes (TOTP, RFC 6238). That 
 = Can I require two-factor authentication for administrators only? =
 
 Yes. In Login and security, set each role to Off, Optional or Required. For example, Required for Administrator and Shop manager, and Optional for everyone else. Required roles get a grace period to set it up.
+
+= Do customers who sign up at checkout have to set up two-step login right away? =
+
+No. WooCommerce logs a new account in as soon as it's made, at sign-up on My Account or at checkout, without the login form. If the Customer role is Required, the setup screen and the grace period start at their next login.
+
+= Does two-step login work with custom login forms? =
+
+Yes, when the form logs people in through WordPress's own sign-in function, `wp_signon()`. That covers the WordPress login page, WooCommerce and any other login form built on it. A form that skips it can opt in with the `happyaccess_twostep_login_request` filter.
 
 = Someone is locked out of two-step login. What do I do? =
 
@@ -158,11 +176,17 @@ Pick whichever fits:
 
 = Can I make a role log in only with an email code? =
 
-Yes, in Login and security. If email stops working on your site, add `define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );` to wp-config.php to get back in with a password.
+Yes, in Login and security. A password login for that role gets the same message as a wrong password, so the message never shows which accounts use email codes. If email stops working on your site, add `define( 'HAPPYACCESS_ALLOW_PASSWORD_LOGIN', true );` to wp-config.php to get back in with a password.
 
 = I changed the security keys in wp-config.php. Why do people need to set up their app again? =
 
 Authenticator secrets are encrypted with your site's keys. New keys mean the old secrets can't be read, so app codes stop working. Two-step login stays on, and people can still log in with an email code or a backup code, then set up the app again from their profile.
+
+The same happens when the HappyAccess site key is lost. It's the `happyaccess_secret` option in the database, and a site move or a database cleanup plugin can leave it out. HappyAccess then makes a new key, and current passes and codes already sent stop working too. Copy the whole options table when you move a site.
+
+= Why did I get a new device alert from a browser I always use? =
+
+HappyAccess knows a browser by a cookie with a random ID, and it stores that ID as a hash made with your site's keys. Clearing cookies makes the browser look new. So do new security keys in wp-config.php or a lost HappyAccess site key: every browser looks new at its next login, and each watched person gets an alert for it. Each person gets at most 3 alerts an hour, and after that login the browser is known again.
 
 = Does it work with WPS Hide Login and other hidden login URL plugins? =
 
@@ -171,6 +195,8 @@ Yes. Every HappyAccess screen is a step of the normal WordPress login page, so a
 = Does it work with Wordfence and other security plugins? =
 
 Yes. HappyAccess codes don't count as wrong passwords, so a brute force lockout won't lock anyone out over them. If Wordfence Login Security, Two Factor, WP 2FA or Kadence Security already adds two-step login to an account, HappyAccess skips that account.
+
+Accounts that the Two Factor plugin protects get no new device alerts. Two Factor finishes the login on its own screen, so HappyAccess doesn't see it.
 
 One thing to know: plugins that add their own checks to the password login, like user approval or country blocks, don't run on code and link logins.
 
@@ -253,10 +279,12 @@ HappyAccess is rebuilt from the ground up in this release.
 * Security: codes and keys are stored as hashes, with rate limits per IP address and per account.
 * Security: the access code is now 8 digits.
 * Changed: temporary users' posts move to your account when access ends. They're never deleted.
+* Changed: HappyAccess needs WordPress 6.7 or later. 1.0.6 needed 6.0.
 
 **Upgrading from 1.0.x:**
 
 * Your active access codes keep working on the new code screen, for up to 7 days from the upgrade.
+* Login links and share links made with 1.0.x stop working at the upgrade. Send the access code instead, or make a new pass.
 * There's no way back to 1.0.6 after upgrading, because the database changes.
 
 = 1.0.6 =
@@ -268,7 +296,7 @@ HappyAccess is rebuilt from the ground up in this release.
 == Upgrade Notice ==
 
 = 1.1.0 =
-A full rebuild with passwordless login, two-step login and new device alerts. Active access codes keep working for up to 7 days. You can't go back to 1.0.6 after upgrading.
+A full rebuild with passwordless login, two-step login and new device alerts. Needs WordPress 6.7 or later. Active access codes keep working for up to 7 days, but 1.0.6 login links and share links stop. You can't go back to 1.0.6 after upgrading.
 
 == Credits ==
 

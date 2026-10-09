@@ -18,10 +18,12 @@ HappyAccess is rebuilt from the ground up in this release.
 - Security: codes and keys are stored as hashes, with rate limits per IP and per account.
 - Security: the access code is now 8 digits.
 - Changed: Temporary users' posts move to your account when access ends. They're never deleted.
+- Changed: HappyAccess needs WordPress 6.7 or later. 1.0.6 needed 6.0.
 
 ### Upgrading from 1.0.x
 
 - Your active access codes keep working on the new code screen, for up to 7 days from the upgrade.
+- Login links and share links made with 1.0.x stop working at the upgrade. Send the access code instead, or make a new pass.
 - There's no way back to 1.0.6 after upgrading, because the database changes.
 
 ## 1.0.6

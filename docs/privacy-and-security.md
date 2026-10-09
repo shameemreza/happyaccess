@@ -81,16 +81,18 @@ Wrong codes are limited per IP address, per account and across the whole site.
 
 - **Per IP address:** every code screen follows Settings > Wrong codes before a pause. The default is 5 tries, then a 30-minute pause.
 - **Per code:** an email code is cancelled after 5 wrong tries.
-- **Per account, for two-step login:** after 10 wrong codes in an hour, the account takes no codes for an hour. Each pause in the same day lasts twice as long, up to 16 hours, and the person gets an email. Resetting the password ends it. On a multisite network the 10 are counted across every site, since one login works on all of them.
+- **Per account, for two-step login:** after 10 wrong codes in an hour, the account takes no codes for an hour. Each pause in the same day lasts twice as long, up to 16 hours, and the person gets an email. Resetting the password ends it. On a multisite network the 10 are counted across every site, since one login works on all of them. That needs HappyAccess active on the main site. Without it, each site counts its own.
 - **Email code requests:** 3 per account every 15 minutes, and 10 per IP address an hour.
 - **Across the site:** after 30 access code tries in an hour, the access code screen pauses for an hour. After 100 wrong email codes in an hour, email code logins pause for an hour. After 100 wrong two-step codes in an hour, HappyAccess only sends a warning, so one account can't pause two-step login for everyone. Each of these emails the site's email address.
 
 HappyAccess codes don't count as wrong passwords, so a brute force plugin won't lock anyone out over them.
 
+The limit of 3 email code requests per account counts requests from anyone. Someone who knows an email address can use up its 3 requests, and that person then gets no code for up to 15 minutes. The screen still shows its usual answer, so it gives nothing away. They can log in with their password meanwhile, unless their role is Email code only.
+
 ## Other protections
 
 - **Login links open a confirm screen first.** Only the button on it logs anyone in, so a link scanner in Outlook, Gmail or Slack can't use the link up.
-- **The passwordless screens give the same answer** for an email with an account and one without.
+- **The passwordless screens give the same answer** for an email with an account and one without. HappyAccess sends the email at the end of the request. With PHP-FPM or LiteSpeed, the answer reaches the browser before that, so the response takes the same time either way. On other servers, such as Apache with mod_php, the answer waits for the email, so a request for a real account can take a little longer. Someone who times many requests could use that to guess which accounts exist. Ask your host about PHP-FPM if that matters for your site.
 - **Temporary accounts are limited by level,** can't touch your account, and can't change or switch off HappyAccess. See [access levels](temporary-access.md#access-levels).
 - **The admin routes** only let in people who can manage the site's options, and never a temporary account.
 

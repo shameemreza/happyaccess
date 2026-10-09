@@ -36,6 +36,8 @@ Under "How each role uses two-step login", pick one choice for each role:
 
 When a person has several roles, the strictest one wins. For example, Required for Administrator and Shop manager, and Optional for everyone else.
 
+WooCommerce logs a new account in as soon as it's made, at sign-up on My Account or at checkout, without the login form. So for a customer in a required role, the setup screen and the grace period start at their next login.
+
 ## The grace period
 
 Required roles get a grace period to set it up. Pick 3 logins (the default), 5 logins, 7 days or 14 days.
@@ -78,6 +80,12 @@ An administrator can turn off two-step login for someone who lost their phone or
 
 They get an email, and they can set it up again from their profile or My Account. [Locked out](locked-out.md) has every other way back in.
 
+## Which logins get the second step
+
+Every login through WordPress's own sign-in function, `wp_signon()`, gets the second step. That covers the WordPress login page, WooCommerce's login form and any other login form built on it. In a browser request, code that only checks a password with `wp_authenticate()`, for example before a sensitive change, is left alone.
+
+A login form that checks the password itself and then sets the login cookie skips the step. Its developer can send it to the step with the [`happyaccess_twostep_login_request`](developers.md#happyaccess_twostep_login_request) filter.
+
 ## XML-RPC
 
 "Block XML-RPC login for accounts with two-step login" is on by default. XML-RPC can't show a second step, so a password alone would get in that way. With it on, those accounts are told to use an application password instead.
@@ -98,6 +106,8 @@ A few details:
 - **The first login is quiet:** the first login after alerts start for someone only remembers the browser.
 - **A limit on emails:** at most 3 alerts an hour per person.
 - **20 browsers each:** HappyAccess remembers up to 20 browsers per person and forgets the one seen longest ago.
+- **New keys:** after new security keys in wp-config.php or a lost HappyAccess site key, every browser looks new at its next login, so each person gets an alert for it, at most 3 an hour.
+- **The Two Factor plugin:** accounts it protects get no alerts. Two Factor finishes the login on its own screen, so HappyAccess doesn't see it.
 
 A browser is known by a cookie with a random ID. Clearing cookies, or a browser that blocks them, makes the next login look new. See [cookies](privacy-and-security.md#cookies).
 

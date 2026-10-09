@@ -119,3 +119,27 @@ Two-step login stays on, but four things change:
 - **New device alerts fire once:** every browser looks new at its next login.
 
 WordPress also logs everyone out when the keys change.
+
+## The HappyAccess site key was lost
+
+HappyAccess also keeps a random key of its own, the `happyaccess_secret` option in the database. A site move that leaves some options behind, or a database cleanup plugin, can remove it. HappyAccess then makes a new key, and the same four things happen as with [new security keys](#you-changed-the-security-keys-in-wp-configphp). WordPress doesn't log anyone out this time.
+
+To keep it:
+
+- Copy the whole options table when you move a site.
+- Tell cleanup plugins to keep options that start with `happyaccess_`.
+
+If you still have a backup with the old key, put the old value back. Passes, codes and app setups made with the new key stop working then.
+
+## HappyAccess couldn't finish updating
+
+After a plugin update, HappyAccess updates its database tables. Until that's done, logins with support codes, email codes and two-step login wait. Their screens say "Login is updating" or "Temporary access is getting ready".
+
+A run that fails is tried again 15 minutes later. When two runs in a row fail, people who manage HappyAccess see a notice in the dashboard that starts with "HappyAccess couldn't finish updating." It names the reason:
+
+- **A table or a column is missing:** the database user can't create or change tables. Ask your host to give it those permissions.
+- **The site key couldn't be saved:** HappyAccess can't write the `happyaccess_secret` option. Check that the options table takes writes.
+- **A database write failed:** check the database error log, or ask your host.
+- **The plain codes from version 1.0 couldn't be removed:** HappyAccess can't drop or empty its old 1.0 tables. Check that the database user can drop tables.
+
+Once the cause is fixed, the next run finishes and the notice goes away on its own.
