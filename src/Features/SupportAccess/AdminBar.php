@@ -76,31 +76,15 @@ final class AdminBar {
 			return;
 		}
 
-		wp_enqueue_script( 'happyaccess-admin-bar', plugins_url( 'assets/admin-bar.js', HAPPYACCESS_PLUGIN_FILE ), array(), HAPPYACCESS_VERSION, true );
+		wp_enqueue_script( 'happyaccess-admin-bar', plugins_url( 'assets/admin-bar.js', HAPPYACCESS_PLUGIN_FILE ), array( 'wp-i18n' ), HAPPYACCESS_VERSION, true );
+		// The countdown builds "5 mins" or "2 hours" with _n() from wp-i18n, so each language gets its own plural rules.
+		wp_set_script_translations( 'happyaccess-admin-bar', 'happyaccess', HAPPYACCESS_PLUGIN_DIR . 'languages' );
 		$strings = array(
 			'confirm' => __( 'Lock all temporary access now? This ends every support session and signs support out.', 'happyaccess' ),
 			/* translators: %s: time left, for example "2 hours". */
 			'ends'    => __( 'Temporary access ends in %s', 'happyaccess' ),
 			'ended'   => __( 'Temporary access has ended', 'happyaccess' ),
 			'less'    => __( 'less than a minute', 'happyaccess' ),
-			'min'     => array(
-				/* translators: %d: number of minutes, singular. */
-				__( '%d min', 'happyaccess' ),
-				/* translators: %d: number of minutes, plural. */
-				__( '%d mins', 'happyaccess' ),
-			),
-			'hour'    => array(
-				/* translators: %d: number of hours, singular. */
-				__( '%d hour', 'happyaccess' ),
-				/* translators: %d: number of hours, plural. */
-				__( '%d hours', 'happyaccess' ),
-			),
-			'day'     => array(
-				/* translators: %d: number of days, singular. */
-				__( '%d day', 'happyaccess' ),
-				/* translators: %d: number of days, plural. */
-				__( '%d days', 'happyaccess' ),
-			),
 		);
 		wp_localize_script( 'happyaccess-admin-bar', 'happyaccessBar', $strings );
 	}

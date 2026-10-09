@@ -285,7 +285,7 @@ final class Page {
 				'name' => $user->display_name,
 			),
 			'timezone'       => wp_timezone_string(),
-			'features'       => (array) Settings::get( 'features' ),
+			'features'       => self::features(),
 			'needsSetup'     => SettingsController::needs_setup(),
 			'menus'          => MenuGuard::menu_snapshot(),
 			'maxDays'        => self::MAX_DAYS,
@@ -298,6 +298,21 @@ final class Page {
 			'otherTwoStep'   => OtherTwoFactor::active_plugins(),
 			'twoStepNetwork' => self::two_step_network(),
 		);
+	}
+
+	/**
+	 * The feature switches that apply on this site. On a subsite of a
+	 * network-active install the main site's two-step switch applies, so the
+	 * Login and security tab shows what people really get.
+	 *
+	 * @return array<string,bool>
+	 */
+	private static function features() {
+		$features = array();
+		foreach ( Features::ALL as $feature ) {
+			$features[ $feature ] = Features::is_enabled( $feature );
+		}
+		return $features;
 	}
 
 	/**

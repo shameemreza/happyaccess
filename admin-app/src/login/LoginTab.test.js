@@ -601,6 +601,37 @@ describe( 'Login and security side panel', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( "follows the main site's two-step switch on a subsite, with the network note in place of the form", async () => {
+		// The subsite's own switch is off; the boot data carries the main site's.
+		mockServer(
+			settingsFixture( {
+				passwordless: passwordless(),
+				features: {
+					support_access: true,
+					passwordless: true,
+					two_step: false,
+				},
+			} )
+		);
+		await renderTab( boot( { ...BOTH_ON, twoStepNetwork: 'main' } ) );
+
+		const section = (
+			await screen.findByRole( 'heading', { name: 'Two-step login' } )
+		).closest( 'section' );
+		expect( section ).toHaveTextContent(
+			"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site."
+		);
+		expect(
+			within( section ).queryByRole( 'button', { name: 'Save changes' } )
+		).not.toBeInTheDocument();
+		expect( drawing() ).toHaveTextContent( 'Authenticator app code' );
+		expect(
+			await screen.findByRole( 'region', {
+				name: 'Who has two-step login',
+			} )
+		).toBeInTheDocument();
+	} );
+
 	it( 'leaves the email code link out while passwordless login is off', async () => {
 		render(
 			<AnnounceProvider>

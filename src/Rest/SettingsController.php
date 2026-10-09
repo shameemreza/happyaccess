@@ -270,6 +270,14 @@ final class SettingsController {
 		}
 		unset( $changes['support']['consent_given_at'], $changes['support']['consent_user_id'] );
 
+		if ( self::follows_main_site() && self::has_main_site_keys( $changes ) ) {
+			return new \WP_Error(
+				'happyaccess_two_step_network',
+				__( "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.", 'happyaccess' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$turns_on = ! Features::is_enabled( 'support_access' )
 			&& isset( $changes['features'] )
 			&& array_key_exists( 'support_access', $changes['features'] )
@@ -293,6 +301,32 @@ final class SettingsController {
 		}
 
 		return rest_ensure_response( array_merge( self::present(), $extra ) );
+	}
+
+	/**
+	 * Whether this site reads its two-step settings from the main site:
+	 * a subsite while HappyAccess is network active.
+	 *
+	 * @return bool
+	 */
+	private static function follows_main_site() {
+		return Settings::network_active() && ! is_main_site();
+	}
+
+	/**
+	 * Whether a save names a setting the main site decides for the network.
+	 *
+	 * @param array $changes Nested changes.
+	 * @return bool
+	 */
+	private static function has_main_site_keys( array $changes ) {
+		foreach ( Settings::MAIN_SITE_PATHS as $path ) {
+			list( $group, $key ) = explode( '.', $path );
+			if ( isset( $changes[ $group ] ) && is_array( $changes[ $group ] ) && array_key_exists( $key, $changes[ $group ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

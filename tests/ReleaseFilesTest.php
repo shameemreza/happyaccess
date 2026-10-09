@@ -56,6 +56,11 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 		$this->assertSame( $header['version'], HAPPYACCESS_VERSION, 'tests/load-plugin.php defines another version' );
 	}
 
+	public function test_the_header_describes_the_three_features_in_plain_words() {
+		$header = get_file_data( $this->root() . 'happyaccess.php', array( 'description' => 'Description' ) );
+		$this->assertSame( 'Give support temporary access without sharing a password, let people log in with an email code, and add two-step login.', $header['description'] );
+	}
+
 	public function test_tested_up_to_is_7_1_in_the_header_and_the_readme() {
 		$header = get_file_data( $this->root() . 'happyaccess.php', array( 'tested' => 'Tested up to' ) );
 

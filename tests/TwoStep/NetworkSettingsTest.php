@@ -13,6 +13,7 @@ use HappyAccess\Core\Installer;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\TwoStep\Challenge;
 use HappyAccess\Features\TwoStep\Enforcement;
+use HappyAccess\Rest\SettingsController;
 
 /**
  * @group ms-required
@@ -112,6 +113,73 @@ class NetworkSettingsTest extends WP_UnitTestCase {
 
 		restore_current_blog();
 		$this->assertSame( '', Page::boot_data()['twoStepNetwork'], 'The main site owns the settings.' );
+		switch_to_blog( $this->site );
+	}
+
+	public function test_the_admin_boot_data_has_the_main_sites_two_step_switch_on_a_subsite() {
+		wp_set_current_user( $this->admin->ID );
+		$this->assertFalse( Page::boot_data()['features']['two_step'], 'Without network activation the site has its own switch.' );
+
+		$this->activate_network_wide();
+		$this->assertTrue( Page::boot_data()['features']['two_step'], 'The main site turned it on for the network.' );
+
+		restore_current_blog();
+		Features::set( 'two_step', false );
+		switch_to_blog( $this->site );
+		Features::set( 'two_step', true );
+		$this->assertFalse( Page::boot_data()['features']['two_step'], "The subsite's own switch doesn't apply." );
+	}
+
+	/**
+	 * A settings save on this site.
+	 *
+	 * @param array $params Body params.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function save( array $params ) {
+		$request = new WP_REST_Request( 'POST', '/happyaccess/v1/settings' );
+		foreach ( $params as $name => $value ) {
+			$request->set_param( $name, $value );
+		}
+		return SettingsController::save_settings( $request );
+	}
+
+	public function test_the_settings_route_refuses_two_step_keys_on_a_subsite_that_follows_the_main_site() {
+		wp_set_current_user( $this->admin->ID );
+		$this->activate_network_wide();
+		$before = get_option( Settings::OPTION );
+
+		foreach ( array(
+			array( 'features' => array( 'two_step' => true ) ),
+			array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ),
+			array( 'two_step' => array( 'grace_days' => 9 ) ),
+			array(
+				'privacy'  => array( 'retention_days' => 60 ),
+				'two_step' => array( 'block_xmlrpc' => true ),
+			),
+		) as $params ) {
+			$result = $this->save( $params );
+			$this->assertWPError( $result, wp_json_encode( $params ) );
+			$this->assertSame( 'happyaccess_two_step_network', $result->get_error_code() );
+			$this->assertSame( 400, $result->get_error_data()['status'] );
+			$this->assertSame( "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.", $result->get_error_message() );
+		}
+		$this->assertSame( $before, get_option( Settings::OPTION ), 'Nothing was saved, not even the other keys.' );
+
+		$saved = $this->save( array( 'privacy' => array( 'retention_days' => 60 ) ) );
+		$this->assertNotWPError( $saved, 'Other settings still save.' );
+		$this->assertSame( 60, Settings::get( 'privacy.retention_days' ) );
+	}
+
+	public function test_the_main_site_and_a_site_without_network_activation_still_save_two_step_keys() {
+		wp_set_current_user( $this->admin->ID );
+		$this->assertNotWPError( $this->save( array( 'two_step' => array( 'grace_days' => 9 ) ) ) );
+		$this->assertSame( 9, Settings::get( 'two_step.grace_days' ) );
+
+		$this->activate_network_wide();
+		restore_current_blog();
+		$this->assertNotWPError( $this->save( array( 'two_step' => array( 'grace_days' => 4 ) ) ) );
+		$this->assertSame( 4, Settings::get( 'two_step.grace_days' ) );
 		switch_to_blog( $this->site );
 	}
 }

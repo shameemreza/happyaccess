@@ -4,9 +4,25 @@
 	if ( ! s ) {
 		return;
 	}
+	// wp-i18n picks the plural form by the rules of the site language.
+	var _n = window.wp && window.wp.i18n ? window.wp.i18n._n : null;
+	var units = {
+		min: function( n ) {
+			/* translators: %d: number of minutes. */
+			return _n( '%d min', '%d mins', n, 'happyaccess' );
+		},
+		hour: function( n ) {
+			/* translators: %d: number of hours. */
+			return _n( '%d hour', '%d hours', n, 'happyaccess' );
+		},
+		day: function( n ) {
+			/* translators: %d: number of days. */
+			return _n( '%d day', '%d days', n, 'happyaccess' );
+		},
+	};
 
-	function unit( n, pair ) {
-		return pair[ n === 1 ? 0 : 1 ].replace( '%d', n );
+	function unit( n, kind ) {
+		return units[ kind ]( n ).replace( '%d', n );
 	}
 
 	// Same rules as AdminBar::time_left(): two units under three days or three
@@ -17,23 +33,23 @@
 			return s.less;
 		}
 		if ( secs < 3600 ) {
-			return unit( Math.floor( secs / 60 ), s.min );
+			return unit( Math.floor( secs / 60 ), 'min' );
 		}
 		if ( secs < 86400 ) {
 			hours = Math.floor( secs / 3600 );
 			if ( hours < 3 ) {
 				mins = Math.floor( ( secs % 3600 ) / 60 );
-				return mins > 0 ? unit( hours, s.hour ) + ' ' + unit( mins, s.min ) : unit( hours, s.hour );
+				return mins > 0 ? unit( hours, 'hour' ) + ' ' + unit( mins, 'min' ) : unit( hours, 'hour' );
 			}
 			hours = Math.round( secs / 3600 );
-			return hours >= 24 ? unit( 1, s.day ) : unit( hours, s.hour );
+			return hours >= 24 ? unit( 1, 'day' ) : unit( hours, 'hour' );
 		}
 		days = Math.floor( secs / 86400 );
 		if ( days < 3 ) {
 			hours = Math.floor( ( secs % 86400 ) / 3600 );
-			return hours > 0 ? unit( days, s.day ) + ' ' + unit( hours, s.hour ) : unit( days, s.day );
+			return hours > 0 ? unit( days, 'day' ) + ' ' + unit( hours, 'hour' ) : unit( days, 'day' );
 		}
-		return unit( Math.round( secs / 86400 ), s.day );
+		return unit( Math.round( secs / 86400 ), 'day' );
 	}
 
 	function tick() {
@@ -54,7 +70,7 @@
 				}
 			} );
 		}
-		if ( document.getElementById( 'wp-admin-bar-happyaccess-timer' ) ) {
+		if ( _n && document.getElementById( 'wp-admin-bar-happyaccess-timer' ) ) {
 			tick();
 			setInterval( tick, 30000 );
 		}

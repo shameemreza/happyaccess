@@ -197,6 +197,41 @@ describe( 'App shell', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( "keeps the main site's two-step switch on a subsite after a save", async () => {
+		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
+		const user = userEvent.setup();
+		// The subsite's own switch is off; the main site's is on.
+		settingsOnServer = {
+			...settingsOnServer,
+			features: { ...settingsOnServer.features, two_step: false },
+		};
+		render(
+			<App
+				boot={ boot( {
+					loginReady: true,
+					twoStepNetwork: 'main',
+					features: {
+						support_access: true,
+						passwordless: false,
+						two_step: true,
+					},
+				} ) }
+			/>
+		);
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+		expect( tabNames() ).toContain( 'Login and security' );
+
+		const passwordless = screen.getByRole( 'switch', {
+			name: 'Passwordless login',
+		} );
+		await user.click( passwordless );
+		await waitFor( () => expect( passwordless ).toBeChecked() );
+		await user.click( passwordless );
+		await waitFor( () => expect( passwordless ).not.toBeChecked() );
+
+		expect( tabNames() ).toContain( 'Login and security' );
+	} );
+
 	it( 'shows the Login tab when Passwordless is switched on in Settings, and hides it when it is switched off', async () => {
 		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
 		const user = userEvent.setup();

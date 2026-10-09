@@ -118,13 +118,25 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 	const openSettings = useCallback( () => select( 'settings' ), [ select ] );
 	const onLocked = useCallback( () => setLockCount( ( n ) => n + 1 ), [] );
 
+	// On a subsite that follows the main site, a save answers with the
+	// subsite's own two-step switch, which doesn't apply, so the main site's
+	// value from the boot data stays.
+	const sharedTwoStep = 'main' === boot.twoStepNetwork;
+	const bootTwoStep = !! boot.features?.two_step;
+
 	// Keeps the boot data the page printed in step, for anything that reads it.
-	const updateFeatures = useCallback( ( next ) => {
-		setFeatures( { ...next } );
-		const printed = window.happyaccessBoot || {};
-		printed.features = Object.assign( printed.features || {}, next );
-		window.happyaccessBoot = printed;
-	}, [] );
+	const updateFeatures = useCallback(
+		( saved ) => {
+			const next = sharedTwoStep
+				? { ...saved, two_step: bootTwoStep }
+				: { ...saved };
+			setFeatures( next );
+			const printed = window.happyaccessBoot || {};
+			printed.features = Object.assign( printed.features || {}, next );
+			window.happyaccessBoot = printed;
+		},
+		[ sharedTwoStep, bootTwoStep ]
+	);
 
 	const finishSetup = useCallback(
 		( saved ) => {

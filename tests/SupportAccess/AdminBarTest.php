@@ -51,6 +51,30 @@ class AdminBarTest extends WP_UnitTestCase {
 		$this->assertNull( $bar->get_node( 'happyaccess-lock' ) );
 	}
 
+	public function test_the_countdown_script_picks_plurals_through_wp_i18n() {
+		$GLOBALS['wp_scripts'] = null;
+		$made                  = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( TempUsers::get_or_create( Grants::get( $made['id'] ) ) );
+		add_filter( 'show_admin_bar', '__return_true' );
+
+		AdminBar::enqueue();
+
+		$script = wp_scripts()->registered['happyaccess-admin-bar'];
+		$this->assertContains( 'wp-i18n', $script->deps );
+		$this->assertSame( 'happyaccess', $script->textdomain );
+		$this->assertSame( HAPPYACCESS_PLUGIN_DIR . 'languages', $script->translations_path );
+		$data = (string) wp_scripts()->get_data( 'happyaccess-admin-bar', 'data' );
+		$this->assertStringNotContainsString( '%d mins', $data, 'No singular and plural pair picked by the English rule.' );
+		$this->assertStringContainsString( 'less than a minute', $data );
+
+		$js = (string) file_get_contents( HAPPYACCESS_PLUGIN_DIR . 'assets/admin-bar.js' );
+		foreach ( array( "_n( '%d min', '%d mins', n, 'happyaccess' )", "_n( '%d hour', '%d hours', n, 'happyaccess' )", "_n( '%d day', '%d days', n, 'happyaccess' )" ) as $call ) {
+			$this->assertStringContainsString( $call, $js );
+		}
+		$this->assertStringNotContainsString( 'n === 1', $js );
+		$GLOBALS['wp_scripts'] = null;
+	}
+
 	public function test_emergency_lock_revokes_everything() {
 		Grants::create( array( 'label' => 'a' ) );
 		Grants::create( array( 'label' => 'b' ) );
