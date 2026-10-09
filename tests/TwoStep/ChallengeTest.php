@@ -11,6 +11,7 @@ use HappyAccess\Core\Codes;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\RateLimiter;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\LoginSteps;
 use HappyAccess\Features\TwoStep\BackupCodes;
@@ -474,6 +475,69 @@ class ChallengeTest extends WP_UnitTestCase {
 		EmailMethod::flush_queue();
 		$this->assertSame( 'redirect', $res['type'] );
 		$this->assertCount( 1, $this->mails );
+	}
+
+	public function test_the_code_step_goes_on_when_google_cannot_be_reached_and_logs_it() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ), 'app', $this->captcha_field( 'twostep' ) );
+
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count, 'A right code logs in while Google is down.' );
+		$rows = AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'twostep', $rows[0]['meta']['step'] );
+	}
+
+	public function test_a_wrong_code_is_still_refused_when_google_cannot_be_reached() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+
+		$res = $this->post_code( $this->pending_cookie(), '000000', 'app', $this->captcha_field( 'twostep' ) );
+
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertSame( array( 'happyaccess_invalid_code' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, $this->wp_login_count );
+	}
+
+	public function test_a_missing_token_is_still_refused_on_the_code_step_when_google_cannot_be_reached() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$made = $this->app_user();
+		$this->password_login( $made['user'] );
+
+		$res = $this->post_code( $this->pending_cookie(), $this->app_code( $made['secret'] ) );
+
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, $this->wp_login_count );
+	}
+
+	public function test_sending_an_email_code_goes_on_when_google_cannot_be_reached() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$made = $this->app_user();
+		UserState::enable_email( $made['user']->ID );
+		$this->password_login( $made['user'] );
+		$cookie = $this->pending_cookie();
+		EmailMethod::flush_queue();
+		$send = array(
+			'method'   => 'email',
+			'send'     => '1',
+			'_wpnonce' => wp_create_nonce( 'happyaccess_twostep_send' ),
+			Recaptcha::FIELD => 'any-token',
+		);
+
+		$res = Challenge::handle( 'POST', array(), $send, array( Challenge::COOKIE => $cookie ) );
+		EmailMethod::flush_queue();
+
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertCount( 1, $this->mails );
+		$this->assertCount( 1, AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'] );
 	}
 
 	public function test_the_code_step_skips_the_check_while_recaptcha_is_off() {

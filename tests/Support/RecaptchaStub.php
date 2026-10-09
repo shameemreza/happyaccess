@@ -50,6 +50,24 @@ trait HappyAccess_Test_Recaptcha {
 	}
 
 	/**
+	 * Makes Google unreachable for the rest of the test: the request fails
+	 * before it is counted.
+	 *
+	 * @return void
+	 */
+	protected function google_is_down() {
+		delete_transient( Recaptcha::UNAVAILABLE_TRANSIENT );
+		add_filter(
+			'pre_http_request',
+			static function ( $preempt, $args, $url ) {
+				return Recaptcha::VERIFY_URL === $url ? new WP_Error( 'http_request_failed', 'cURL error 28: timed out' ) : $preempt;
+			},
+			5,
+			3
+		);
+	}
+
+	/**
 	 * The token that passes for an action.
 	 *
 	 * @param string $action Action name.
@@ -68,7 +86,7 @@ trait HappyAccess_Test_Recaptcha {
 	 * @return false|array
 	 */
 	public function answer_recaptcha( $preempt, $args, $url ) {
-		if ( Recaptcha::VERIFY_URL !== $url ) {
+		if ( false !== $preempt || Recaptcha::VERIFY_URL !== $url ) {
 			return $preempt;
 		}
 		++$this->captcha_calls;

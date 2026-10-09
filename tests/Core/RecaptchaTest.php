@@ -200,6 +200,59 @@ class RecaptchaTest extends WP_UnitTestCase {
 		$this->assertCount( 2, $this->log_rows( 'captcha_unavailable' ), 'The next hour logs again.' );
 	}
 
+	public function test_the_two_step_steps_go_on_when_google_cannot_be_reached_and_log_it() {
+		$this->turn_on();
+		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
+
+		$this->assertTrue( Recaptcha::verify( 'good-token', 'twostep' ) );
+		$this->assertTrue( Recaptcha::verify( 'good-token', 'twostep_setup' ) );
+
+		$rows = $this->log_rows( 'captcha_unavailable' );
+		$this->assertCount( 1, $rows, 'Still one row an hour.' );
+		$this->assertSame( 'twostep', $rows[0]['meta']['step'] );
+		$this->assertSame( 'allowed', $rows[0]['meta']['outcome'] );
+	}
+
+	public function test_the_public_steps_log_that_they_were_refused() {
+		$this->turn_on();
+		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
+
+		foreach ( array( 'code', 'link', 'pl_request', 'pl_verify' ) as $action ) {
+			$this->assertWPError( Recaptcha::verify( 'good-token', $action ), $action );
+		}
+		$this->assertSame( 'refused', $this->log_rows( 'captcha_unavailable' )[0]['meta']['outcome'] );
+	}
+
+	public function test_the_two_step_steps_still_refuse_what_a_reachable_google_refuses() {
+		$this->turn_on();
+
+		$this->assertWPError( Recaptcha::verify( '', 'twostep' ), 'A missing token.' );
+		$this->assertWPError( Recaptcha::verify( '', 'twostep_setup' ) );
+		$this->answer = array(
+			'success' => true,
+			'action'  => 'code',
+			'score'   => 0.9,
+		);
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep' ), 'A token made for another step.' );
+		$this->answer = array(
+			'success' => true,
+			'action'  => 'twostep',
+			'score'   => 0.1,
+		);
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep' ), 'A low score.' );
+		$this->answer = array( 'success' => false );
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep_setup' ), 'A token Google rejects.' );
+		$this->assertSame( array(), $this->log_rows( 'captcha_unavailable' ) );
+	}
+
+	public function test_the_filter_can_still_refuse_a_two_step_step_while_google_is_down() {
+		$this->turn_on();
+		$this->answer = new WP_Error( 'http_request_failed', 'cURL error 28: timed out' );
+		add_filter( 'happyaccess_verify_captcha', '__return_false' );
+
+		$this->assertWPError( Recaptcha::verify( 'good-token', 'twostep' ) );
+	}
+
 	public function test_an_answer_that_is_not_json_counts_as_unavailable() {
 		$this->turn_on();
 		$this->answer = array();

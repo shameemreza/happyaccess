@@ -459,15 +459,15 @@ msgstr ""
 msgid "Two-step login settings were kept, because they protect the account."
 msgstr ""
 
-#: src/Core/Recaptcha.php:227
+#: src/Core/Recaptcha.php:238
 msgid "The security check didn't pass. Reload the page and try again."
 msgstr ""
 
-#: src/Core/Recaptcha.php:245
-msgid "The security check couldn't reach Google, so logins were refused"
+#: src/Core/Recaptcha.php:257
+msgid "The security check couldn't reach Google"
 msgstr ""
 
-#: src/Core/Recaptcha.php:267
+#: src/Core/Recaptcha.php:282
 msgid "A login failed the security check"
 msgstr ""
 

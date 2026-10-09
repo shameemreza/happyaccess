@@ -9,6 +9,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Recaptcha;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\Passwordless\LoginSteps;
@@ -375,6 +376,38 @@ class SetupStepsTest extends WP_UnitTestCase {
 		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) + $this->captcha_field( 'twostep_setup' ) );
 		$this->assertSame( 'redirect', $res['type'] );
 		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	public function test_the_setup_steps_go_on_when_google_cannot_be_reached_and_log_it() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$user   = $this->admin();
+		$cookie = $this->start_setup( $user );
+		$secret = $this->shown_secret( $this->screen( $cookie )['body'] );
+		$code   = Totp::code( $secret, Totp::step_for( Clock::now() ) );
+		$token  = array( Recaptcha::FIELD => 'any-token' );
+
+		$res = $this->post( $cookie, 'app', array( 'pwd' => $code ) + $token );
+		$this->assertSame( 'render', $res['type'] );
+		$this->assertTrue( UserState::app_enabled( $user->ID ) );
+
+		$res = $this->post( $cookie, 'continue', array( 'saved' => '1' ) + $token );
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( 1, $this->wp_login_count );
+		$rows = AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'twostep_setup', $rows[0]['meta']['step'] );
+	}
+
+	public function test_a_missing_token_is_still_refused_on_the_setup_step_when_google_cannot_be_reached() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$cookie = $this->start_setup( $this->admin() );
+
+		$res = $this->post( $cookie, 'later' );
+
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, $this->wp_login_count );
 	}
 
 	public function test_the_setup_step_skips_the_check_while_recaptcha_is_off() {

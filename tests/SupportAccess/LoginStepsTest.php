@@ -360,6 +360,19 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 0, $this->captcha_calls, 'No token, no request to Google.' );
 	}
 
+	public function test_the_code_step_still_refuses_when_google_cannot_be_reached() {
+		$this->turn_on_recaptcha();
+		$this->google_is_down();
+		$made = Grants::create( array( 'label' => 'Acme' ) );
+		wp_set_current_user( 0 );
+
+		$res = $this->post_code( $made['code'], array( Recaptcha::FIELD => 'any-token' ) );
+
+		$this->assertSame( array( 'happyaccess_captcha' ), $res['errors']->get_error_codes() );
+		$this->assertSame( 0, Grants::get( $made['id'] )['login_count'] );
+		$this->assertCount( 1, AuditLog::query( array( 'event' => 'captcha_unavailable' ) )['items'], 'The refusal is logged too.' );
+	}
+
 	public function test_the_code_step_logs_in_with_a_passing_token() {
 		$this->turn_on_recaptcha();
 		$made = Grants::create( array( 'label' => 'Acme' ) );

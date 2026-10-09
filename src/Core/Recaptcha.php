@@ -14,10 +14,14 @@ defined( 'ABSPATH' ) || exit;
  * token each POST step sends. Every step has its own action name, so a token
  * made on one screen can't be spent on another.
  *
- * When Google can't be reached, the step is refused, as 1.0.6 did: a site
- * owner turned the check on to keep bots out, and letting every login
+ * When Google can't be reached, the public steps are refused, as 1.0.6 did:
+ * a site owner turned the check on to keep bots out, and letting every login
  * through whenever the check is down would let a bot in at the moment it
- * can block the check. The log says why, once an hour.
+ * can block the check. The two-step steps (code, email send, setup) run only
+ * after a right password, so they go on instead: refusing there would lock
+ * out every user with two-step login, admins included, and the only way back
+ * is a login. A reachable Google that says no still refuses every step.
+ * The log says what happened, once an hour.
  */
 final class Recaptcha {
 
@@ -40,6 +44,12 @@ final class Recaptcha {
 	 * Action names, one per step.
 	 */
 	const ACTIONS = array( 'code', 'link', 'pl_request', 'pl_verify', 'twostep', 'twostep_setup' );
+
+	/**
+	 * Steps that go on when Google can't be reached. They come after a right
+	 * password, so a bot has already failed to get here.
+	 */
+	const OPEN_WHEN_UNREACHABLE = array( 'twostep', 'twostep_setup' );
 
 	/**
 	 * Set while the log already has this hour's row.
@@ -158,6 +168,7 @@ final class Recaptcha {
 	public static function verify( $token, $action ) {
 		$action = (string) $action;
 		$reason = self::reason( is_string( $token ) ? trim( $token ) : '', $action );
+		$open   = 'unavailable' === $reason && in_array( $action, self::OPEN_WHEN_UNREACHABLE, true );
 
 		/**
 		 * Overrides the reCAPTCHA result of a login step.
@@ -165,7 +176,7 @@ final class Recaptcha {
 		 * @param bool   $passed Whether the check passed.
 		 * @param string $action The step: code, link, pl_request, pl_verify, twostep or twostep_setup.
 		 */
-		if ( (bool) apply_filters( 'happyaccess_verify_captcha', '' === $reason, $action ) ) {
+		if ( (bool) apply_filters( 'happyaccess_verify_captcha', '' === $reason || $open, $action ) ) {
 			return true;
 		}
 
@@ -201,7 +212,7 @@ final class Recaptcha {
 
 		$data = is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ? null : json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( ! is_array( $data ) ) {
-			self::log_unavailable( $action );
+			self::log_unavailable( $action, in_array( $action, self::OPEN_WHEN_UNREACHABLE, true ) );
 			return 'unavailable';
 		}
 
@@ -231,9 +242,10 @@ final class Recaptcha {
 	 * Logs that Google couldn't be reached, once an hour.
 	 *
 	 * @param string $action Action name.
+	 * @param bool   $open   Whether the step went on.
 	 * @return void
 	 */
-	private static function log_unavailable( $action ) {
+	private static function log_unavailable( $action, $open ) {
 		if ( ! self::first_this_hour( self::UNAVAILABLE_TRANSIENT ) ) {
 			return;
 		}
@@ -242,8 +254,11 @@ final class Recaptcha {
 			array(
 				'feature' => 'core',
 				'user_id' => 0,
-				'summary' => __( "The security check couldn't reach Google, so logins were refused", 'happyaccess' ),
-				'meta'    => array( 'step' => $action ),
+				'summary' => __( "The security check couldn't reach Google", 'happyaccess' ),
+				'meta'    => array(
+					'step'    => $action,
+					'outcome' => $open ? 'allowed' : 'refused',
+				),
 			)
 		);
 	}
