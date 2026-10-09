@@ -263,6 +263,29 @@ function TipText( { tip, className, as: Tag = 'span', textRef, focusable } ) {
 	);
 }
 
+const FOCUSABLE =
+	'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The last control before a node in page order, where focus goes when the
+ * node goes away, as if the person had tabbed back once.
+ *
+ * @param {Element} node The node that is about to go.
+ * @return {Element|null} The control, or nothing.
+ */
+function controlBefore( node ) {
+	const before = Array.from(
+		node.ownerDocument.querySelectorAll( FOCUSABLE )
+	).filter(
+		( element ) =>
+			! node.contains( element ) &&
+			// eslint-disable-next-line no-bitwise
+			element.compareDocumentPosition( node ) &
+				node.ownerDocument.defaultView.Node.DOCUMENT_POSITION_FOLLOWING
+	);
+	return before.length ? before[ before.length - 1 ] : null;
+}
+
 /**
  * The author card, at the bottom of a tab's right-hand column. A hello for
  * the first day, a rating ask once the plugin has done its job, and a
@@ -278,6 +301,8 @@ export default function AuthorCard() {
 	const tip = context?.tip || null;
 	const title = useRef( null );
 	const body = useRef( null );
+	const root = useRef( null );
+	const fallback = useRef( null );
 	const moveFocus = useRef( false );
 
 	// After a choice, focus goes to what replaced the button. Tips wait
@@ -294,6 +319,10 @@ export default function AuthorCard() {
 			if ( ! target ) {
 				return;
 			}
+		} else if ( '' === view ) {
+			// The card is gone, so focus goes to the control before it.
+			target = fallback.current?.isConnected ? fallback.current : null;
+			fallback.current = null;
 		}
 		moveFocus.current = false;
 		target?.focus();
@@ -310,12 +339,13 @@ export default function AuthorCard() {
 	};
 
 	const hide = () => {
+		fallback.current = root.current ? controlBefore( root.current ) : null;
 		choose( 'hidden', '' );
 		announce( __( 'Tips hidden', 'happyaccess' ) );
 	};
 
 	return (
-		<div className={ `ha-author ha-author--${ view }` }>
+		<div ref={ root } className={ `ha-author ha-author--${ view }` }>
 			<span
 				className="ha-author__curve ha-author__curve--top"
 				aria-hidden="true"

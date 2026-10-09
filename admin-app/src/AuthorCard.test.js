@@ -307,6 +307,28 @@ describe( 'AuthorCard', () => {
 		expect( container ).not.toHaveTextContent( 'Built by' );
 	} );
 
+	it( 'puts focus on the control before the card after Hide tips, not on the page body', async () => {
+		const user = userEvent.setup();
+		render(
+			<AuthorCardProvider
+				card={ { state: 'tips', photo: PHOTO, user: 1, facts: {} } }
+				features={ ALL_ON }
+			>
+				<button type="button">Before the card</button>
+				<AuthorCard />
+				<button type="button">After the card</button>
+			</AuthorCardProvider>
+		);
+		await waitFor( () => expect( hideButton() ).toBeInTheDocument() );
+
+		await user.click( hideButton() );
+
+		expect( hideButton() ).not.toBeInTheDocument();
+		expect(
+			screen.getByRole( 'button', { name: 'Before the card' } )
+		).toHaveFocus();
+	} );
+
 	it( 'stays hidden when the save fails', async () => {
 		apiFetch.mockRejectedValue( { code: 'fetch_error' } );
 		const { user, container } = setup( 'tips' );
@@ -508,6 +530,48 @@ describe( 'AuthorCard tips layout', () => {
 			clear
 		);
 		expect( styleBlock( '.ha-author__foot' ) ).toContain( clear );
+	} );
+
+	it( 'places the cut-out, photo, badge and Hide button with logical sides, so they flip in RTL', () => {
+		const scss = readFileSync(
+			path.resolve( 'admin-app/src/style.scss' ),
+			'utf8'
+		);
+		const physical =
+			/(^|[\s;{])(left|right|top|bottom):|border-(top|bottom)-(left|right)-radius|(margin|padding|border)-(left|right)\b|(^|[^-])(min|max)-width:/m;
+		const blocks = scss
+			.split( '\n\t.' )
+			.filter( ( block ) => block.startsWith( 'ha-author' ) );
+		expect( blocks.length ).toBeGreaterThan( 10 );
+		blocks.forEach( ( block ) =>
+			expect( block.slice( 0, block.indexOf( '}' ) ) ).not.toMatch(
+				physical
+			)
+		);
+		expect( styleBlock( '.ha-author::before' ) ).toMatch(
+			/inset-inline-end: 0;/
+		);
+		expect( styleBlock( '.ha-author::before' ) ).toMatch(
+			/border-start-start-radius: 28px;/
+		);
+		expect( styleBlock( '.ha-author__curve::before' ) ).toMatch(
+			/border-end-end-radius: 18px;/
+		);
+		expect( styleBlock( '.ha-author__hide.components-button' ) ).toMatch(
+			/inset-inline-end: 8px;/
+		);
+	} );
+
+	it( 'rests the rating button on the dark green, which passes contrast with white text', () => {
+		expect( styleBlock( '.ha-author__rate' ) ).toMatch(
+			/background: var\(--ha-author-link\);/
+		);
+		expect(
+			styleBlock( '.ha-author__rate:hover,\n\t.ha-author__rate:focus' )
+		).toMatch( /background: var\(--ha-author-rate-hover\);/ );
+		expect( styleBlock( '\t.ha-author' ) ).toMatch(
+			/--ha-author-rate-hover: #095c40;/
+		);
 	} );
 
 	it( 'has no border, so only the green fill follows the cut-out', () => {

@@ -162,7 +162,7 @@
 
 	.ha-copy {
 		justify-content: center;
-		min-width: 84px;
+		min-inline-size: 84px;
 		height: 40px;
 
 		@include motion.motion {

@@ -100,15 +100,18 @@
 		margin-block-start: 24px;
 	}
 
-	// A light green card with a cut-out at the bottom right that holds the
-	// photo. The cut-out and its two curves are drawn in the page color, so
-	// the card must sit on the admin page background. The foot, beside the
-	// cut-out, keeps its text clear of it at any width.
+	// A light green card with a cut-out at the bottom end corner (bottom
+	// right, or bottom left in RTL) that holds the photo. Every side is a
+	// logical one, so the cut-out flips with the text. The cut-out and its
+	// two curves are drawn in the page color, so the card must sit on the
+	// admin page background. The foot, beside the cut-out, keeps its text
+	// clear of it at any width.
 	.ha-author {
 		--ha-author-page: #f0f0f1;
 		--ha-author-card: #e4f2ea;
 		--ha-author-green: #0e8a5f;
 		--ha-author-link: #0b6e4c;
+		--ha-author-rate-hover: #095c40;
 		--ha-author-notch: 92px;
 		--ha-author-pad: 22px;
 		--ha-author-pad-end: 18px;
@@ -125,11 +128,11 @@
 	.ha-author::before {
 		content: "";
 		position: absolute;
-		right: 0;
-		bottom: 0;
+		inset-block-end: 0;
+		inset-inline-end: 0;
 		width: var(--ha-author-notch);
 		height: var(--ha-author-notch);
-		border-top-left-radius: 28px;
+		border-start-start-radius: 28px;
 		background: var(--ha-author-page);
 	}
 
@@ -144,24 +147,24 @@
 		content: "";
 		position: absolute;
 		inset: 0;
-		border-bottom-right-radius: 18px;
+		border-end-end-radius: 18px;
 		background: var(--ha-author-card);
 	}
 
 	.ha-author__curve--top {
-		right: 0;
-		bottom: var(--ha-author-notch);
+		inset-block-end: var(--ha-author-notch);
+		inset-inline-end: 0;
 	}
 
 	.ha-author__curve--side {
-		right: var(--ha-author-notch);
-		bottom: 0;
+		inset-block-end: 0;
+		inset-inline-end: var(--ha-author-notch);
 	}
 
 	.ha-author__photo {
 		position: absolute;
-		right: 6px;
-		bottom: 6px;
+		inset-block-end: 6px;
+		inset-inline-end: 6px;
 		width: 76px;
 		height: 76px;
 		border-radius: 50%;
@@ -171,8 +174,8 @@
 
 	.ha-author__badge {
 		position: absolute;
-		right: 4px;
-		bottom: 62px;
+		inset-block-end: 62px;
+		inset-inline-end: 4px;
 		display: grid;
 		place-items: center;
 		width: 24px;
@@ -321,12 +324,12 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 2px 10px;
-		max-width: 100%;
+		max-inline-size: 100%;
 		box-sizing: border-box;
 		margin: 2px 0 12px;
 		padding: 8px 16px;
 		border-radius: 999px;
-		background: var(--ha-author-green);
+		background: var(--ha-author-link);
 		color: #fff;
 		font-weight: 600;
 		text-decoration: none;
@@ -334,7 +337,7 @@
 
 	.ha-author__rate:hover,
 	.ha-author__rate:focus {
-		background: var(--ha-author-link);
+		background: var(--ha-author-rate-hover);
 		color: #fff;
 	}
 
@@ -364,8 +367,8 @@
 
 	.ha-author__hide.components-button {
 		position: absolute;
-		top: 8px;
-		right: 8px;
+		inset-block-start: 8px;
+		inset-inline-end: 8px;
 		color: var(--ha-muted);
 	}
 
