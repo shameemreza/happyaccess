@@ -22,6 +22,8 @@ Two-step login also brings **new device alerts**: your administrators get an ema
 
 Each feature is a switch in Settings. Turn on only what you need. Anything you leave off adds no code to your pages.
 
+https://www.youtube.com/watch?v=VtsEFprDkdM
+
 = How to give temporary admin access without sharing a password =
 
 Someone from support needs to look at your site. The usual way is to make them an admin account, send a password by email, and promise to delete the account later. Most people forget, and the account stays forever.

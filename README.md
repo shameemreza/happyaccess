@@ -13,9 +13,9 @@ Docs: the [HappyAccess docs](docs/README.md) cover setup, each feature, every wa
 
 ## Watch it
 
-<!-- promo video goes here -->
+[![Watch the HappyAccess video: temporary login, passwordless login and 2FA for WordPress](.github/assets/video-thumbnail.png)](https://www.youtube.com/watch?v=VtsEFprDkdM)
 
-For now, the screenshots below and the [HappyAccess page on WordPress.org](https://wordpress.org/plugins/happyaccess/) show how it works.
+A 74-second look at temporary access, passwordless login, two-step login and new device alerts.
 
 ## Features
 
