@@ -10,6 +10,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useSettings } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
+import RetryButton from '../RetryButton';
 import { networkNote, otherPluginsQuestion } from '../login/twoStepModel';
 import { InlineConfirm } from '../support/GrantRow';
 import AuthorCard from '../AuthorCard';
@@ -112,9 +113,11 @@ export default function SettingsTab( {
 					{ error?.message ||
 						__( 'Could not load the settings.', 'happyaccess' ) }
 				</Notice>
-				<Button variant="secondary" onClick={ refresh }>
-					{ __( 'Try again', 'happyaccess' ) }
-				</Button>
+				<RetryButton
+					variant="secondary"
+					error={ error }
+					onRetry={ refresh }
+				/>
 			</section>
 		);
 	}

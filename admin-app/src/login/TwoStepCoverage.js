@@ -1,8 +1,8 @@
 import { useEffect, useId } from '@wordpress/element';
-import { Button } from '@wordpress/components';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useCoverage } from '../data/DataProvider';
 import LoadingLine from '../LoadingLine';
+import RetryButton from '../RetryButton';
 import { listNames } from './twoStepModel';
 
 /**
@@ -115,13 +115,12 @@ export default function TwoStepCoverage( { others = [] } ) {
 			{ ! coverage && error && (
 				<div className="ha-coverage__error">
 					<p>{ __( 'Could not load the counts.', 'happyaccess' ) }</p>
-					<Button
+					<RetryButton
 						variant="secondary"
 						size="compact"
-						onClick={ retry }
-					>
-						{ __( 'Try again', 'happyaccess' ) }
-					</Button>
+						error={ error }
+						onRetry={ retry }
+					/>
 				</div>
 			) }
 			{ coverage && rows.length > 0 && (

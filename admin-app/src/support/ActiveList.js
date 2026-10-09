@@ -5,6 +5,7 @@ import { activityKey } from '../activity/activityFormat';
 import { useActivityCache } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
+import RetryButton from '../RetryButton';
 import { isPlainClick, tabUrl } from '../tabList';
 import GrantRow, { InlineConfirm } from './GrantRow';
 import { timeAgo } from './passFormat';
@@ -201,9 +202,11 @@ export default function ActiveList( {
 					<Notice status="error" isDismissible={ false }>
 						{ error.message }
 					</Notice>
-					<Button variant="link" onClick={ onRetry }>
-						{ __( 'Try again', 'happyaccess' ) }
-					</Button>
+					<RetryButton
+						variant="link"
+						error={ error }
+						onRetry={ onRetry }
+					/>
 				</div>
 			) }
 

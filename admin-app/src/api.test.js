@@ -252,6 +252,40 @@ describe( 'errors', () => {
 	} );
 } );
 
+describe( 'errors a retry cannot fix', () => {
+	it( 'maps a missing route to unavailable with a reload message', () => {
+		expect(
+			api.normalizeError( {
+				code: 'rest_no_route',
+				message:
+					'No route was found matching the URL and request method.',
+				data: { status: 404 },
+			} )
+		).toEqual( {
+			code: 'unavailable',
+			message:
+				"HappyAccess isn't answering. It may have been turned off or updated. Reload the page to continue.",
+			status: 404,
+		} );
+	} );
+
+	it( 'passes an expired nonce through, since apiFetch refreshes it', () => {
+		expect(
+			api.normalizeError( {
+				code: 'rest_cookie_invalid_nonce',
+				message: 'Cookie check failed',
+				data: { status: 403 },
+			} )
+		).toMatchObject( { code: 'rest_cookie_invalid_nonce', status: 403 } );
+	} );
+
+	it( 'reloads the page it is given', () => {
+		const win = { location: { reload: vi.fn() } };
+		api.reloadPage( win );
+		expect( win.location.reload ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
 describe( 'keepStatus middleware', () => {
 	const reply = ( status, body ) => ( {
 		status,

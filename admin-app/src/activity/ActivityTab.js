@@ -14,6 +14,7 @@ import { useActivity } from '../hooks/useActivity';
 import { useAnnounce } from '../hooks/useAnnounce';
 import { useNow } from '../hooks/useNow';
 import LoadingLine from '../LoadingLine';
+import RetryButton from '../RetryButton';
 import {
 	clearQueryToken,
 	isPlainClick,
@@ -412,12 +413,11 @@ export default function ActivityTab( {
 							<Notice status="error" isDismissible={ false }>
 								{ error.message }
 							</Notice>
-							<Button
+							<RetryButton
 								variant="secondary"
-								onClick={ activity.refresh }
-							>
-								{ __( 'Try again', 'happyaccess' ) }
-							</Button>
+								error={ error }
+								onRetry={ activity.refresh }
+							/>
 						</div>
 					) }
 					{ ! error && 0 === items.length && loading && (

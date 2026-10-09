@@ -24,6 +24,17 @@ export function normalizeError( error ) {
 			status: 0,
 		};
 	}
+	if ( 'rest_no_route' === code ) {
+		// The plugin was turned off or updated while this page stayed open.
+		return {
+			code: 'unavailable',
+			message: __(
+				"HappyAccess isn't answering. It may have been turned off or updated. Reload the page to continue.",
+				'happyaccess'
+			),
+			status: Number( error?.data?.status ?? 404 ) || 404,
+		};
+	}
 	if ( ! code ) {
 		// A thrown Error (a bug in the app, not the connection) has no code.
 		return {
@@ -42,6 +53,15 @@ export function normalizeError( error ) {
 				: __( 'Something went wrong. Try again.', 'happyaccess' ),
 		status: Number.isFinite( status ) ? status : 0,
 	};
+}
+
+/**
+ * Reloads the page, for an error a retry can't fix.
+ *
+ * @param {Window} win The window to reload. Tests pass a stand-in.
+ */
+export function reloadPage( win = window ) {
+	win.location.reload();
 }
 
 const isResponse = ( value ) =>

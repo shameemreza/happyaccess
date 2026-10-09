@@ -251,6 +251,27 @@ describe( 'ActiveList', () => {
 		expect( onRetry ).toHaveBeenCalled();
 	} );
 
+	it( 'offers a reload instead of a retry when HappyAccess is not answering', () => {
+		setup( {
+			grants: [],
+			error: {
+				code: 'unavailable',
+				message:
+					"HappyAccess isn't answering. It may have been turned off or updated. Reload the page to continue.",
+			},
+		} );
+
+		expect(
+			document.querySelector( '.components-notice__content' )
+		).toHaveTextContent( "HappyAccess isn't answering." );
+		expect(
+			screen.getByRole( 'button', { name: 'Reload the page' } )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Try again' } )
+		).not.toBeInTheDocument();
+	} );
+
 	it( 'has no accessibility violations', async () => {
 		const { container } = setup();
 		await screen.findByText( /^Latest:/ );

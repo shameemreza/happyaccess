@@ -4,6 +4,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useSettings } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
+import RetryButton from '../RetryButton';
 import Switch from '../settings/Switch';
 import RolePolicyTable, { EITHER } from './RolePolicyTable';
 import AuthorCard from '../AuthorCard';
@@ -118,9 +119,11 @@ export default function LoginTab( { boot } ) {
 					{ error?.message ||
 						__( 'Could not load the settings.', 'happyaccess' ) }
 				</Notice>
-				<Button variant="secondary" onClick={ refresh }>
-					{ __( 'Try again', 'happyaccess' ) }
-				</Button>
+				<RetryButton
+					variant="secondary"
+					error={ error }
+					onRetry={ refresh }
+				/>
 			</section>
 		);
 	}

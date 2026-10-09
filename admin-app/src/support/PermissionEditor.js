@@ -1,13 +1,9 @@
 import { useMemo, useState } from '@wordpress/element';
-import {
-	Button,
-	Notice,
-	SelectControl,
-	TextControl,
-} from '@wordpress/components';
+import { Notice, SelectControl, TextControl } from '@wordpress/components';
 import { __, _n, isRTL, sprintf } from '@wordpress/i18n';
 import { Icon, chevronDown, chevronLeft, chevronRight } from '@wordpress/icons';
 import LoadingLine from '../LoadingLine';
+import RetryButton from '../RetryButton';
 
 const PRESET_NAMES = () => ( {
 	administrator: __( 'Administrator', 'happyaccess' ),
@@ -67,9 +63,11 @@ export default function PermissionEditor( {
 				<Notice status="error" isDismissible={ false }>
 					{ __( 'Could not load the permissions.', 'happyaccess' ) }
 				</Notice>
-				<Button variant="secondary" onClick={ onRetry }>
-					{ __( 'Try again', 'happyaccess' ) }
-				</Button>
+				<RetryButton
+					variant="secondary"
+					error={ error }
+					onRetry={ onRetry }
+				/>
 			</div>
 		);
 	}
