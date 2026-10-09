@@ -101,6 +101,42 @@ final class SettingLabels {
 	}
 
 	/**
+	 * The entries of all() whose plain name, in the viewer's language,
+	 * contains a search term, ignoring case. The log search uses them to
+	 * find settings rows by the names a person reads.
+	 *
+	 * @param string $term Search term.
+	 * @return string[] Dotted keys, and ".*" entries for a group of keys.
+	 */
+	public static function entries_matching( $term ) {
+		$term = (string) $term;
+		if ( '' === $term ) {
+			return array();
+		}
+		$found = array();
+		foreach ( self::all() as $entry => $label ) {
+			if ( self::contains( $label, $term ) ) {
+				$found[] = $entry;
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * Whether a text contains a term, ignoring case.
+	 *
+	 * @param string $text Text.
+	 * @param string $term Term.
+	 * @return bool
+	 */
+	public static function contains( $text, $term ) {
+		if ( function_exists( 'mb_stripos' ) ) {
+			return false !== mb_stripos( (string) $text, (string) $term, 0, 'UTF-8' );
+		}
+		return false !== stripos( (string) $text, (string) $term );
+	}
+
+	/**
 	 * The new on or off of each feature switch among the changed keys, for
 	 * the log row. Only booleans, never another setting's value.
 	 *

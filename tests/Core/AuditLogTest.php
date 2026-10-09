@@ -150,6 +150,84 @@ class AuditLogTest extends WP_UnitTestCase {
 		$this->assertSame( 4, AuditLog::query( array( 'search' => '' ) )['total'] );
 	}
 
+	/**
+	 * Adds a settings row the way SettingsController writes one.
+	 *
+	 * @param string[] $keys Changed dotted keys.
+	 * @return int Row id.
+	 */
+	private function settings_row( array $keys ) {
+		return AuditLog::add(
+			'settings_changed',
+			array(
+				'feature' => 'core',
+				'summary' => sprintf( 'Changed settings: %s', implode( ', ', $keys ) ),
+				'meta'    => array( 'keys' => $keys ),
+			)
+		);
+	}
+
+	/**
+	 * Ids of the rows a search finds.
+	 *
+	 * @param string $term Search term.
+	 * @return int[]
+	 */
+	private function found( $term ) {
+		return array_map( 'intval', array_column( AuditLog::query( array( 'search' => $term ) )['items'], 'id' ) );
+	}
+
+	public function test_search_finds_a_settings_row_by_the_name_on_the_screen() {
+		$logging  = $this->settings_row( array( 'privacy.logging' ) );
+		$switch   = $this->settings_row( array( 'features.passwordless' ) );
+		$policy   = $this->settings_row( array( 'two_step.role_policy.editor' ) );
+		$alerts   = $this->settings_row( array( 'two_step.device_alert_roles' ) );
+		$retained = $this->settings_row( array( 'privacy.retention_days' ) );
+
+		$this->assertSame( array( $logging ), $this->found( 'Keep a log' ) );
+		$this->assertSame( array( $switch ), $this->found( 'passwordless LOGIN' ), 'Case is ignored.' );
+		$this->assertSame( array( $policy ), $this->found( 'Two-step login by role' ), 'A key under a group matches the group name.' );
+		$this->assertSame( array( $alerts ), $this->found( 'New device alerts' ), 'A whole list key matches its name.' );
+		$this->assertSame( array( $retained ), $this->found( 'Keep activity' ) );
+	}
+
+	public function test_search_still_finds_a_settings_row_by_its_dotted_key() {
+		$row = $this->settings_row( array( 'privacy.retention_days' ) );
+		$this->settings_row( array( 'privacy.logging' ) );
+
+		$this->assertSame( array( $row ), $this->found( 'privacy.retention_days' ) );
+	}
+
+	public function test_search_for_a_setting_name_leaves_other_rows_alone() {
+		$this->settings_row( array( 'privacy.logging' ) );
+		// Another event whose meta happens to hold the same key.
+		AuditLog::add(
+			'plugin_upgraded',
+			array(
+				'feature' => 'core',
+				'summary' => 'Upgraded',
+				'meta'    => array( 'keys' => array( 'privacy.logging' ) ),
+			)
+		);
+
+		$this->assertSame( array(), $this->found( 'Nothing called this' ) );
+		$this->assertCount( 1, $this->found( 'Keep a log' ) );
+	}
+
+	public function test_search_matches_setting_names_in_the_viewers_language() {
+		$row       = $this->settings_row( array( 'privacy.logging' ) );
+		$translate = static function ( $translation, $text, $domain ) {
+			return 'happyaccess' === $domain && 'Keep a log' === $text ? 'Protokoll führen' : $translation;
+		};
+		add_filter( 'gettext', $translate, 10, 3 );
+		try {
+			$this->assertSame( array( $row ), $this->found( 'protokoll' ) );
+			$this->assertSame( array(), $this->found( 'Keep a log' ), 'The English name is not the viewer\'s.' );
+		} finally {
+			remove_filter( 'gettext', $translate, 10 );
+		}
+	}
+
 	public function test_search_is_cut_to_100_characters() {
 		AuditLog::add( 'settings_saved', array( 'summary' => str_repeat( 'a', 100 ) ) );
 		$this->assertSame( 1, AuditLog::query( array( 'search' => str_repeat( 'a', 100 ) . 'zzz' ) )['total'] );

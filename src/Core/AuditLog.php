@@ -278,8 +278,9 @@ final class AuditLog {
 		}
 		$search = self::clip_chars( sanitize_text_field( (string) $f['search'] ), 100 );
 		if ( '' !== $search ) {
-			$where[]  = 'summary LIKE %s';
-			$params[] = '%' . $wpdb->esc_like( $search ) . '%';
+			list( $match, $values ) = self::search_clause( $search );
+			$where[]                = $match;
+			$params                 = array_merge( $params, $values );
 		}
 		foreach ( array(
 			'since' => '>=',
@@ -297,6 +298,51 @@ final class AuditLog {
 		}
 
 		return array( implode( ' AND ', $where ), $params );
+	}
+
+	/**
+	 * The search part of the WHERE clause. A row matches when its stored
+	 * summary contains the term, or when the line built for it at read time
+	 * would: a settings row matches the plain names of its changed keys, in
+	 * the viewer's language. The names are matched here, against the short
+	 * list of labels, so the table is never read into PHP; the rows are then
+	 * found by the keys in their stored meta.
+	 *
+	 * @param string $search Cleaned search term.
+	 * @return array The clause with placeholders, then the values.
+	 */
+	private static function search_clause( $search ) {
+		global $wpdb;
+
+		$any    = array( 'summary LIKE %s' );
+		$params = array( '%' . $wpdb->esc_like( $search ) . '%' );
+
+		$keys = array();
+		foreach ( SettingLabels::entries_matching( $search ) as $entry ) {
+			if ( '.*' === substr( $entry, -2 ) ) {
+				// The group itself, as a whole list, and any key under it.
+				$stem   = substr( $entry, 0, -2 );
+				$keys[] = '"' . $stem . '"';
+				$keys[] = '"' . $stem . '.';
+			} else {
+				$keys[] = '"' . $entry . '"';
+			}
+		}
+		if ( $keys ) {
+			$any[]  = '( event_type = %s AND ( ' . implode( ' OR ', array_fill( 0, count( $keys ), 'metadata LIKE %s' ) ) . ' ) )';
+			$params = array_merge(
+				$params,
+				array( 'settings_changed' ),
+				array_map(
+					static function ( $key ) use ( $wpdb ) {
+						return '%' . $wpdb->esc_like( $key ) . '%';
+					},
+					$keys
+				)
+			);
+		}
+
+		return array( '( ' . implode( ' OR ', $any ) . ' )', $params );
 	}
 
 	/**
