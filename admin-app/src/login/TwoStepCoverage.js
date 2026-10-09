@@ -3,19 +3,21 @@ import { Button } from '@wordpress/components';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useCoverage } from '../data/DataProvider';
 import LoadingLine from '../LoadingLine';
+import { listNames } from './twoStepModel';
 
 /**
  * One role: how many of its users have two-step login on, with a bar, and
  * for a required role, who is still setting up and who can't skip anymore.
  *
- * @param {Object} props     Props.
- * @param {Object} props.row A row of the coverage route.
+ * @param {Object}  props           Props.
+ * @param {Object}  props.row       A row of the coverage route.
+ * @param {boolean} props.hideSetup Leave out who is still setting up.
  * @return {Element} The row.
  */
-function CoverageRow( { row } ) {
+function CoverageRow( { row, hideSetup } ) {
 	const total = Number( row.total ) || 0;
 	const enabled = Number( row.enabled ) || 0;
-	const settingUp = Number( row.setting_up ) || 0;
+	const settingUp = hideSetup ? 0 : Number( row.setting_up ) || 0;
 	const late = Number( row.past_grace ) || 0;
 	const share = total > 0 ? Math.round( ( enabled / total ) * 100 ) : 0;
 
@@ -73,9 +75,15 @@ function CoverageRow( { row } ) {
  * Who has two-step login, per role with users, the biggest roles first.
  * Shown only while two-step login is on, since the route exists only then.
  *
+ * The counts read HappyAccess's own settings only. With another two-step
+ * plugin active, accounts that use it would show as still setting up, so
+ * that figure is left out and a line names the plugin instead.
+ *
+ * @param {Object}   props        Props.
+ * @param {string[]} props.others Names of other active two-step plugins.
  * @return {Element} The card.
  */
-export default function TwoStepCoverage() {
+export default function TwoStepCoverage( { others = [] } ) {
 	const { coverage, error, loadOnce, retry } = useCoverage();
 	const id = useId();
 
@@ -119,9 +127,25 @@ export default function TwoStepCoverage() {
 			{ coverage && rows.length > 0 && (
 				<ul className="ha-coverage__list">
 					{ rows.map( ( row ) => (
-						<CoverageRow key={ row.slug } row={ row } />
+						<CoverageRow
+							key={ row.slug }
+							row={ row }
+							hideSetup={ others.length > 0 }
+						/>
 					) ) }
 				</ul>
+			) }
+			{ coverage && others.length > 0 && (
+				<p className="ha-help ha-coverage__note">
+					{ sprintf(
+						/* translators: %s: plugin names, like "WP 2FA" or "WP 2FA and Kadence Security". */
+						__(
+							"%s handles two-step login for some accounts. They aren't counted here.",
+							'happyaccess'
+						),
+						listNames( others )
+					) }
+				</p>
 			) }
 			{ coverage && 0 === rows.length && (
 				<p className="ha-help">

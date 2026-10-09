@@ -622,6 +622,24 @@ describe( 'Login and security side panel', () => {
 		expect( drawing() ).toHaveTextContent( 'Authenticator app code' );
 	} );
 
+	it( 'with another two-step plugin, leaves out who is still setting up and names the plugin', async () => {
+		await renderTab( boot( { ...BOTH_ON, otherTwoStep: [ 'WP 2FA' ] } ) );
+
+		const card = await screen.findByRole( 'region', {
+			name: 'Who has two-step login',
+		} );
+		const rows = await within( card ).findAllByRole( 'listitem' );
+		expect( rows.map( ( row ) => row.textContent ) ).toEqual( [
+			"Editors: 2 of 51 can't skip anymore",
+			'Administrators: 2 of 3',
+		] );
+		expect(
+			within( card ).getByText(
+				"WP 2FA handles two-step login for some accounts. They aren't counted here."
+			)
+		).toBeInTheDocument();
+	} );
+
 	it( 'says the counts can be 5 minutes old on a big site', async () => {
 		coverage = { ...COVERAGE, large: true };
 		await renderTab( boot( BOTH_ON ) );

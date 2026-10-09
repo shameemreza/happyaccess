@@ -359,7 +359,15 @@ export default function LoginTab( { boot } ) {
 			{ forms }
 			<div className="ha-side">
 				<WhatPeopleSee link={ previewLink } twoStep={ twoStepOn } />
-				{ twoStepOn && <TwoStepCoverage /> }
+				{ twoStepOn && (
+					<TwoStepCoverage
+						others={
+							Array.isArray( boot?.otherTwoStep )
+								? boot.otherTwoStep
+								: []
+						}
+					/>
+				) }
 			</div>
 		</div>
 	);
