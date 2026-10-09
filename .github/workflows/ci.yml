@@ -66,12 +66,21 @@ jobs:
         run: npm run size
 
   phpunit:
-    name: PHPUnit on PHP ${{ matrix.php }}
+    name: PHPUnit on PHP ${{ matrix.php }}, WooCommerce ${{ matrix.woocommerce }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         php: [ '7.4', '8.4' ]
+        # The My Account tests load WooCommerce from next to HappyAccess.
+        # 11.1.2 logs a user in after every password reset, and 11.2 and
+        # later only a user who was already logged in, so both run.
+        # latest-stable catches the next change to the reset.
+        woocommerce: [ '11.1.2', 'latest-stable' ]
+        include:
+          # 10.8 and earlier fire only password_reset around a reset.
+          - php: '8.4'
+            woocommerce: '10.5.2'
 
     services:
       mysql:
@@ -93,9 +102,7 @@ jobs:
       WP_TESTS_DB_NAME: happyaccess_tests
       WP_TESTS_DB_USER: root
       WP_TESTS_DB_HOST: 127.0.0.1
-      # The My Account tests load WooCommerce from next to HappyAccess. This
-      # is the version they were last checked against.
-      WOOCOMMERCE_VERSION: 11.1.2
+      WOOCOMMERCE_VERSION: ${{ matrix.woocommerce }}
 
     steps:
       - uses: actions/checkout@v4

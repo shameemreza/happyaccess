@@ -1514,7 +1514,7 @@ class ChallengeTest extends WP_UnitTestCase {
 		// WooCommerce's own redirect after the reset ends in exit, so it stops here instead.
 		add_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
 		try {
-			WC_Form_Handler::process_reset_password();
+			@WC_Form_Handler::process_reset_password(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- WooCommerce's reset cookie warns under the CLI.
 		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
 			$url = $stop->url;
 		} finally {
@@ -1526,28 +1526,49 @@ class ChallengeTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Loads WooCommerce, so this runs in its own process.
+	 * Whether the loaded WooCommerce logs in a logged-out user after a My
+	 * Account reset. 9.4 to 11.1 do. 11.2 and later log in only a user who
+	 * was already logged in as that user.
 	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
+	 * @return bool
 	 */
-	public function test_a_woocommerce_password_reset_sends_an_app_user_to_the_step() {
-		$account = $this->load_woocommerce();
-		$made    = $this->app_user( 'customer' );
-		$pass    = wp_generate_password( 24, false );
+	private function woo_logs_in_after_a_logged_out_reset() {
+		return version_compare( WC()->version, '11.2.0', '<' );
+	}
 
-		$url = $this->woo_reset( $made['user'], $pass );
-
-		$this->assertSame( array(), $this->auth, 'No auth cookie before the second step.' );
-		$this->assertSame( 0, get_current_user_id() );
+	/**
+	 * Checks that a reset left nobody logged in: no current user, no
+	 * session, the auth cookie held back and no wp_login.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	private function assert_reset_logged_nobody_in( $user_id ) {
+		$this->assertSame( 0, get_current_user_id(), 'The user is not logged in for the rest of the request.' );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $user_id )->get_all(), 'No session is left for an auth cookie.' );
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertFalse( apply_filters( 'send_auth_cookies', true, 0, 0, $user_id, 'auth', '' ), 'The auth cookie is held back.' );
+		add_filter( 'send_auth_cookies', '__return_false' );
 		$this->assertSame( 0, $this->wp_login_count );
+	}
+
+	/**
+	 * Checks that a reset sent an app user to the step, and that the step
+	 * then logs them in and goes back to My Account.
+	 *
+	 * @param array  $made    User and secret.
+	 * @param string $url     Where the reset sent the browser.
+	 * @param string $account My Account URL.
+	 * @return void
+	 */
+	private function assert_step_then_login( array $made, $url, $account ) {
 		$args = $this->query( $url );
 		$this->assertSame( 'twostep', $args['step'] );
 		$this->assertSame( 'woo', $args['from'] );
 		$this->assertSame( $account, $args['redirect_to'] );
-		$this->assertTrue( wp_check_password( $pass, get_userdata( $made['user']->ID )->user_pass, $made['user']->ID ), 'The new password is saved.' );
 
-		$res = $this->post_code(
+		$this->auth = array();
+		$res        = $this->post_code(
 			$this->pending_cookie(),
 			$this->app_code( $made['secret'] ),
 			'app',
@@ -1568,15 +1589,111 @@ class ChallengeTest extends WP_UnitTestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
+	public function test_a_woocommerce_password_reset_sends_an_app_user_to_the_step() {
+		$account = $this->load_woocommerce();
+		if ( ! $this->woo_logs_in_after_a_logged_out_reset() ) {
+			$this->markTestSkipped( 'WooCommerce 11.2 and later do not log in a logged-out user after a reset, so there is no login to send to the step. The logged-out test for 11.2 and the logged-in test cover it.' );
+		}
+		$made = $this->app_user( 'customer' );
+		$pass = wp_generate_password( 24, false );
+
+		$url = $this->woo_reset( $made['user'], $pass );
+
+		$this->assertSame( array( $made['user']->ID ), $this->auth, 'WooCommerce tried to log the user in.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+		$this->assertTrue( wp_check_password( $pass, get_userdata( $made['user']->ID )->user_pass, $made['user']->ID ), 'The new password is saved.' );
+		$this->assert_step_then_login( $made, $url, $account );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_of_a_logged_out_app_user_starts_no_login() {
+		$this->load_woocommerce();
+		if ( $this->woo_logs_in_after_a_logged_out_reset() ) {
+			$this->markTestSkipped( 'WooCommerce before 11.2 logs the user in after a reset. The test that sends an app user to the step covers it.' );
+		}
+		$made = $this->app_user( 'customer' );
+
+		$url = $this->woo_reset( $made['user'], wp_generate_password( 24, false ) );
+
+		$this->assertStringContainsString( 'password-reset=true', $url, 'WooCommerce sends the user to log in with the new password.' );
+		$this->assertSame( array(), $this->auth, 'WooCommerce made no auth cookie.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+		$this->assertSame( '', $this->pending_cookie(), 'No pending login starts, because nothing logs in.' );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_while_logged_in_sends_an_app_user_to_the_step() {
+		$account = $this->load_woocommerce();
+		$made    = $this->app_user( 'customer' );
+		// Logged in as that user, so every WooCommerce from 9.4 logs in again after the reset.
+		wp_set_current_user( $made['user']->ID );
+
+		$url = $this->woo_reset( $made['user'], wp_generate_password( 24, false ) );
+
+		$this->assertSame( array( $made['user']->ID ), $this->auth, 'WooCommerce tried to log the user in.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+		$this->assert_step_then_login( $made, $url, $account );
+	}
+
+	/**
+	 * WooCommerce 9.4 to 10.8 fire only password_reset, before the new
+	 * password is saved, and log in right after. after_password_reset
+	 * came in 10.9.
+	 *
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_reset_that_fires_only_password_reset_then_logs_in_goes_to_the_step() {
+		$account = $this->load_woocommerce();
+		$made    = $this->app_user( 'customer' );
+		$pass    = wp_generate_password( 24, false );
+
+		// The order of WC_Shortcode_My_Account::reset_password() in 10.8 and earlier.
+		$_POST = array( 'wc_reset_password' => 'true' );
+		$url   = '';
+		try {
+			do_action( 'password_reset', $made['user'], $pass ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook.
+			wp_set_password( $pass, $made['user']->ID );
+			wc_set_customer_auth_cookie( $made['user']->ID );
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			$url = $stop->url;
+		} finally {
+			$_POST = array();
+		}
+
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+		$this->assert_step_then_login( $made, $url, $account );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_a_woocommerce_password_reset_sends_a_required_user_to_setup() {
 		$this->load_woocommerce();
 		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'customer' => 'required' ) ) ) );
 		$user = self::factory()->user->create_and_get( array( 'role' => 'customer' ) );
+		// Logged in as that user, so every WooCommerce from 9.4 logs in again after the reset.
+		wp_set_current_user( $user->ID );
 
 		$url = $this->woo_reset( $user, wp_generate_password( 24, false ) );
 
-		$this->assertSame( array(), $this->auth );
-		$this->assertSame( 0, get_current_user_id() );
+		$this->assert_reset_logged_nobody_in( $user->ID );
 		$this->assertSame( 'twostep_setup', $this->query( $url )['step'] );
 	}
 
@@ -1590,10 +1707,40 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->load_woocommerce();
 		$user = self::factory()->user->create_and_get( array( 'role' => 'customer' ) );
 
-		$url = @$this->woo_reset( $user, wp_generate_password( 24, false ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- WooCommerce's own redirect sends headers under the CLI.
+		$url = $this->woo_reset( $user, wp_generate_password( 24, false ) );
+
+		$this->assertStringContainsString( 'password-reset=true', $url, 'HappyAccess leaves this reset to WooCommerce.' );
+		if ( $this->woo_logs_in_after_a_logged_out_reset() ) {
+			$this->assertSame( array( $user->ID ), $this->auth );
+			$this->assertSame( $user->ID, get_current_user_id() );
+		} else {
+			// 11.2 and later log in only a user who was already logged in.
+			$this->assertSame( array(), $this->auth );
+			$this->assertSame( 0, get_current_user_id() );
+		}
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertTrue( apply_filters( 'send_auth_cookies', true, 0, 0, $user->ID, 'auth', '' ), 'HappyAccess holds back no cookie.' );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_while_logged_in_still_logs_in_a_user_without_two_step() {
+		$this->load_woocommerce();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'customer' ) );
+		wp_set_current_user( $user->ID );
+
+		$url = $this->woo_reset( $user, wp_generate_password( 24, false ) );
 
 		$this->assertStringContainsString( 'password-reset=true', $url, 'HappyAccess leaves this reset to WooCommerce.' );
 		$this->assertSame( array( $user->ID ), $this->auth );
+		$this->assertSame( $user->ID, get_current_user_id() );
+		$this->assertCount( 1, WP_Session_Tokens::get_instance( $user->ID )->get_all() );
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertTrue( apply_filters( 'send_auth_cookies', true, 0, 0, $user->ID, 'auth', '' ), 'HappyAccess holds back no cookie.' );
 	}
 
 	/**
@@ -1605,15 +1752,15 @@ class ChallengeTest extends WP_UnitTestCase {
 	public function test_a_reset_that_logs_in_outside_the_form_gets_no_session() {
 		$this->load_woocommerce();
 		$made = $this->app_user( 'customer' );
+		// Logged in as that user, so every WooCommerce from 9.4 logs in again after the reset.
+		wp_set_current_user( $made['user']->ID );
 
 		// The reset itself, without WooCommerce's form around it.
 		@WC_Shortcode_My_Account::reset_password( $made['user'], wp_generate_password( 24, false ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- WooCommerce's reset cookie warns under the CLI.
 
-		$this->assertSame( 0, get_current_user_id(), 'The user is not logged in for the rest of the request.' );
-		$this->assertSame( array(), WP_Session_Tokens::get_instance( $made['user']->ID )->get_all(), 'The session made for the cookie is gone.' );
-		remove_filter( 'send_auth_cookies', '__return_false' );
-		$this->assertFalse( apply_filters( 'send_auth_cookies', true, 0, 0, $made['user']->ID, 'auth', '' ), 'The cookie is held back.' );
-		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( array( $made['user']->ID ), $this->auth, 'WooCommerce tried to log the user in.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+		$this->assertSame( '', $this->pending_cookie(), 'Only the My Account form goes to the step.' );
 	}
 
 	public function test_a_core_password_reset_is_left_alone() {

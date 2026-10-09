@@ -142,6 +142,8 @@ final class Challenge {
 	/**
 	 * Ids of users whose password was reset in this request and who need
 	 * the second step. No auth cookie goes out for them until it passes.
+	 * True while a login after WooCommerce's My Account reset form should
+	 * still go to the step.
 	 *
 	 * @var array<int,bool>
 	 */
@@ -162,7 +164,8 @@ final class Challenge {
 	public static function register() {
 		Router::add_step( self::STEP, array( __CLASS__, 'run_step' ) );
 		add_action( 'after_password_reset', array( __CLASS__, 'end_account_lock' ), 10, 1 );
-		add_action( 'after_password_reset', array( __CLASS__, 'after_woo_reset' ), PHP_INT_MAX, 1 );
+		add_action( 'password_reset', array( __CLASS__, 'note_reset' ), PHP_INT_MAX, 1 );
+		add_action( 'after_password_reset', array( __CLASS__, 'note_reset' ), PHP_INT_MAX, 1 );
 		add_action( 'set_auth_cookie', array( __CLASS__, 'drop_reset_session' ), PHP_INT_MAX, 6 );
 		add_filter( 'send_auth_cookies', array( __CLASS__, 'hold_reset_cookie' ), PHP_INT_MAX, 4 );
 		add_filter( 'authenticate', array( __CLASS__, 'filter_authenticate' ), 50, 3 );
@@ -347,37 +350,81 @@ final class Challenge {
 	}
 
 	/**
-	 * WooCommerce logs the shopper in right after its My Account password
-	 * reset, with wp_set_auth_cookie() and no authenticate filter. It fires
-	 * after_password_reset after the new password is saved and before that
-	 * cookie, so a user who needs the second step, or setup, goes there from
-	 * here and the request ends. WooCommerce's own steps after the cookie run
-	 * first: the reset cookie is cleared, the owner hears about the new
-	 * password and its reset action fires.
+	 * Notes a password reset of a user who needs the second step, or setup.
+	 * Until the step passes, no auth cookie goes out for them in this
+	 * request, whatever logs them in after the reset.
 	 *
-	 * Core's reset on wp-login.php never logs in, so only WooCommerce's form
-	 * is sent to the step. For any reset of a user who needs the step, the
-	 * auth cookie is also held back for the rest of the request, so other
-	 * code that logs in after a reset gets no session either.
+	 * Hooked to password_reset and after_password_reset. WooCommerce 9.4 to
+	 * 10.8 fire only password_reset, before the new password is saved, and
+	 * 10.9 added after_password_reset. Whether WooCommerce then logs the
+	 * user in depends on its version: up to 11.1 it always does, and 11.2
+	 * only does for a user who was already logged in as that user. So the
+	 * step starts when the auth cookie is made, in drop_reset_session(),
+	 * not here.
 	 *
-	 * @param \WP_User $user The user whose password was reset.
+	 * @param \WP_User $user The user whose password is reset.
 	 * @return void
 	 */
-	public static function after_woo_reset( $user ) {
+	public static function note_reset( $user ) {
 		if ( ! $user instanceof \WP_User ) {
 			return;
 		}
 		self::forget_stale_grace( $user );
-		if ( ! self::applies( $user ) ) {
+		if ( ! self::applies( $user ) || isset( self::$reset_users[ (int) $user->ID ] ) ) {
 			return;
 		}
-		// Whatever logs the user in after this reset, no cookie goes out before the step.
-		self::$reset_users[ (int) $user->ID ] = true;
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read as a flag only; WooCommerce checked its reset nonce before the reset.
-		if ( ! isset( $_POST['wc_reset_password'] ) || ! function_exists( 'wc_get_page_permalink' ) ) {
+		self::$reset_users[ (int) $user->ID ] = isset( $_POST['wc_reset_password'] ) && function_exists( 'wc_get_page_permalink' );
+	}
+
+	/**
+	 * When code logs in a user right after their password reset and before
+	 * the second step, drops the session that wp_set_auth_cookie() just made
+	 * and the current user. hold_reset_cookie() keeps the cookie back.
+	 *
+	 * After WooCommerce's My Account reset form, the user goes to the step,
+	 * or setup, from here and the request ends. Core's reset on wp-login.php
+	 * never logs in, and other code gets no session and no redirect.
+	 *
+	 * @param string $cookie     Cookie value.
+	 * @param int    $expire     Cookie expiry.
+	 * @param int    $expiration Session expiry.
+	 * @param int    $user_id    User id.
+	 * @param string $scheme     Cookie scheme.
+	 * @param string $token      Session token.
+	 * @return void
+	 */
+	public static function drop_reset_session( $cookie, $expire = 0, $expiration = 0, $user_id = 0, $scheme = '', $token = '' ) {
+		unset( $cookie, $expire, $expiration, $scheme );
+		$user_id = (int) $user_id;
+		if ( ! isset( self::$reset_users[ $user_id ] ) ) {
 			return;
+		}
+		if ( is_string( $token ) && '' !== $token ) {
+			\WP_Session_Tokens::get_instance( $user_id )->destroy( $token );
+		}
+		if ( get_current_user_id() === $user_id ) {
+			wp_set_current_user( 0 );
 		}
 
+		$user = get_userdata( $user_id );
+		if ( true === self::$reset_users[ $user_id ] && $user instanceof \WP_User ) {
+			// One redirect per reset, even if the redirect returns.
+			self::$reset_users[ $user_id ] = false;
+			self::woo_reset_step( $user );
+		}
+	}
+
+	/**
+	 * Sends a user that WooCommerce logs in after its My Account reset to
+	 * the second step, or setup, and ends the request. WooCommerce's own
+	 * steps after the login run first: the reset cookie is cleared, the
+	 * owner hears about the new password and its reset action fires.
+	 *
+	 * @param \WP_User $user The user whose password was reset.
+	 * @return void
+	 */
+	private static function woo_reset_step( \WP_User $user ) {
 		$url = self::begin(
 			$user,
 			self::PURPOSE,
@@ -400,32 +447,6 @@ final class Challenge {
 		do_action( 'woocommerce_customer_reset_password', $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hook, so its listeners see the reset.
 
 		self::redirect( $url );
-	}
-
-	/**
-	 * When code logs in a user right after their password reset and before
-	 * the second step, drops the session that wp_set_auth_cookie() just made
-	 * and the current user. hold_reset_cookie() keeps the cookie back.
-	 *
-	 * @param string $cookie     Cookie value.
-	 * @param int    $expire     Cookie expiry.
-	 * @param int    $expiration Session expiry.
-	 * @param int    $user_id    User id.
-	 * @param string $scheme     Cookie scheme.
-	 * @param string $token      Session token.
-	 * @return void
-	 */
-	public static function drop_reset_session( $cookie, $expire = 0, $expiration = 0, $user_id = 0, $scheme = '', $token = '' ) {
-		unset( $cookie, $expire, $expiration, $scheme );
-		if ( ! isset( self::$reset_users[ (int) $user_id ] ) ) {
-			return;
-		}
-		if ( is_string( $token ) && '' !== $token ) {
-			\WP_Session_Tokens::get_instance( (int) $user_id )->destroy( $token );
-		}
-		if ( get_current_user_id() === (int) $user_id ) {
-			wp_set_current_user( 0 );
-		}
 	}
 
 	/**
