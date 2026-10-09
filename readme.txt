@@ -263,8 +263,6 @@ HappyAccess is rebuilt from the ground up in this release.
 = 1.0.5 =
 * New: admin menu restrictions, hide the admin bar, protection for the site owner's account and suspend or reactivate access.
 
-Older versions: https://github.com/shameemreza/happyaccess/blob/main/CHANGELOG.md
-
 == Upgrade Notice ==
 
 = 1.1.0 =
