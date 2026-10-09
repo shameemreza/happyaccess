@@ -281,10 +281,11 @@ final class Challenge {
 
 	/**
 	 * The hand-off after a passwordless code or link. The email code already
-	 * proved access to the mailbox, so a user whose only method is email logs
-	 * in directly. Anyone else goes to the step with the app and backup
-	 * codes only. A required user with no method goes to the setup screen,
-	 * because the email code proves the inbox but setup still has to happen.
+	 * proved access to the mailbox, so a user without the app logs in
+	 * directly, even with backup codes left. Only the app adds a step, and
+	 * that step offers the app and backup codes only. A required user with
+	 * no method goes to the setup screen, because the email code proves the
+	 * inbox but setup still has to happen.
 	 *
 	 * @param \WP_User $user     The user.
 	 * @param bool     $remember Whether to keep the session.
@@ -296,7 +297,7 @@ final class Challenge {
 		if ( ! self::applies( $user ) ) {
 			return null;
 		}
-		if ( ! self::needs_setup( $user ) && array() === self::allowed_methods( $user, self::PURPOSE_AFTER_PASSWORDLESS ) ) {
+		if ( ! self::needs_setup( $user ) && ! UserState::app_enabled( $user->ID ) ) {
 			return null;
 		}
 

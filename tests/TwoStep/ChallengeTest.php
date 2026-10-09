@@ -1041,6 +1041,37 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( array(), $this->pending_rows() );
 	}
 
+	public function test_passwordless_email_users_with_backup_codes_log_in_directly() {
+		Features::set( 'passwordless', true );
+		$user = $this->email_user();
+		BackupCodes::generate( $user->ID );
+		$this->assertSame( 10, BackupCodes::remaining( $user->ID ) );
+		$this->assertContains( 'backup', UserState::methods( $user->ID ) );
+		$code = $this->passwordless_code( $user );
+
+		$res = LoginSteps::verify_flow( $code['cookie'], $code['code'], false, '' );
+		$this->assertSame( admin_url(), $res['redirect'] );
+		$this->assertSame( array( $user->ID ), $this->auth );
+		$this->assertSame( 1, $this->wp_login_count );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	public function test_passwordless_app_users_with_backup_codes_still_get_the_app_step() {
+		Features::set( 'passwordless', true );
+		$made = $this->app_user();
+		UserState::enable_email( $made['user']->ID );
+		BackupCodes::generate( $made['user']->ID );
+		$code = $this->passwordless_code( $made['user'] );
+
+		$res = LoginSteps::verify_flow( $code['cookie'], $code['code'], false, '' );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( array(), $this->auth );
+		$args = $this->query( $res['redirect'] );
+		$this->assertSame( 'twostep', $args['step'] );
+		$this->assertSame( 'app', $args['method'] );
+		$this->assertCount( 1, $this->pending_rows() );
+	}
+
 	public function test_passwordless_app_users_get_the_app_step() {
 		Features::set( 'passwordless', true );
 		$made = $this->app_user();
