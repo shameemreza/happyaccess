@@ -16,7 +16,7 @@
 .happyaccess-app {
 
 	.ha-grant {
-		min-width: 0;
+		min-inline-size: 0;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;
 		background: #fff;
@@ -64,7 +64,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		min-width: 0;
+		min-inline-size: 0;
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -124,7 +124,7 @@
 	}
 
 	.ha-level__text {
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	.ha-level__name,

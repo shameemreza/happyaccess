@@ -3,7 +3,7 @@
 .happyaccess-app {
 
 	.ha-active {
-		min-width: 0;
+		min-inline-size: 0;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;
 		background: #fff;
@@ -102,7 +102,7 @@
 
 	.ha-row__who {
 		flex: 1 1 220px;
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	.ha-row__name {

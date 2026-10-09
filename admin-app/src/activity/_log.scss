@@ -3,7 +3,7 @@
 .happyaccess-app {
 
 	.ha-log {
-		min-width: 0;
+		min-inline-size: 0;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;
 		background: #fff;
@@ -182,7 +182,7 @@
 
 	.ha-event__text {
 		flex: 1 1 320px;
-		min-width: 0;
+		min-inline-size: 0;
 	}
 
 	.ha-event__summary,
