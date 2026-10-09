@@ -201,7 +201,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor', 'otherTwoStep', 'authorCard' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor', 'otherTwoStep', 'twoStepNetwork', 'twoStepSetupUrl', 'authorCard' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );
@@ -227,6 +227,12 @@ class PageTest extends WP_UnitTestCase {
 		update_site_option( 'active_sitewide_plugins', array( HAPPYACCESS_PLUGIN_BASENAME => time() ) );
 
 		$this->assertSame( '', Page::boot_data()['twoStepNetwork'] );
+	}
+
+	public function test_boot_data_links_setup_to_the_two_step_section_of_the_own_profile() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->assertSame( admin_url( 'profile.php#happyaccess-twostep' ), Page::boot_data()['twoStepSetupUrl'] );
 	}
 
 	public function test_boot_data_says_when_another_two_step_plugin_is_active() {

@@ -32,9 +32,11 @@
 		}
 	}
 
+	// Two or three steps, as Temporary access adds the consent step.
 	.ha-steps {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-auto-columns: minmax(0, 1fr);
+		grid-auto-flow: column;
 		gap: 8px;
 		margin: 0;
 		padding: 0;
@@ -92,9 +94,19 @@
 		}
 	}
 
+	.ha-setup__card .components-notice {
+		margin: 16px 0 0;
+	}
+
 	.ha-setup__lead {
 		margin: 0 0 16px;
 		color: var(--ha-muted);
+	}
+
+	.ha-setup__choices {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 
 	.ha-setup__choice {
@@ -172,9 +184,16 @@
 		color: #007017;
 	}
 
+	.ha-setup__actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px;
+		margin-block-start: 8px;
+	}
+
 	.ha-setup__go {
 		height: 44px;
-		margin-block-start: 8px;
 		padding-inline: 20px;
 	}
 }

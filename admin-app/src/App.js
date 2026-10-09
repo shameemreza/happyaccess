@@ -139,14 +139,16 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 		[ sharedTwoStep, bootTwoStep ]
 	);
 
+	// Setup ends on the tab its last button names. Only the Temporary access
+	// form takes focus, as the first thing to do there.
 	const finishSetup = useCallback(
-		( saved ) => {
+		( saved, tab = 'support' ) => {
 			if ( saved ) {
 				updateFeatures( saved );
 			}
 			setNeedsSetup( false );
-			select( 'support' );
-			setAfterSetup( true );
+			select( tab );
+			setAfterSetup( 'support' === tab );
 		},
 		[ updateFeatures, select ]
 	);
@@ -169,7 +171,11 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 					<RefreshOnLock count={ lockCount } />
 					<Header onLocked={ onLocked } />
 					{ needsSetup ? (
-						<Setup onFinish={ finishSetup } />
+						<Setup
+							onFinish={ finishSetup }
+							twoStepNetwork={ boot.twoStepNetwork }
+							twoStepSetupUrl={ boot.twoStepSetupUrl }
+						/>
 					) : (
 						<>
 							<TabNav

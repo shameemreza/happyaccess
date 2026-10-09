@@ -13,6 +13,7 @@ use HappyAccess\Core\Features;
 use HappyAccess\Core\OtherTwoFactor;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\MenuGuard;
+use HappyAccess\Features\TwoStep\Profile;
 use HappyAccess\Login\Router;
 use HappyAccess\Rest\SettingsController;
 
@@ -275,29 +276,30 @@ final class Page {
 		$user = wp_get_current_user();
 
 		return array(
-			'siteName'       => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
-			'homeUrl'        => home_url( '/' ),
-			'loginUrl'       => wp_login_url(),
-			'codeUrl'        => Router::url( 'code' ),
-			'adminUrl'       => admin_url( 'users.php?page=' . self::SLUG ),
-			'currentUser'    => array(
+			'siteName'        => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			'homeUrl'         => home_url( '/' ),
+			'loginUrl'        => wp_login_url(),
+			'codeUrl'         => Router::url( 'code' ),
+			'adminUrl'        => admin_url( 'users.php?page=' . self::SLUG ),
+			'currentUser'     => array(
 				'id'   => (int) $user->ID,
 				'name' => $user->display_name,
 			),
-			'timezone'       => wp_timezone_string(),
-			'features'       => self::features(),
-			'needsSetup'     => SettingsController::needs_setup(),
-			'menus'          => MenuGuard::menu_snapshot(),
-			'maxDays'        => self::MAX_DAYS,
-			'isMultisite'    => is_multisite(),
-			'roles'          => self::roles(),
-			'loginRoles'     => self::login_roles(),
-			'loginReady'     => true,
-			'woocommerce'    => class_exists( 'WooCommerce' ),
-			'otherTwoFactor' => OtherTwoFactor::plugin_active(),
-			'otherTwoStep'   => OtherTwoFactor::active_plugins(),
-			'twoStepNetwork' => self::two_step_network(),
-			'authorCard'     => AuthorCard::boot_data(),
+			'timezone'        => wp_timezone_string(),
+			'features'        => self::features(),
+			'needsSetup'      => SettingsController::needs_setup(),
+			'menus'           => MenuGuard::menu_snapshot(),
+			'maxDays'         => self::MAX_DAYS,
+			'isMultisite'     => is_multisite(),
+			'roles'           => self::roles(),
+			'loginRoles'      => self::login_roles(),
+			'loginReady'      => true,
+			'woocommerce'     => class_exists( 'WooCommerce' ),
+			'otherTwoFactor'  => OtherTwoFactor::plugin_active(),
+			'otherTwoStep'    => OtherTwoFactor::active_plugins(),
+			'twoStepNetwork'  => self::two_step_network(),
+			'twoStepSetupUrl' => Profile::url(),
+			'authorCard'      => AuthorCard::boot_data(),
 		);
 	}
 

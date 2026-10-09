@@ -575,9 +575,7 @@ describe( 'App shell', () => {
 		).not.toBeInTheDocument();
 
 		await user.click(
-			screen.getByRole( 'button', {
-				name: 'Create your first support pass',
-			} )
+			screen.getByRole( 'button', { name: 'Give temporary access' } )
 		);
 
 		expect( tabNames() ).toEqual( [
@@ -611,6 +609,76 @@ describe( 'App shell', () => {
 		expect(
 			screen.getByRole( 'textbox', { name: 'Who is it for' } )
 		).not.toHaveFocus();
+	} );
+
+	it( 'ends setup on the Login and security tab from its Done button', async () => {
+		const user = userEvent.setup();
+		render(
+			<App
+				boot={ boot( {
+					needsSetup: true,
+					loginReady: true,
+					features: {
+						support_access: true,
+						passwordless: false,
+						two_step: false,
+					},
+					twoStepSetupUrl:
+						'https://example.test/wp-admin/profile.php#happyaccess-twostep',
+				} ) }
+			/>
+		);
+		settingsOnServer = {
+			...settingsOnServer,
+			features: {
+				support_access: false,
+				passwordless: true,
+				two_step: false,
+			},
+		};
+		await user.click(
+			screen.getByRole( 'checkbox', { name: 'Temporary access' } )
+		);
+		await user.click(
+			screen.getByRole( 'checkbox', { name: 'Passwordless login' } )
+		);
+		await user.click(
+			screen.getByRole( 'button', { name: 'Finish setup' } )
+		);
+		await screen.findByRole( 'heading', { name: "You're all set" } );
+
+		await user.click(
+			screen.getByRole( 'button', {
+				name: 'Choose how each role logs in',
+			} )
+		);
+
+		expect( tabNames() ).toEqual( [
+			'Activity',
+			'Login and security',
+			'Settings',
+		] );
+		expect(
+			screen.getByRole( 'link', { name: 'Login and security' } )
+		).toHaveAttribute( 'aria-current', 'page' );
+		expect(
+			new URLSearchParams( window.location.search ).get( 'tab' )
+		).toBe( 'login' );
+	} );
+
+	it( 'hides the two-step choice in setup on a subsite that follows the main site', () => {
+		render(
+			<App
+				boot={ boot( { needsSetup: true, twoStepNetwork: 'main' } ) }
+			/>
+		);
+
+		expect(
+			screen.getByRole( 'checkbox', { name: 'Passwordless login' } )
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'checkbox', { name: 'Two-step login' } )
+		).not.toBeInTheDocument();
 	} );
 
 	it( 'drops the Support access tab and updates the boot data when the feature is switched off', async () => {

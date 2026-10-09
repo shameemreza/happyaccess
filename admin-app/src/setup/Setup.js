@@ -6,20 +6,33 @@ import { runSetup } from '../api';
 const noop = () => {};
 
 /**
- * The three first-run steps: features, consent, done.
+ * The first-run steps: features, consent, done. Consent only shows when
+ * Temporary access is picked, since it is the only feature that lets
+ * someone else in.
  *
  * Nothing is saved until "Finish setup". The screen stays up on the last
- * step, and the parent switches to the tabs when "Create your first support
- * pass" is pressed.
+ * step, and the parent switches to the tabs when one of its buttons is
+ * pressed.
  *
- * @param {Object}                     props          Props.
- * @param {(features: Object) => void} props.onFinish Called with the saved feature switches when the last button is pressed.
+ * @param {Object}                                  props                 Props.
+ * @param {(features: Object, tab: string) => void} props.onFinish        Called with the saved feature switches and the tab to open.
+ * @param {string}                                  props.twoStepNetwork  'main' when the main site decides two-step login for this site.
+ * @param {string}                                  props.twoStepSetupUrl The two-step section of the user's own profile.
  * @return {Element} The setup screen.
  */
-export default function Setup( { onFinish = noop } ) {
+export default function Setup( {
+	onFinish = noop,
+	twoStepNetwork = '',
+	twoStepSetupUrl = '',
+} ) {
 	const ids = useId();
-	const [ step, setStep ] = useState( 1 );
-	const [ supportOn, setSupportOn ] = useState( true );
+	const twoStepShown = 'main' !== twoStepNetwork;
+	const [ step, setStep ] = useState( 'features' );
+	const [ chosen, setChosen ] = useState( {
+		support_access: true,
+		passwordless: false,
+		two_step: false,
+	} );
 	const [ agreed, setAgreed ] = useState( false );
 	const [ busy, setBusy ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -35,28 +48,109 @@ export default function Setup( { onFinish = noop } ) {
 		moved.current = true;
 	}, [ step ] );
 
+	const supportOn = chosen.support_access;
+	const passwordlessOn = chosen.passwordless;
+	const twoStepOn = twoStepShown && chosen.two_step;
+	const anyOn = supportOn || passwordlessOn || twoStepOn;
+
 	const steps = [
-		__( 'Features', 'happyaccess' ),
-		__( 'Consent', 'happyaccess' ),
-		__( 'Done', 'happyaccess' ),
+		{ key: 'features', label: __( 'Features', 'happyaccess' ) },
+		...( supportOn
+			? [ { key: 'consent', label: __( 'Consent', 'happyaccess' ) } ]
+			: [] ),
+		{ key: 'done', label: __( 'Done', 'happyaccess' ) },
 	];
+	const stepIndex = steps.findIndex( ( item ) => item.key === step );
+
+	const pick = ( key ) => ( checked ) =>
+		setChosen( ( previous ) => ( { ...previous, [ key ]: checked } ) );
 
 	const finish = async () => {
+		// The main site owns two-step login here, and the server refuses it.
+		const sent = {
+			support_access: supportOn,
+			passwordless: passwordlessOn,
+			...( twoStepShown ? { two_step: twoStepOn } : {} ),
+		};
 		setBusy( true );
 		setError( null );
 		try {
 			const result = await runSetup( {
-				features: { support_access: supportOn },
-				consent: true,
+				features: sent,
+				consent: supportOn,
 			} );
-			setFeatures( result?.features || { support_access: supportOn } );
-			setStep( 3 );
+			setFeatures( result?.features || sent );
+			setStep( 'done' );
 		} catch ( e ) {
 			setError( e );
 		} finally {
 			setBusy( false );
 		}
 	};
+
+	const choices = [
+		{
+			key: 'support_access',
+			label: __( 'Temporary access', 'happyaccess' ),
+			help: __(
+				'Give support a login link or code that ends by itself. No shared passwords.',
+				'happyaccess'
+			),
+		},
+		{
+			key: 'passwordless',
+			label: __( 'Passwordless login', 'happyaccess' ),
+			help: __(
+				'Let people log in with a code or link sent to their email.',
+				'happyaccess'
+			),
+		},
+		...( twoStepShown
+			? [
+					{
+						key: 'two_step',
+						label: __( 'Two-step login', 'happyaccess' ),
+						help: __(
+							'Ask for a second step after the password, like a code from an authenticator app.',
+							'happyaccess'
+						),
+					},
+				]
+			: [] ),
+	];
+
+	// The Done step's buttons, one per feature turned on. The first is primary.
+	const actions = [];
+	if ( supportOn ) {
+		actions.push( {
+			key: 'support',
+			label: __( 'Give temporary access', 'happyaccess' ),
+			onClick: () => onFinish( features, 'support' ),
+		} );
+	}
+	if ( passwordlessOn ) {
+		actions.push( {
+			key: 'login',
+			label: __( 'Choose how each role logs in', 'happyaccess' ),
+			onClick: () => onFinish( features, 'login' ),
+		} );
+	}
+	if ( twoStepOn && twoStepSetupUrl ) {
+		actions.push( {
+			key: 'two-step',
+			label: __(
+				'Set up two-step login for your account',
+				'happyaccess'
+			),
+			href: twoStepSetupUrl,
+		} );
+	}
+
+	const errorNotice = error && (
+		<Notice status="error" isDismissible={ false }>
+			{ error.message }
+		</Notice>
+	);
 
 	return (
 		<section className="ha-setup" aria-labelledby={ `${ ids }-title` }>
@@ -66,7 +160,7 @@ export default function Setup( { onFinish = noop } ) {
 				</h2>
 				<p>
 					{ __(
-						'Two quick choices. You can change both later in Settings.',
+						'A few quick choices. You can change them later in Settings.',
 						'happyaccess'
 					) }
 				</p>
@@ -76,29 +170,28 @@ export default function Setup( { onFinish = noop } ) {
 				className="ha-steps"
 				aria-label={ __( 'Setup steps', 'happyaccess' ) }
 			>
-				{ steps.map( ( label, index ) => {
-					const number = index + 1;
-					return (
-						<li
-							key={ number }
-							className={ number <= step ? 'is-reached' : '' }
-							aria-current={
-								number === step ? 'step' : undefined
-							}
-						>
-							<span className="ha-steps__bar" />
-							<span className="ha-steps__label">
-								{ `${ number }. ${ label }` }
-							</span>
-						</li>
-					);
-				} ) }
+				{ steps.map( ( item, index ) => (
+					<li
+						key={ item.key }
+						className={ index <= stepIndex ? 'is-reached' : '' }
+						aria-current={ item.key === step ? 'step' : undefined }
+					>
+						<span className="ha-steps__bar" />
+						<span className="ha-steps__label">
+							{ `${ index + 1 }. ${ item.label }` }
+						</span>
+					</li>
+				) ) }
 			</ol>
 
 			<div className="ha-setup__card">
-				{ 1 === step && (
+				{ 'features' === step && (
 					<>
-						<h3 ref={ headingRef } tabIndex={ -1 }>
+						<h3
+							id={ `${ ids }-features` }
+							ref={ headingRef }
+							tabIndex={ -1 }
+						>
 							{ __( 'What do you want to use?', 'happyaccess' ) }
 						</h3>
 						<p className="ha-setup__lead">
@@ -108,30 +201,34 @@ export default function Setup( { onFinish = noop } ) {
 							) }
 						</p>
 						<div
-							className={
-								supportOn
-									? 'ha-setup__choice is-on'
-									: 'ha-setup__choice'
-							}
+							className="ha-setup__choices"
+							role="group"
+							aria-labelledby={ `${ ids }-features` }
 						>
-							<CheckboxControl
-								label={ __(
-									'Temporary access',
-									'happyaccess'
-								) }
-								help={ __(
-									'Login links and codes for support people, that end by themselves.',
-									'happyaccess'
-								) }
-								checked={ supportOn }
-								onChange={ setSupportOn }
-								__nextHasNoMarginBottom
-							/>
+							{ choices.map( ( choice ) => (
+								<div
+									key={ choice.key }
+									className={
+										chosen[ choice.key ]
+											? 'ha-setup__choice is-on'
+											: 'ha-setup__choice'
+									}
+								>
+									<CheckboxControl
+										label={ choice.label }
+										help={ choice.help }
+										checked={ chosen[ choice.key ] }
+										onChange={ pick( choice.key ) }
+										__nextHasNoMarginBottom
+									/>
+								</div>
+							) ) }
 						</div>
+						{ errorNotice }
 					</>
 				) }
 
-				{ 2 === step && (
+				{ 'consent' === step && (
 					<>
 						<h3 ref={ headingRef } tabIndex={ -1 }>
 							{ __(
@@ -141,14 +238,14 @@ export default function Setup( { onFinish = noop } ) {
 						</h3>
 						<p className="ha-setup__lead">
 							{ __(
-								'Read this once. It applies to every support pass you create.',
+								'Read this once. It applies to everyone you give temporary access.',
 								'happyaccess'
 							) }
 						</p>
 						<ul className="ha-setup__terms">
 							<li>
 								{ __(
-									"A support pass lets someone outside your team into your site's admin, for as long as you choose.",
+									"Temporary access lets someone outside your team into your site's admin, for as long as you choose.",
 									'happyaccess'
 								) }
 							</li>
@@ -176,15 +273,11 @@ export default function Setup( { onFinish = noop } ) {
 								__nextHasNoMarginBottom
 							/>
 						</div>
-						{ error && (
-							<Notice status="error" isDismissible={ false }>
-								{ error.message }
-							</Notice>
-						) }
+						{ errorNotice }
 					</>
 				) }
 
-				{ 3 === step && (
+				{ 'done' === step && (
 					<div className="ha-setup__done">
 						<span className="ha-setup__tick" aria-hidden="true">
 							<svg
@@ -205,51 +298,73 @@ export default function Setup( { onFinish = noop } ) {
 							{ __( "You're all set", 'happyaccess' ) }
 						</h3>
 						<p className="ha-setup__lead">
-							{ __(
-								'Next time support asks for access, create a pass here instead of a new user and a shared password.',
-								'happyaccess'
-							) }
+							{ supportOn
+								? __(
+										'Next time someone needs into your admin, send them a link or code instead of a password.',
+										'happyaccess'
+									)
+								: __(
+										"Your login options are on. Here's where to set them up.",
+										'happyaccess'
+									) }
 						</p>
-						<Button
-							variant="primary"
-							className="ha-setup__go"
-							onClick={ () => onFinish( features ) }
-						>
-							{ __(
-								'Create your first support pass',
-								'happyaccess'
-							) }
-						</Button>
+						{ actions.length > 0 && (
+							<div className="ha-setup__actions">
+								{ actions.map( ( action, index ) => (
+									<Button
+										key={ action.key }
+										variant={
+											0 === index
+												? 'primary'
+												: 'secondary'
+										}
+										className="ha-setup__go"
+										href={ action.href }
+										onClick={ action.onClick }
+									>
+										{ action.label }
+									</Button>
+								) ) }
+							</div>
+						) }
 					</div>
 				) }
 
-				{ step < 3 && (
+				{ 'done' !== step && (
 					<div className="ha-setup__nav">
-						{ 2 === step && (
+						{ 'consent' === step && (
 							<Button
 								variant="secondary"
 								accessibleWhenDisabled
 								disabled={ busy }
-								onClick={ () => setStep( 1 ) }
+								onClick={ () => setStep( 'features' ) }
 							>
 								{ __( 'Back', 'happyaccess' ) }
 							</Button>
 						) }
 						<span className="ha-setup__spacer" />
-						{ 1 === step ? (
+						{ /* With nothing picked there is nothing to finish, so the button says Continue. */ }
+						{ 'features' === step && ( supportOn || ! anyOn ) && (
 							<Button
 								variant="primary"
-								disabled={ ! supportOn }
-								onClick={ () => setStep( 2 ) }
+								accessibleWhenDisabled
+								disabled={ ! anyOn }
+								onClick={ () => setStep( 'consent' ) }
 							>
 								{ __( 'Continue', 'happyaccess' ) }
 							</Button>
-						) : (
+						) }
+						{ ( 'consent' === step ||
+							( 'features' === step &&
+								! supportOn &&
+								anyOn ) ) && (
 							<Button
 								variant="primary"
 								isBusy={ busy }
 								accessibleWhenDisabled
-								disabled={ ! agreed || busy }
+								disabled={
+									busy || ( 'consent' === step && ! agreed )
+								}
 								onClick={ finish }
 							>
 								{ __( 'Finish setup', 'happyaccess' ) }
