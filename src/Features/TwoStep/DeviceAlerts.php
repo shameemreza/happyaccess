@@ -91,13 +91,27 @@ final class DeviceAlerts {
 	private static $queue = array();
 
 	/**
+	 * Which listener checked each user in this request: 'wp_login' or
+	 * 'two_factor'. A user checked by one listener is skipped by the other,
+	 * so one login never sends two alerts.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $checked_by = array();
+
+	/**
 	 * Watches every login. Late, so a listener that refuses the login runs
 	 * first. Safe to call twice.
+	 *
+	 * The Two Factor plugin stops at wp_login priority 10 to show its own
+	 * step, and when that step passes it fires two_factor_user_authenticated
+	 * instead of wp_login, so its logins are watched there.
 	 *
 	 * @return void
 	 */
 	public static function register() {
 		add_action( 'wp_login', array( __CLASS__, 'on_login' ), PHP_INT_MAX, 2 );
+		add_action( 'two_factor_user_authenticated', array( __CLASS__, 'on_two_factor_login' ), PHP_INT_MAX, 2 );
 	}
 
 	/**
@@ -110,9 +124,37 @@ final class DeviceAlerts {
 	 */
 	public static function on_login( $user_login, $user = null ) {
 		unset( $user_login );
+		self::check( $user, 'wp_login' );
+	}
+
+	/**
+	 * The Two Factor plugin's two_factor_user_authenticated action, fired
+	 * once its step passes and the auth cookie is set.
+	 *
+	 * @param \WP_User|null $user     The user who logged in.
+	 * @param mixed         $provider Two Factor's provider object. Unused.
+	 * @return void
+	 */
+	public static function on_two_factor_login( $user, $provider = null ) {
+		unset( $provider );
+		self::check( $user, 'two_factor' );
+	}
+
+	/**
+	 * Remembers the browser and alerts when it is new.
+	 *
+	 * @param mixed  $user   The user who logged in.
+	 * @param string $source The listener that called: 'wp_login' or 'two_factor'.
+	 * @return void
+	 */
+	private static function check( $user, $source ) {
 		if ( ! $user instanceof \WP_User || ! self::watches( $user ) || Challenge::is_side_login( $user ) ) {
 			return;
 		}
+		if ( isset( self::$checked_by[ $user->ID ] ) && $source !== self::$checked_by[ $user->ID ] ) {
+			return;
+		}
+		self::$checked_by[ $user->ID ] = $source;
 		// Without the tables or a stored key, nothing could be logged and no hash would match later.
 		if ( ! Challenge::db_ready() || ! Secrets::is_network_persisted() ) {
 			return;
@@ -237,12 +279,13 @@ final class DeviceAlerts {
 	}
 
 	/**
-	 * Drops the queued emails. For tests.
+	 * Drops the queued emails and the per-request checks. For tests.
 	 *
 	 * @return void
 	 */
 	public static function reset() {
-		self::$queue = array();
+		self::$queue      = array();
+		self::$checked_by = array();
 	}
 
 	/**

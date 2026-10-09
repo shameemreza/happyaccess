@@ -107,7 +107,7 @@ A few details:
 - **A limit on emails:** at most 3 alerts an hour per person.
 - **20 browsers each:** HappyAccess remembers up to 20 browsers per person and forgets the one seen longest ago.
 - **New keys:** after new security keys in wp-config.php or a lost HappyAccess site key, every browser looks new at its next login, so each person gets an alert for it, at most 3 an hour.
-- **The Two Factor plugin:** accounts it protects get no alerts. Two Factor finishes the login on its own screen, so HappyAccess doesn't see it.
+- **Other two-step plugins:** with Two Factor or Kadence Security, the alert goes out once their step passes.
 
 A browser is known by a cookie with a random ID. Clearing cookies, or a browser that blocks them, makes the next login look new. See [cookies](privacy-and-security.md#cookies).
 

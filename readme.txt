@@ -196,8 +196,6 @@ Yes. Every HappyAccess screen is a step of the normal WordPress login page, so a
 
 Yes. HappyAccess codes don't count as wrong passwords, so a brute force lockout won't lock anyone out over them. If Wordfence Login Security, Two Factor, WP 2FA or Kadence Security already adds two-step login to an account, HappyAccess skips that account.
 
-Accounts that the Two Factor plugin protects get no new device alerts. Two Factor finishes the login on its own screen, so HappyAccess doesn't see it.
-
 One thing to know: plugins that add their own checks to the password login, like user approval or country blocks, don't run on code and link logins.
 
 = Does it work with page cache plugins? =

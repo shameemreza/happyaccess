@@ -327,6 +327,90 @@ class DeviceAlertsTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->mails );
 	}
 
+	/**
+	 * Finishes a login the way Two Factor 0.14.2 does after its own step:
+	 * it sets the auth cookie and fires two_factor_user_authenticated with
+	 * the user and the provider object, never wp_login.
+	 *
+	 * @param WP_User $user The user.
+	 * @return void
+	 */
+	private function two_factor_login( WP_User $user ) {
+		do_action( 'two_factor_user_authenticated', $user, new stdClass() );
+		DeviceAlerts::flush_queue();
+	}
+
+	public function test_a_two_factor_login_from_a_new_browser_sends_one_alert() {
+		$this->turn_on();
+		$user = $this->admin();
+		$this->seed_devices( $user->ID );
+
+		$this->two_factor_login( $user );
+
+		$this->assertCount( 1, $this->mails );
+		$this->assertSame( $user->user_email, $this->mails[0]['to'] );
+		$this->assertCount( 1, $this->alert_rows( $user->ID ) );
+		$this->assertCount( 1, $this->cookies );
+		$this->assertCount( 2, $this->devices( $user->ID ) );
+	}
+
+	public function test_a_two_factor_login_from_a_known_browser_sends_nothing() {
+		$this->turn_on();
+		$user = $this->admin();
+		$id   = $this->first_login( $user );
+
+		$_COOKIE[ DeviceAlerts::COOKIE ] = $id;
+		$this->two_factor_login( $user );
+
+		$this->assertSame( array(), $this->mails );
+		$this->assertSame( array(), $this->alert_rows( $user->ID ) );
+		$this->assertCount( 1, $this->devices( $user->ID ) );
+	}
+
+	public function test_wp_login_and_two_factor_in_one_request_send_one_alert() {
+		$this->turn_on();
+		$user = $this->admin();
+		$this->seed_devices( $user->ID );
+
+		do_action( 'wp_login', $user->user_login, $user );
+		do_action( 'two_factor_user_authenticated', $user, new stdClass() );
+		DeviceAlerts::flush_queue();
+
+		$this->assertCount( 1, $this->mails );
+		$this->assertCount( 1, $this->alert_rows( $user->ID ) );
+		$this->assertCount( 2, $this->devices( $user->ID ), 'The second listener adds no device either.' );
+	}
+
+	public function test_two_factor_then_wp_login_in_one_request_send_one_alert() {
+		$this->turn_on();
+		$user = $this->admin();
+		$this->seed_devices( $user->ID );
+
+		do_action( 'two_factor_user_authenticated', $user, new stdClass() );
+		do_action( 'wp_login', $user->user_login, $user );
+		DeviceAlerts::flush_queue();
+
+		$this->assertCount( 1, $this->mails );
+		$this->assertCount( 1, $this->alert_rows( $user->ID ) );
+	}
+
+	public function test_a_two_factor_interim_login_is_skipped() {
+		$this->turn_on();
+		$user = $this->admin();
+		$this->seed_devices( $user->ID );
+
+		$_REQUEST['interim-login'] = '1';
+		$this->two_factor_login( $user );
+
+		$this->assertSame( array(), $this->mails );
+		$this->assertSame( array(), $this->alert_rows( $user->ID ) );
+	}
+
+	public function test_the_two_factor_hook_is_added_late_with_two_arguments() {
+		$this->turn_on();
+		$this->assertSame( PHP_INT_MAX, has_action( 'two_factor_user_authenticated', array( DeviceAlerts::class, 'on_two_factor_login' ) ) );
+	}
+
 	public function test_a_user_without_two_step_gets_the_tip_with_a_profile_link() {
 		$this->turn_on();
 		$user = $this->admin();
@@ -508,6 +592,7 @@ class DeviceAlertsTest extends WP_UnitTestCase {
 		do_action( 'wp_login', $user->user_login, $user );
 
 		$this->assertFalse( has_action( 'wp_login', array( DeviceAlerts::class, 'on_login' ) ) );
+		$this->assertFalse( has_action( 'two_factor_user_authenticated', array( DeviceAlerts::class, 'on_two_factor_login' ) ) );
 		$this->assertFalse( metadata_exists( 'user', $user->ID, DeviceAlerts::META ) );
 		$this->assertSame( array(), $this->cookies );
 	}
