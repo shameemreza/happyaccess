@@ -163,8 +163,10 @@ final class Challenge {
 	 */
 	public static function register() {
 		Router::add_step( self::STEP, array( __CLASS__, 'run_step' ) );
+		add_action( 'password_reset', array( __CLASS__, 'end_account_lock' ), 10, 1 );
 		add_action( 'after_password_reset', array( __CLASS__, 'end_account_lock' ), 10, 1 );
-		add_action( 'password_reset', array( __CLASS__, 'note_reset' ), PHP_INT_MAX, 1 );
+		// Priority 0, so a listener that logs the user in at any later priority is already held. It has no side effects.
+		add_action( 'password_reset', array( __CLASS__, 'note_reset' ), 0, 1 );
 		add_action( 'after_password_reset', array( __CLASS__, 'note_reset' ), PHP_INT_MAX, 1 );
 		add_action( 'set_auth_cookie', array( __CLASS__, 'drop_reset_session' ), PHP_INT_MAX, 6 );
 		add_filter( 'send_auth_cookies', array( __CLASS__, 'hold_reset_cookie' ), PHP_INT_MAX, 4 );
@@ -1169,7 +1171,8 @@ final class Challenge {
 
 	/**
 	 * Ends a pause and forgets the wrong codes after a password reset: the
-	 * person who reset it has the mailbox, and the old password is gone.
+	 * person who reset it has the mailbox, and the old password is gone. Runs
+	 * on password_reset too, because WooCommerce 9.4 to 10.8 fire only that.
 	 *
 	 * @param \WP_User $user The user whose password was reset.
 	 * @return void

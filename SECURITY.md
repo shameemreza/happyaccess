@@ -13,10 +13,9 @@ Security fixes go into the latest 1.1.x release. If you're on 1.0.x, please upda
 
 ## Reporting a vulnerability
 
-Please don't report a security issue in a public GitHub issue, a pull request or the WordPress.org support forum. Use one of these private channels instead:
+Please don't report a security issue in a public GitHub issue, a pull request or the WordPress.org support forum. Use the private channel instead:
 
 - **GitHub:** open the [Security tab](https://github.com/shameemreza/happyaccess/security) of this repo and select "Report a vulnerability". Only you and I can see the report.
-- **Patchstack:** report it through the [HappyAccess program on Patchstack](https://patchstack.com/database/vdp/happyaccess).
 
 A good report has:
 

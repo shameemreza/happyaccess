@@ -107,7 +107,6 @@ body:
     attributes:
       label: Logs or screenshots
       description: Anything from the PHP error log or the browser console. Remove codes, links and email addresses first.
-      render: text
 
   - type: checkboxes
     id: checks

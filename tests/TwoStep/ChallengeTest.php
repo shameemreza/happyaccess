@@ -1018,6 +1018,23 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'account', Challenge::account_subject( $user->ID ), DAY_IN_SECONDS ) );
 	}
 
+	/**
+	 * WooCommerce 9.4 to 10.8 fire only password_reset on a My Account reset.
+	 */
+	public function test_a_reset_that_fires_only_password_reset_ends_the_account_lock() {
+		$made                   = $this->app_user();
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.1';
+		$this->five_wrong_codes( $made['user'] );
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.2';
+		$this->five_wrong_codes( $made['user'] );
+		$this->assertGreaterThan( 0, Challenge::account_wait( $made['user']->ID ), 'The account is paused first.' );
+
+		do_action( 'password_reset', $made['user'], wp_generate_password( 24, false ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook.
+
+		$this->assertSame( 0, Challenge::account_wait( $made['user']->ID ), 'The pause is over.' );
+		$this->assertSame( 0, RateLimiter::count( Challenge::CODE_ACTION, 'account', Challenge::account_subject( $made['user']->ID ), DAY_IN_SECONDS ), 'The wrong codes are forgotten.' );
+	}
+
 	public function test_one_ip_cycling_its_own_account_cannot_lock_other_accounts() {
 		$own  = $this->email_user();
 		$made = $this->app_user( 'administrator' );
@@ -1679,6 +1696,86 @@ class ChallengeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Other code can log the user in on password_reset before HappyAccess
+	 * hears of the reset, as long as HappyAccess listens first.
+	 *
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_listener_that_logs_in_on_password_reset_still_ends_in_the_step() {
+		$account = $this->load_woocommerce();
+		$made    = $this->app_user( 'customer' );
+		add_action( 'password_reset', array( $this, 'log_in_on_reset' ), 1, 1 );
+		$_POST = array( 'wc_reset_password' => 'true' );
+		$url   = '';
+		try {
+			do_action( 'password_reset', $made['user'], wp_generate_password( 24, false ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook.
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			$url = $stop->url;
+		} finally {
+			$_POST = array();
+		}
+
+		$this->assertSame( array( $made['user']->ID ), $this->auth, 'The listener tried to log the user in.' );
+		$this->assert_reset_logged_nobody_in( $made['user']->ID );
+		$this->assert_step_then_login( $made, $url, $account );
+	}
+
+	/**
+	 * A listener that logs in the user it is given.
+	 *
+	 * @param WP_User $user The user whose password is reset.
+	 * @return void
+	 */
+	public function log_in_on_reset( $user ) {
+		wp_set_auth_cookie( $user->ID );
+	}
+
+	/**
+	 * WooCommerce 11.2 and later log in only the user who is already logged
+	 * in as the one reset. Someone else's reset logs nobody in. Before 11.2
+	 * the test runs the same steps by hand, with that check in place.
+	 *
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_while_logged_in_as_someone_else_starts_no_login() {
+		$this->load_woocommerce();
+		$made  = $this->app_user( 'customer' );
+		$other = self::factory()->user->create_and_get( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $other->ID );
+		$pass = wp_generate_password( 24, false );
+
+		if ( $this->woo_logs_in_after_a_logged_out_reset() ) {
+			// WooCommerce before 11.2 would log the user in, so the 11.2 check is applied here.
+			$_POST = array( 'wc_reset_password' => 'true' );
+			try {
+				do_action( 'password_reset', $made['user'], $pass ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook.
+				wp_set_password( $pass, $made['user']->ID );
+				do_action( 'after_password_reset', $made['user'], $pass ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook.
+				if ( get_current_user_id() === $made['user']->ID ) {
+					wc_set_customer_auth_cookie( $made['user']->ID );
+				}
+			} finally {
+				$_POST = array();
+			}
+		} else {
+			$this->woo_reset( $made['user'], $pass );
+		}
+
+		$this->assertSame( array(), $this->auth, 'Nobody is logged in.' );
+		$this->assertSame( $other->ID, get_current_user_id(), 'The person at the browser stays logged in as themselves.' );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $made['user']->ID )->get_all(), 'The reset user has no session.' );
+		$this->assertSame( 0, $this->wp_login_count );
+		$this->assertSame( '', $this->pending_cookie(), 'No pending login starts, because nothing logs in.' );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	/**
 	 * Loads WooCommerce, so this runs in its own process.
 	 *
 	 * @runInSeparateProcess
@@ -1768,6 +1865,21 @@ class ChallengeTest extends WP_UnitTestCase {
 		reset_password( $made['user'], wp_generate_password( 24, false ) );
 		$this->assertSame( array(), $this->auth, 'wp-login.php never logs in after a reset.' );
 		$this->assertSame( array(), $this->cookies );
+		$this->assertSame( 0, get_current_user_id() );
+	}
+
+	public function test_a_login_on_after_password_reset_after_a_core_reset_is_held() {
+		$made = $this->app_user();
+		add_action( 'after_password_reset', array( $this, 'log_in_on_reset' ), 10, 1 );
+
+		reset_password( $made['user'], wp_generate_password( 24, false ) );
+
+		$this->assertSame( array( $made['user']->ID ), $this->auth, 'The listener tried to log the user in.' );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $made['user']->ID )->get_all(), 'No session is left for an auth cookie.' );
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertFalse( apply_filters( 'send_auth_cookies', true, 0, 0, $made['user']->ID, 'auth', '' ), 'The auth cookie is held back.' );
+		add_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertSame( 0, $this->wp_login_count );
 		$this->assertSame( 0, get_current_user_id() );
 	}
 

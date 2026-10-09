@@ -52,9 +52,11 @@ The settings come from these environment variables, with these defaults:
 Outside a WordPress install, `bin/install-wp-tests.sh` downloads WordPress and creates the database. It reads the password from `WP_TESTS_DB_PASSWORD`, never from an argument:
 
 ```
-bin/install-wp-tests.sh happyaccess_tests root 127.0.0.1 7.1.1
+WP_CORE_DIR=/tmp/wordpress bin/install-wp-tests.sh happyaccess_tests root 127.0.0.1 7.1.1
 WP_CORE_DIR=/tmp/wordpress composer test
 ```
+
+The WooCommerce tests skip unless WooCommerce is in the plugins folder of that WordPress copy.
 
 The WordPress test library itself comes from the `wp-phpunit/wp-phpunit` Composer package.
 
