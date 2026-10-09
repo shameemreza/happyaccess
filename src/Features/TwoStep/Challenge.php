@@ -423,7 +423,7 @@ final class Challenge {
 		if ( is_string( $token ) && '' !== $token ) {
 			\WP_Session_Tokens::get_instance( (int) $user_id )->destroy( $token );
 		}
-		if ( (int) $user_id === get_current_user_id() ) {
+		if ( get_current_user_id() === (int) $user_id ) {
 			wp_set_current_user( 0 );
 		}
 	}
