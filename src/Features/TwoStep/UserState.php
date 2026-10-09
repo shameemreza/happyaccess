@@ -32,8 +32,9 @@ defined( 'ABSPATH' ) || exit;
  * the user sets the app up again. It can make codes only while the secret
  * opens. Backup codes alone never turn two-step login on.
  *
- * Every write that changes who has two-step login or where their grace
- * period stands drops the Coverage counts.
+ * Every write that turns a method on or off drops the Coverage counts.
+ * Grace writes don't: the counts are kept for 5 minutes and would
+ * otherwise be worked out again after every grace login.
  */
 final class UserState {
 
@@ -355,7 +356,6 @@ final class UserState {
 				return $state;
 			}
 		);
-		Coverage::forget();
 	}
 
 	/**
@@ -450,7 +450,6 @@ final class UserState {
 				return $state;
 			}
 		);
-		Coverage::forget();
 	}
 
 	/**
@@ -471,7 +470,6 @@ final class UserState {
 				return $state;
 			}
 		);
-		Coverage::forget();
 		return null === $state ? self::grace_logins_used( $user_id ) + 1 : (int) $state['grace_logins_used'];
 	}
 

@@ -23,8 +23,10 @@ defined( 'ABSPATH' ) || exit;
  * UserState::app_enabled() checks before it opens the secret. Temp users
  * are left out, since two-step login never applies to them.
  *
- * The answer is kept in a transient for 5 minutes. UserState drops it on
- * every two-step change, and a settings save or a role change drops it too.
+ * The answer is kept in a transient for 5 minutes. UserState drops it when
+ * someone turns a method on or off, and a settings save or a role change
+ * drops it too. New accounts and grace logins wait for the 5 minutes, so a
+ * busy store doesn't count again on every sign-up.
  */
 final class Coverage {
 
@@ -50,6 +52,18 @@ final class Coverage {
 	const EMAIL_ON = '"email";b:1;';
 
 	/**
+	 * Query var of a user query that reads only users after this id.
+	 */
+	const AFTER_ID = 'happyaccess_after_id';
+
+	/**
+	 * Ids of accounts being created in this request.
+	 *
+	 * @var array<int,bool>
+	 */
+	private static $new_users = array();
+
+	/**
 	 * Hooks the route and the cache clearing. Safe to call twice.
 	 *
 	 * @return void
@@ -59,8 +73,53 @@ final class Coverage {
 		foreach ( array( 'add_option_', 'update_option_', 'delete_option_' ) as $hook ) {
 			add_action( $hook . Settings::OPTION, array( __CLASS__, 'forget' ) );
 		}
-		foreach ( array( 'set_user_role', 'add_user_role', 'remove_user_role', 'user_register', 'deleted_user', 'add_user_to_blog', 'remove_user_from_blog' ) as $hook ) {
+		add_filter( 'insert_user_meta', array( __CLASS__, 'note_new_user' ), 10, 3 );
+		add_action( 'user_register', array( __CLASS__, 'forget_new_user' ) );
+		foreach ( array( 'set_user_role', 'add_user_role', 'remove_user_role' ) as $hook ) {
+			add_action( $hook, array( __CLASS__, 'role_changed' ) );
+		}
+		foreach ( array( 'deleted_user', 'add_user_to_blog', 'remove_user_from_blog' ) as $hook ) {
 			add_action( $hook, array( __CLASS__, 'forget' ) );
+		}
+	}
+
+	/**
+	 * Notes an account that wp_insert_user() is creating, which gets its
+	 * first role next. On a busy store that happens on every sign-up and
+	 * checkout, so a new account waits for the 5 minutes instead.
+	 *
+	 * @param array    $meta   User meta to save.
+	 * @param \WP_User $user   The user.
+	 * @param bool     $update Whether this is an update of an existing user.
+	 * @return array
+	 */
+	public static function note_new_user( $meta, $user = null, $update = true ) {
+		if ( ! $update && $user instanceof \WP_User ) {
+			self::$new_users[ (int) $user->ID ] = true;
+		}
+		return $meta;
+	}
+
+	/**
+	 * Forgets the note once the new account is saved.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	public static function forget_new_user( $user_id ) {
+		unset( self::$new_users[ (int) $user_id ] );
+	}
+
+	/**
+	 * Drops the kept answer when a role changes, except the first role of
+	 * an account being created.
+	 *
+	 * @param int $user_id User id.
+	 * @return void
+	 */
+	public static function role_changed( $user_id ) {
+		if ( ! isset( self::$new_users[ (int) $user_id ] ) ) {
+			self::forget();
 		}
 	}
 
@@ -214,7 +273,8 @@ final class Coverage {
 	/**
 	 * Users in a required role with no method whose grace period is over.
 	 * Only users whose grace started can be past it, so only they are read,
-	 * a batch at a time, and each one is checked the way the login does.
+	 * a batch at a time after the last id read, and each one is checked the
+	 * way the login does.
 	 *
 	 * @param string $role Role slug.
 	 * @return int
@@ -238,38 +298,62 @@ final class Coverage {
 			),
 		);
 
-		$past = 0;
-		$page = 1;
-		do {
-			$ids = ( new \WP_User_Query(
-				array(
-					'role'          => $role,
-					'number'        => self::BATCH,
-					'paged'         => $page,
-					'orderby'       => 'ID',
-					'fields'        => 'ID',
-					'count_total'   => false,
-					'cache_results' => false,
-					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Only users whose grace started, then kept for 5 minutes.
-					'meta_query'    => self::meta_query( $clause ),
-				)
-			) )->get_results();
+		$past  = 0;
+		$after = 0;
+		add_action( 'pre_user_query', array( __CLASS__, 'after_id' ) );
+		try {
+			do {
+				$ids = ( new \WP_User_Query(
+					array(
+						'role'          => $role,
+						'number'        => self::BATCH,
+						'orderby'       => 'ID',
+						'order'         => 'ASC',
+						'fields'        => 'ID',
+						'count_total'   => false,
+						'cache_results' => false,
+						self::AFTER_ID  => $after,
+						// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Only users whose grace started, then kept for 5 minutes.
+						'meta_query'    => self::meta_query( $clause ),
+					)
+				) )->get_results();
 
-			$ids  = array_map( 'intval', (array) $ids );
-			$read = count( $ids );
+				$ids  = array_map( 'intval', (array) $ids );
+				$read = count( $ids );
 
-			update_meta_cache( 'user', $ids );
-			foreach ( $ids as $id ) {
-				if ( ! Enforcement::in_grace( $id ) ) {
-					++$past;
+				update_meta_cache( 'user', $ids );
+				foreach ( $ids as $id ) {
+					if ( ! Enforcement::in_grace( $id ) ) {
+						++$past;
+					}
+					// The batch's meta is not needed again, so it doesn't pile up in memory.
+					wp_cache_delete( $id, 'user_meta' );
 				}
-				// The batch's meta is not needed again, so it doesn't pile up in memory.
-				wp_cache_delete( $id, 'user_meta' );
-			}
-			++$page;
-		} while ( self::BATCH === $read );
+				if ( $read > 0 ) {
+					$after = max( $ids );
+				}
+			} while ( self::BATCH === $read );
+		} finally {
+			remove_action( 'pre_user_query', array( __CLASS__, 'after_id' ) );
+		}
 
 		return $past;
+	}
+
+	/**
+	 * Limits a user query that carries AFTER_ID to users after that id, so
+	 * each batch is read by the primary key instead of an offset.
+	 *
+	 * @param \WP_User_Query $query The query.
+	 * @return void
+	 */
+	public static function after_id( $query ) {
+		global $wpdb;
+
+		if ( ! $query instanceof \WP_User_Query || null === $query->get( self::AFTER_ID ) ) {
+			return;
+		}
+		$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID > %d", (int) $query->get( self::AFTER_ID ) );
 	}
 
 	/**

@@ -230,11 +230,24 @@ final class Page {
 			'/happyaccess/v1/catalog',
 			$activity,
 		);
-		// The route exists only while two-step login is on.
-		if ( Features::is_enabled( 'two_step' ) ) {
+		// The route exists only while two-step login is on. Counting can be
+		// slow on a big store, so it runs here only when the page opens on
+		// the Login and security tab; that tab loads it when opened later.
+		if ( Features::is_enabled( 'two_step' ) && 'login' === self::start_tab() ) {
 			$paths[] = '/happyaccess/v1/twostep/coverage';
 		}
 		return $paths;
+	}
+
+	/**
+	 * The tab named in the page URL, or an empty string. The app may still
+	 * open a remembered tab, which only the browser knows.
+	 *
+	 * @return string
+	 */
+	private static function start_tab() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only; picks what to preload.
+		return isset( $_GET['tab'] ) && is_string( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
 	}
 
 	/**

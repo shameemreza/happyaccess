@@ -49,6 +49,7 @@ class PageTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		unset( $_GET['tab'] );
 		wp_dequeue_script( Page::HANDLE );
 		wp_deregister_script( Page::HANDLE );
 		wp_dequeue_style( Page::HANDLE );
@@ -342,14 +343,25 @@ class PageTest extends WP_UnitTestCase {
 		);
 	}
 
-	public function test_preload_adds_the_two_step_coverage_while_two_step_is_on() {
+	public function test_preload_adds_the_two_step_coverage_only_when_the_page_opens_on_the_login_tab() {
 		\HappyAccess\Core\Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
-		$this->assertNotContains( '/happyaccess/v1/twostep/coverage', Page::preload_paths() );
+		$_GET['tab'] = 'login';
+		$this->assertNotContains( '/happyaccess/v1/twostep/coverage', Page::preload_paths(), 'The route exists only while two-step login is on.' );
 
 		\HappyAccess\Core\Features::set( 'two_step', true );
 		$paths = Page::preload_paths();
 		$this->assertSame( '/happyaccess/v1/twostep/coverage', end( $paths ) );
 		$this->assertCount( 5, $paths );
+
+		foreach ( array( 'support', 'activity', 'settings', null ) as $tab ) {
+			if ( null === $tab ) {
+				unset( $_GET['tab'] );
+			} else {
+				$_GET['tab'] = $tab;
+			}
+			$this->assertNotContains( '/happyaccess/v1/twostep/coverage', Page::preload_paths(), (string) $tab );
+			$this->assertCount( 4, Page::preload_paths() );
+		}
 	}
 
 	public function test_preload_days_follow_the_site_timezone() {
@@ -415,6 +427,7 @@ class PageTest extends WP_UnitTestCase {
 		\HappyAccess\Core\Features::set( 'two_step', true );
 		\HappyAccess\Features\TwoStep\Feature::register();
 		$GLOBALS['wp_rest_server'] = null;
+		$_GET['tab']               = 'login';
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		Routes::register();
 		Page::add_menu();

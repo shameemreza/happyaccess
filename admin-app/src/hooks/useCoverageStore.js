@@ -5,7 +5,8 @@ import { getCoverage } from '../api';
  * Who has two-step login, per role. It lives in the app-level DataProvider
  * and loads the first time the Login and security tab asks for it, since
  * the route exists only while two-step login is on. The page preloads that
- * first answer.
+ * first answer only when it opens on that tab; otherwise the tab shows the
+ * delayed loading line while the counts arrive.
  *
  * @return {Object} { coverage, loading, error, loadOnce, retry, refresh }
  */

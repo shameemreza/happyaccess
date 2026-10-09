@@ -261,9 +261,46 @@ class CoverageTest extends WP_UnitTestCase {
 
 		UserState::reset( $user );
 		$this->assertSame( 0, $this->rows()['editor']['enabled'] );
+	}
+
+	public function test_new_users_and_grace_writes_keep_the_kept_answer() {
+		$user = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$this->rows();
+		$this->assertIsArray( get_transient( Coverage::TRANSIENT ) );
+
+		self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->assertIsArray( get_transient( Coverage::TRANSIENT ), 'A new account waits for the 5 minutes.' );
 
 		UserState::start_grace( $user, Clock::now() );
-		$this->assertFalse( get_transient( Coverage::TRANSIENT ) );
+		UserState::count_grace_login( $user );
+		UserState::clear_grace( $user );
+		$this->assertIsArray( get_transient( Coverage::TRANSIENT ), 'Grace writes wait for the 5 minutes.' );
+
+		( new WP_User( $user ) )->set_role( 'author' );
+		$this->assertFalse( get_transient( Coverage::TRANSIENT ), 'A role change still clears it.' );
+	}
+
+	public function test_past_grace_reads_users_after_the_last_id_instead_of_an_offset() {
+		$this->past_grace( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$queries = array();
+		$watch   = static function ( $sql ) use ( &$queries ) {
+			// The LIKE value comes through esc_like(), which escapes the underscores.
+			if ( false !== strpos( $sql, 'started' ) && false !== strpos( $sql, 'SELECT' ) ) {
+				$queries[] = $sql;
+			}
+			return $sql;
+		};
+		add_filter( 'query', $watch );
+		try {
+			$this->assertSame( 1, $this->rows()['editor']['past_grace'] );
+		} finally {
+			remove_filter( 'query', $watch );
+		}
+
+		$this->assertNotEmpty( $queries );
+		foreach ( $queries as $sql ) {
+			$this->assertStringContainsString( '.ID > 0', $sql, 'Each batch starts after the last id read.' );
+		}
 	}
 
 	public function test_a_settings_save_or_a_role_change_clears_the_kept_answer() {
