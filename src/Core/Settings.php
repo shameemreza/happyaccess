@@ -51,6 +51,20 @@ final class Settings {
 	const ROLE_LISTS = array( 'two_step.device_alert_roles' );
 
 	/**
+	 * Settings every site reads from the main site while HappyAccess is
+	 * network active. A login on one site of a network can be good on the
+	 * others, so one site's two-step rules can't be weaker than another's.
+	 */
+	const MAIN_SITE_PATHS = array(
+		'features.two_step',
+		'two_step.role_policy',
+		'two_step.grace_type',
+		'two_step.grace_logins',
+		'two_step.grace_days',
+		'two_step.block_xmlrpc',
+	);
+
+	/**
 	 * Cleaned settings per site for this request.
 	 *
 	 * @var array
@@ -166,6 +180,41 @@ final class Settings {
 			$value = $value[ $part ];
 		}
 		return $value;
+	}
+
+	/**
+	 * One setting by dotted path, from the main site for a path in
+	 * MAIN_SITE_PATHS while HappyAccess is network active, else from this
+	 * site, the same as get().
+	 *
+	 * @param string $path     Dotted path.
+	 * @param mixed  $fallback Returned when the path doesn't exist.
+	 * @return mixed
+	 */
+	public static function shared( $path, $fallback = null ) {
+		if ( ! in_array( $path, self::MAIN_SITE_PATHS, true ) || ! self::network_active() || is_main_site() ) {
+			return self::get( $path, $fallback );
+		}
+		switch_to_blog( get_main_site_id() );
+		try {
+			return self::get( $path, $fallback );
+		} finally {
+			restore_current_blog();
+		}
+	}
+
+	/**
+	 * Whether HappyAccess is active for the whole network. Reads the site
+	 * option, so it works before wp-admin/includes/plugin.php loads.
+	 *
+	 * @return bool
+	 */
+	public static function network_active() {
+		if ( ! is_multisite() ) {
+			return false;
+		}
+		$plugins = get_site_option( 'active_sitewide_plugins', array() );
+		return is_array( $plugins ) && isset( $plugins[ HAPPYACCESS_PLUGIN_BASENAME ] );
 	}
 
 	/**

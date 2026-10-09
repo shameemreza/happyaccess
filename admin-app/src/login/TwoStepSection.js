@@ -98,7 +98,7 @@ function RoleRow( { role, value, onChange } ) {
  * as the whole list, which replaces the saved one.
  *
  * @param {Object} props      Props.
- * @param {Object} props.boot Boot data: loginRoles and otherTwoStep.
+ * @param {Object} props.boot Boot data: loginRoles, otherTwoStep and twoStepNetwork.
  * @return {Element|null} The section, or nothing before the settings load.
  */
 export default function TwoStepSection( { boot } ) {
@@ -245,6 +245,22 @@ export default function TwoStepSection( { boot } ) {
 				<h2 id={ `${ ids }-twostep-title` }>
 					{ __( 'Two-step login', 'happyaccess' ) }
 				</h2>
+				{ 'main' === boot?.twoStepNetwork && (
+					<Notice status="info" isDismissible={ false }>
+						{ __(
+							"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Changes here don't apply.",
+							'happyaccess'
+						) }
+					</Notice>
+				) }
+				{ 'subdir' === boot?.twoStepNetwork && (
+					<Notice status="warning" isDismissible={ false }>
+						{ __(
+							'Sites on this network share their logins, so a login on another site counts here too. Turn on HappyAccess for the whole network, or turn on two-step login with the same roles on every site.',
+							'happyaccess'
+						) }
+					</Notice>
+				) }
 				{ others.length > 0 && (
 					<Notice status="info" isDismissible={ false }>
 						{ otherPluginsNotice( others ) }

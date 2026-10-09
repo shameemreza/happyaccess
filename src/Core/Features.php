@@ -25,13 +25,14 @@ final class Features {
 	const REWRITE_FLUSH_OPTION = 'happyaccess_rewrite_flush';
 
 	/**
-	 * Whether a feature is on.
+	 * Whether a feature is on. Two-step login follows the main site's switch
+	 * while HappyAccess is network active (see Settings::MAIN_SITE_PATHS).
 	 *
 	 * @param string $feature Feature key.
 	 * @return bool
 	 */
 	public static function is_enabled( $feature ) {
-		return in_array( $feature, self::ALL, true ) && true === Settings::get( 'features.' . $feature );
+		return in_array( $feature, self::ALL, true ) && true === Settings::shared( 'features.' . $feature );
 	}
 
 	/**

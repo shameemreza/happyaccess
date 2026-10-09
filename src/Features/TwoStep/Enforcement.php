@@ -41,9 +41,10 @@ final class Enforcement {
 	/**
 	 * The policy for a user: required when any of their roles is required,
 	 * else optional when any is optional or missing from the setting, else
-	 * off. A super admin on multisite follows the main site's policy, with
-	 * administrator added to their roles there, because they act as one on
-	 * every site.
+	 * off. While HappyAccess is network active, the setting is the main
+	 * site's, applied to the user's roles on this site. A super admin on
+	 * multisite follows the main site's policy, with administrator added to
+	 * their roles there, because they act as one on every site.
 	 *
 	 * The answer is kept for the rest of the request, so one login doesn't
 	 * switch to the main site again on every check. A settings or role
@@ -65,12 +66,12 @@ final class Enforcement {
 			try {
 				$main   = get_userdata( $user->ID );
 				$roles  = $main instanceof \WP_User ? (array) $main->roles : array();
-				$policy = self::resolve( Settings::get( 'two_step.role_policy', array() ), array_merge( $roles, array( 'administrator' ) ) );
+				$policy = self::resolve( Settings::shared( 'two_step.role_policy', array() ), array_merge( $roles, array( 'administrator' ) ) );
 			} finally {
 				restore_current_blog();
 			}
 		} else {
-			$policy = self::resolve( Settings::get( 'two_step.role_policy', array() ), (array) $user->roles );
+			$policy = self::resolve( Settings::shared( 'two_step.role_policy', array() ), (array) $user->roles );
 		}
 
 		self::$policies[ $key ] = $policy;
@@ -165,7 +166,7 @@ final class Enforcement {
 	 * @return string
 	 */
 	public static function grace_type() {
-		return 'days' === Settings::get( 'two_step.grace_type' ) ? 'days' : 'logins';
+		return 'days' === Settings::shared( 'two_step.grace_type' ) ? 'days' : 'logins';
 	}
 
 	/**
@@ -174,7 +175,7 @@ final class Enforcement {
 	 * @return int
 	 */
 	private static function grace_logins() {
-		return max( 1, (int) Settings::get( 'two_step.grace_logins' ) );
+		return max( 1, (int) Settings::shared( 'two_step.grace_logins' ) );
 	}
 
 	/**
@@ -183,7 +184,7 @@ final class Enforcement {
 	 * @return int
 	 */
 	private static function grace_days() {
-		return max( 1, (int) Settings::get( 'two_step.grace_days' ) );
+		return max( 1, (int) Settings::shared( 'two_step.grace_days' ) );
 	}
 
 	/**

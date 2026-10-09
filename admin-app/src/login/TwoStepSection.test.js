@@ -388,6 +388,31 @@ describe( 'Two-step section', () => {
 		).not.toBeInTheDocument();
 	} );
 
+	it( 'says when the main site sets two-step login for the whole network', async () => {
+		const main = await renderSection( boot( { twoStepNetwork: 'main' } ) );
+		expect(
+			within( main.container ).getByText(
+				"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Changes here don't apply."
+			)
+		).toBeInTheDocument();
+		main.unmount();
+
+		const folders = await renderSection(
+			boot( { twoStepNetwork: 'subdir' } )
+		);
+		expect(
+			within( folders.container ).getByText(
+				'Sites on this network share their logins, so a login on another site counts here too. Turn on HappyAccess for the whole network, or turn on two-step login with the same roles on every site.'
+			)
+		).toBeInTheDocument();
+		folders.unmount();
+
+		const single = await renderSection();
+		expect(
+			within( single.container ).queryByText( /whole network/ )
+		).not.toBeInTheDocument();
+	} );
+
 	it( 'has no accessibility violations, with the notes showing', async () => {
 		mockServer(
 			settingsFixture( {

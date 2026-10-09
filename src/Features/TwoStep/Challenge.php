@@ -660,7 +660,7 @@ final class Challenge {
 	 */
 	private static function outside_browser( \WP_User $user ) {
 		if ( 'xmlrpc' === self::context() ) {
-			if ( ! Settings::get( 'two_step.block_xmlrpc' ) ) {
+			if ( ! Settings::shared( 'two_step.block_xmlrpc' ) ) {
 				return $user;
 			}
 			return new \WP_Error( 'happyaccess_twostep_xmlrpc', esc_html__( "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead.", 'happyaccess' ) );

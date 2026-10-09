@@ -283,7 +283,28 @@ final class Page {
 			'woocommerce'    => class_exists( 'WooCommerce' ),
 			'otherTwoFactor' => OtherTwoFactor::plugin_active(),
 			'otherTwoStep'   => OtherTwoFactor::active_plugins(),
+			'twoStepNetwork' => self::two_step_network(),
 		);
+	}
+
+	/**
+	 * How this network shares two-step login settings, for the notice on
+	 * the Login and security tab: main when HappyAccess is network active and
+	 * this isn't the main site, so the main site's settings apply; subdir on
+	 * a subdirectory network without network activation, where a login on
+	 * one site works on the others but each site has its own rules; else
+	 * empty.
+	 *
+	 * @return string
+	 */
+	private static function two_step_network() {
+		if ( ! is_multisite() ) {
+			return '';
+		}
+		if ( Settings::network_active() ) {
+			return is_main_site() ? '' : 'main';
+		}
+		return is_subdomain_install() ? '' : 'subdir';
 	}
 
 	/**

@@ -133,7 +133,7 @@ final class Coverage {
 	 * @return array{roles: array, large: bool}
 	 */
 	private static function compute() {
-		$policy = Settings::get( 'two_step.role_policy', array() );
+		$policy = Settings::shared( 'two_step.role_policy', array() );
 		$policy = is_array( $policy ) ? $policy : array();
 
 		$rows = array();
