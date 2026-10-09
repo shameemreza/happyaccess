@@ -9,15 +9,15 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-09T20:02:09+00:00\n"
+"POT-Creation-Date: 2026-10-09T20:41:57+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: happyaccess\n"
 
 #. Plugin Name of the plugin
 #: happyaccess.php
-#: src/Admin/Page.php:143
-#: src/Admin/Page.php:144
+#: src/Admin/Page.php:210
+#: src/Admin/Page.php:211
 #: src/Core/Privacy.php:193
 #: src/Core/Privacy.php:207
 #: build/index.js:2
@@ -46,14 +46,52 @@ msgid "https://shameem.dev/"
 msgstr ""
 
 #. translators: %d: number of support passes ended.
-#: src/Admin/Page.php:124
+#: src/Admin/Page.php:126
 #, php-format
 msgid "Emergency lock ended %d support pass."
 msgid_plural "Emergency lock ended %d support passes."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/Page.php:293
+#: src/Admin/Page.php:160
+msgid "HappyAccess couldn't finish updating."
+msgstr ""
+
+#: src/Admin/Page.php:162
+msgid "Until it does, logins with support codes, email codes and two-step login wait. It tries again every 15 minutes."
+msgstr ""
+
+#. translators: %s: database table name.
+#: src/Admin/Page.php:178
+#, php-format
+msgid "The table %s is missing. Check that the database user can create tables."
+msgstr ""
+
+#. translators: 1: column name, 2: database table name.
+#: src/Admin/Page.php:183
+#, php-format
+msgid "The column %1$s of the table %2$s is missing. Check that the database user can change tables."
+msgstr ""
+
+#: src/Admin/Page.php:188
+msgid "The HappyAccess site key couldn't be saved in the options table."
+msgstr ""
+
+#: src/Admin/Page.php:190
+msgid "A database write failed."
+msgstr ""
+
+#: src/Admin/Page.php:192
+msgid "The plain codes from version 1.0 couldn't be removed."
+msgstr ""
+
+#. translators: %s: a short reason code.
+#: src/Admin/Page.php:195
+#, php-format
+msgid "Reason: %s"
+msgstr ""
+
+#: src/Admin/Page.php:360
 msgid "The HappyAccess admin app is not built yet. Run npm ci and npm run build in the plugin folder."
 msgstr ""
 
@@ -285,7 +323,7 @@ msgid "Two-step login setup put off"
 msgstr ""
 
 #: src/Core/EventLabels.php:96
-#: src/Features/TwoStep/Challenge.php:1873
+#: src/Features/TwoStep/Challenge.php:1970
 #: templates/emails/twostep-site-alert.php:13
 msgid "Many wrong two-step login codes"
 msgstr ""
@@ -710,7 +748,7 @@ msgid "Expires (UTC)"
 msgstr ""
 
 #: src/Core/Privacy.php:304
-#: templates/emails/admin-created.php:56
+#: templates/emails/admin-created.php:60
 msgid "Role"
 msgstr ""
 
@@ -735,9 +773,9 @@ msgid "Temporary access records that name this user or email address."
 msgstr ""
 
 #: src/Core/Privacy.php:370
-#: src/Core/SettingLabels.php:39
-#: src/Features/TwoStep/Challenge.php:1658
-#: src/Features/TwoStep/Challenge.php:1684
+#: src/Core/SettingLabels.php:55
+#: src/Features/TwoStep/Challenge.php:1755
+#: src/Features/TwoStep/Challenge.php:1781
 #: src/Features/TwoStep/MyAccount.php:106
 #: src/Features/TwoStep/Profile.php:409
 #: src/Features/TwoStep/Profile.php:597
@@ -797,7 +835,7 @@ msgstr ""
 msgid "The security check didn't pass. Reload the page and try again."
 msgstr ""
 
-#: src/Core/SettingLabels.php:37
+#: src/Core/SettingLabels.php:53
 #: src/Features/SupportAccess/LoginSteps.php:361
 #: src/Features/SupportAccess/LoginSteps.php:522
 #: src/Features/SupportAccess/LoginSteps.php:555
@@ -813,162 +851,162 @@ msgstr ""
 msgid "Temporary access"
 msgstr ""
 
-#: src/Core/SettingLabels.php:38
+#: src/Core/SettingLabels.php:54
 #: build/index.js:42
 #: build/index.js:65
 #: build/index.js:66
 msgid "Passwordless login"
 msgstr ""
 
-#: src/Core/SettingLabels.php:40
-#: src/Core/SettingLabels.php:41
+#: src/Core/SettingLabels.php:56
+#: src/Core/SettingLabels.php:57
 #: build/index.js:66
 msgid "Wrong codes before a pause"
 msgstr ""
 
-#: src/Core/SettingLabels.php:42
+#: src/Core/SettingLabels.php:58
 msgid "Time window for wrong codes"
 msgstr ""
 
-#: src/Core/SettingLabels.php:43
+#: src/Core/SettingLabels.php:59
 msgid "Wrong access codes allowed on the whole site"
 msgstr ""
 
-#: src/Core/SettingLabels.php:44
+#: src/Core/SettingLabels.php:60
 #: build/index.js:66
 msgid "Keep activity for"
 msgstr ""
 
-#: src/Core/SettingLabels.php:45
+#: src/Core/SettingLabels.php:61
 #: build/index.js:66
 msgid "Visitor IP comes from"
 msgstr ""
 
-#: src/Core/SettingLabels.php:46
+#: src/Core/SettingLabels.php:62
 #: build/index.js:66
 msgid "Default pass length"
 msgstr ""
 
-#: src/Core/SettingLabels.php:47
+#: src/Core/SettingLabels.php:63
 #: build/index.js:66
 msgid "Shorten IP addresses in the log"
 msgstr ""
 
-#: src/Core/SettingLabels.php:48
+#: src/Core/SettingLabels.php:64
 #: build/index.js:66
 msgid "Keep a log"
 msgstr ""
 
-#: src/Core/SettingLabels.php:49
+#: src/Core/SettingLabels.php:65
 #: build/index.js:66
 msgid "Delete all HappyAccess data when the plugin is deleted"
 msgstr ""
 
-#: src/Core/SettingLabels.php:50
+#: src/Core/SettingLabels.php:66
 #: build/index.js:66
 msgid "reCAPTCHA"
 msgstr ""
 
-#: src/Core/SettingLabels.php:51
+#: src/Core/SettingLabels.php:67
 msgid "reCAPTCHA site key"
 msgstr ""
 
-#: src/Core/SettingLabels.php:52
+#: src/Core/SettingLabels.php:68
 msgid "reCAPTCHA secret key"
 msgstr ""
 
-#: src/Core/SettingLabels.php:53
+#: src/Core/SettingLabels.php:69
 msgid "reCAPTCHA score needed"
 msgstr ""
 
-#: src/Core/SettingLabels.php:54
+#: src/Core/SettingLabels.php:70
 #: build/index.js:42
 msgid "Code lifetime"
 msgstr ""
 
-#: src/Core/SettingLabels.php:55
+#: src/Core/SettingLabels.php:71
 #: build/index.js:42
 msgid "Button style"
 msgstr ""
 
-#: src/Core/SettingLabels.php:56
+#: src/Core/SettingLabels.php:72
 #: build/index.js:42
 msgid "Show the email code option on"
 msgstr ""
 
-#: src/Core/SettingLabels.php:57
+#: src/Core/SettingLabels.php:73
 msgid "Passwordless login by role"
 msgstr ""
 
-#: src/Core/SettingLabels.php:58
+#: src/Core/SettingLabels.php:74
 msgid "Two-step login by role"
 msgstr ""
 
-#: src/Core/SettingLabels.php:59
-#: src/Core/SettingLabels.php:60
-#: src/Core/SettingLabels.php:61
+#: src/Core/SettingLabels.php:75
+#: src/Core/SettingLabels.php:76
+#: src/Core/SettingLabels.php:77
 #: build/index.js:41
 msgid "Grace period for required roles"
 msgstr ""
 
-#: src/Core/SettingLabels.php:62
+#: src/Core/SettingLabels.php:78
 #: build/index.js:41
 msgid "Block XML-RPC login for accounts with two-step login"
 msgstr ""
 
-#: src/Core/SettingLabels.php:63
+#: src/Core/SettingLabels.php:79
 #: build/index.js:41
 msgid "New device alerts"
 msgstr ""
 
-#. translators: %s: comma-separated names of the settings that changed.
-#: src/Core/SettingLabels.php:198
-#, php-format
-msgid "Changed settings: %s"
-msgstr ""
-
 #. translators: 1: what was finished or turned on or off, 2: the settings that changed.
-#: src/Core/SettingLabels.php:204
+#: src/Core/SettingLabels.php:216
 #, php-format
 msgid "%1$s. %2$s"
 msgstr ""
 
+#. translators: %s: comma-separated names of the settings that changed.
+#: src/Core/SettingLabels.php:288
+#, php-format
+msgid "Changed settings: %s"
+msgstr ""
+
 #. translators: 1: features turned on, 2: features turned off.
-#: src/Core/SettingLabels.php:246
+#: src/Core/SettingLabels.php:290
 #, php-format
 msgid "Finished setup, turned on %1$s and turned off %2$s"
 msgstr ""
 
 #. translators: %s: features turned on, for example "Temporary access and Passwordless login".
-#: src/Core/SettingLabels.php:250
+#: src/Core/SettingLabels.php:292
 #, php-format
 msgid "Finished setup and turned on %s"
 msgstr ""
 
 #. translators: %s: features turned off.
-#: src/Core/SettingLabels.php:254
+#: src/Core/SettingLabels.php:294
 #, php-format
 msgid "Finished setup and turned off %s"
 msgstr ""
 
-#: src/Core/SettingLabels.php:256
+#: src/Core/SettingLabels.php:295
 msgid "Finished setup"
 msgstr ""
 
 #. translators: 1: features turned on, 2: features turned off.
-#: src/Core/SettingLabels.php:260
+#: src/Core/SettingLabels.php:297
 #, php-format
 msgid "Turned on %1$s and turned off %2$s"
 msgstr ""
 
 #. translators: %s: features turned on.
-#: src/Core/SettingLabels.php:264
+#: src/Core/SettingLabels.php:299
 #, php-format
 msgid "Turned on %s"
 msgstr ""
 
 #. translators: %s: features turned off.
-#: src/Core/SettingLabels.php:268
+#: src/Core/SettingLabels.php:301
 #, php-format
 msgid "Turned off %s"
 msgstr ""
@@ -995,8 +1033,8 @@ msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:217
 #: src/Features/Passwordless/LoginSteps.php:320
-#: src/Features/TwoStep/Challenge.php:608
-#: src/Features/TwoStep/Challenge.php:1158
+#: src/Features/TwoStep/Challenge.php:643
+#: src/Features/TwoStep/Challenge.php:1202
 #: src/Features/TwoStep/Profile.php:206
 #: src/Features/TwoStep/SetupSteps.php:771
 msgid "This page expired. Try again."
@@ -1027,7 +1065,7 @@ msgstr ""
 #. translators: %d: minutes.
 #: src/Features/Passwordless/LoginSteps.php:835
 #: src/Features/SupportAccess/LoginSteps.php:490
-#: src/Features/TwoStep/Challenge.php:1989
+#: src/Features/TwoStep/Challenge.php:2086
 #: src/Features/TwoStep/RestController.php:549
 #, php-format
 msgid "Too many attempts. Try again in %d minute."
@@ -1036,7 +1074,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Features/Passwordless/LoginSteps.php:847
-#: src/Features/TwoStep/Challenge.php:2003
+#: src/Features/TwoStep/Challenge.php:2100
 msgid "Login is updating. Try again in a minute."
 msgstr ""
 
@@ -1081,14 +1119,14 @@ msgstr ""
 #: src/Features/Passwordless/LoginSteps.php:978
 #: src/Features/SupportAccess/LoginSteps.php:517
 #: src/Features/SupportAccess/LoginSteps.php:550
-#: src/Features/TwoStep/Challenge.php:1643
+#: src/Features/TwoStep/Challenge.php:1740
 #: templates/login/passwordless-form.php:45
 #: build/index.js:41
 msgid "Log in"
 msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:942
-#: src/Features/TwoStep/Challenge.php:1732
+#: src/Features/TwoStep/Challenge.php:1829
 #: src/Features/TwoStep/Profile.php:643
 #: src/Features/TwoStep/SetupSteps.php:562
 msgid "Send a new code"
@@ -1156,7 +1194,7 @@ msgid "Temporary support accounts can't authorize API access."
 msgstr ""
 
 #: src/Features/SupportAccess/AdminBar.php:58
-#: src/Features/SupportAccess/Notifications.php:448
+#: src/Features/SupportAccess/Notifications.php:479
 #: build/index.js:30
 msgid "Emergency lock"
 msgstr ""
@@ -1227,14 +1265,14 @@ msgstr ""
 msgid "Temporary support accounts can't remove HappyAccess."
 msgstr ""
 
-#: src/Features/SupportAccess/CapabilityGuard.php:729
-#: src/Features/SupportAccess/CapabilityGuard.php:751
-#: src/Features/SupportAccess/CapabilityGuard.php:791
-#: src/Features/SupportAccess/CapabilityGuard.php:810
+#: src/Features/SupportAccess/CapabilityGuard.php:735
+#: src/Features/SupportAccess/CapabilityGuard.php:757
+#: src/Features/SupportAccess/CapabilityGuard.php:797
+#: src/Features/SupportAccess/CapabilityGuard.php:816
 msgid "Temporary support accounts can't change this setting."
 msgstr ""
 
-#: src/Features/SupportAccess/CapabilityGuard.php:1094
+#: src/Features/SupportAccess/CapabilityGuard.php:1100
 msgid "Invalid user ID."
 msgstr ""
 
@@ -1774,56 +1812,66 @@ msgstr ""
 msgid "email address"
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:308
-#: templates/emails/admin-created.php:30
+#: src/Features/SupportAccess/Notifications.php:275
+msgid "This account isn't an administrator, but it can post unfiltered HTML, which can run scripts."
+msgstr ""
+
+#. translators: %s: comma-separated permission names, like promote_users.
+#: src/Features/SupportAccess/Notifications.php:287
+#, php-format
+msgid "This account isn't an administrator, but it has admin-level permissions: %s."
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:338
+#: templates/emails/admin-created.php:31
 msgid "A support pass changed an administrator's login details"
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:311
-#: templates/emails/admin-created.php:28
+#: src/Features/SupportAccess/Notifications.php:341
+#: templates/emails/admin-created.php:29
 msgid "A support pass gave a role admin-level permissions"
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:314
-#: templates/emails/admin-created.php:32
+#: src/Features/SupportAccess/Notifications.php:344
+#: templates/emails/admin-created.php:33
 msgid "A support pass made an administrator account"
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:380
+#: src/Features/SupportAccess/Notifications.php:411
 #: templates/emails/site-lock.php:13
 msgid "Code logins are paused"
 msgstr ""
 
 #. translators: %s: site name.
-#: src/Features/SupportAccess/Notifications.php:397
+#: src/Features/SupportAccess/Notifications.php:428
 #, php-format
 msgid "Here's temporary access to %s:"
 msgstr ""
 
 #. translators: %s: login link.
-#: src/Features/SupportAccess/Notifications.php:399
+#: src/Features/SupportAccess/Notifications.php:430
 #, php-format
 msgid "Login link: %s"
 msgstr ""
 
 #. translators: 1: address of the code screen, 2: access code.
-#: src/Features/SupportAccess/Notifications.php:401
+#: src/Features/SupportAccess/Notifications.php:432
 #, php-format
 msgid "Or open %1$s and enter this code: %2$s"
 msgstr ""
 
 #. translators: %s: date and time the access ends.
-#: src/Features/SupportAccess/Notifications.php:403
+#: src/Features/SupportAccess/Notifications.php:434
 #: templates/emails/access-bundle.php:42
 #, php-format
 msgid "Access ends %s."
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:444
+#: src/Features/SupportAccess/Notifications.php:475
 msgid "Revoked by an administrator"
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:446
+#: src/Features/SupportAccess/Notifications.php:477
 msgid "Time ran out"
 msgstr ""
 
@@ -1833,20 +1881,20 @@ msgstr ""
 msgid "Temporary access: %s"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:326
+#: src/Features/TwoStep/Challenge.php:361
 msgid "Finish logging in with your two-step login code."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:683
+#: src/Features/TwoStep/Challenge.php:718
 msgid "Your login took too long. Log in again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:684
+#: src/Features/TwoStep/Challenge.php:719
 msgid "Too many wrong codes. Log in again."
 msgstr ""
 
 #. translators: 1: backup codes left, 2: link to where new ones are made.
-#: src/Features/TwoStep/Challenge.php:726
+#: src/Features/TwoStep/Challenge.php:761
 #, php-format
 msgid "You have %1$d backup code left. Make new ones on %2$s."
 msgid_plural "You have %1$d backup codes left. Make new ones on %2$s."
@@ -1854,86 +1902,87 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: backup codes left.
-#: src/Features/TwoStep/Challenge.php:734
+#: src/Features/TwoStep/Challenge.php:769
 #, php-format
 msgid "You have %d backup code left. Make new ones on your profile."
 msgid_plural "You have %d backup codes left. Make new ones on your profile."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Features/TwoStep/Challenge.php:833
+#: src/Features/TwoStep/Challenge.php:877
 msgid "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:836
+#: src/Features/TwoStep/Challenge.php:880
 msgid "Your role needs two-step login. Log in on the login page to set it up."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:838
+#: src/Features/TwoStep/Challenge.php:882
 msgid "This account uses two-step login. Log in on the login page."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:924
+#: src/Features/TwoStep/Challenge.php:968
 #: templates/emails/twostep-secret.php:12
 msgid "Authenticator app codes can't be checked"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1352
+#: src/Features/TwoStep/Challenge.php:1449
 #: src/Features/TwoStep/RestController.php:289
 msgid "That code didn't work. Try again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1429
+#: src/Features/TwoStep/Challenge.php:1526
 msgid "You have logged in successfully."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1626
+#: src/Features/TwoStep/Challenge.php:1723
 #: build/index.js:41
 msgid "Authenticator app code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1627
+#: src/Features/TwoStep/Challenge.php:1724
 #: src/Features/TwoStep/SetupSteps.php:535
+#: build/index.js:41
 msgid "Email code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1628
+#: src/Features/TwoStep/Challenge.php:1725
 msgid "Backup code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1649
+#: src/Features/TwoStep/Challenge.php:1746
 #: src/Features/TwoStep/Profile.php:377
 #: src/Features/TwoStep/SetupSteps.php:407
 msgid "We sent a code to your email address."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1651
+#: src/Features/TwoStep/Challenge.php:1748
 #: src/Features/TwoStep/RestController.php:344
 msgid "We already sent several codes. Check your email, or wait a few minutes and try again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1653
+#: src/Features/TwoStep/Challenge.php:1750
 msgid "Enter the code from your authenticator app."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1685
+#: src/Features/TwoStep/Challenge.php:1782
 msgid "Log in again"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1729
+#: src/Features/TwoStep/Challenge.php:1826
 msgid "Use your authenticator app"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1732
+#: src/Features/TwoStep/Challenge.php:1829
 msgid "Email me a code instead"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1741
+#: src/Features/TwoStep/Challenge.php:1838
 #: build/index.js:41
 msgid "Use a backup code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1904
+#: src/Features/TwoStep/Challenge.php:2001
 #: templates/emails/twostep-account-lock-text.php:17
 #: templates/emails/twostep-account-lock.php:14
 msgid "Two-step login is paused for your account"
@@ -1949,31 +1998,31 @@ msgstr ""
 msgid "Two-step login is off for %s."
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:442
+#: src/Features/TwoStep/Coverage.php:590
 msgid "Administrators"
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:443
+#: src/Features/TwoStep/Coverage.php:591
 msgid "Editors"
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:444
+#: src/Features/TwoStep/Coverage.php:592
 msgid "Authors"
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:445
+#: src/Features/TwoStep/Coverage.php:593
 msgid "Contributors"
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:446
+#: src/Features/TwoStep/Coverage.php:594
 msgid "Subscribers"
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:447
+#: src/Features/TwoStep/Coverage.php:595
 msgid "Customers"
 msgstr ""
 
-#: src/Features/TwoStep/Coverage.php:448
+#: src/Features/TwoStep/Coverage.php:596
 msgid "Shop managers"
 msgstr ""
 
@@ -2494,64 +2543,64 @@ msgid "No activity was recorded."
 msgstr ""
 
 #. translators: 1: grant label, 2: site name.
-#: templates/emails/admin-created.php:40
+#: templates/emails/admin-created.php:41
 #, php-format
 msgid "The temporary access \"%1$s\" made new accounts on %2$s get a role with admin-level permissions."
 msgstr ""
 
 #. translators: 1: grant label, 2: site name.
-#: templates/emails/admin-created.php:43
+#: templates/emails/admin-created.php:44
 #, php-format
 msgid "The temporary access \"%1$s\" gave a role on %2$s admin-level permissions. Everyone with that role now has them."
 msgstr ""
 
 #. translators: 1: grant label, 2: site name.
-#: templates/emails/admin-created.php:46
+#: templates/emails/admin-created.php:47
 #, php-format
 msgid "The temporary access \"%1$s\" changed the login details of an administrator account on %2$s."
 msgstr ""
 
 #. translators: 1: grant label, 2: site name.
-#: templates/emails/admin-created.php:49
+#: templates/emails/admin-created.php:50
 #, php-format
 msgid "The temporary access \"%1$s\" made an administrator account on %2$s."
 msgstr ""
 
-#: templates/emails/admin-created.php:60
+#: templates/emails/admin-created.php:64
 msgid "Permissions"
 msgstr ""
 
-#: templates/emails/admin-created.php:65
+#: templates/emails/admin-created.php:69
 msgid "Login"
 msgstr ""
 
-#: templates/emails/admin-created.php:69
+#: templates/emails/admin-created.php:73
 msgid "Email"
 msgstr ""
 
-#: templates/emails/admin-created.php:75
+#: templates/emails/admin-created.php:79
 msgid "Changed"
 msgstr ""
 
-#: templates/emails/admin-created.php:80
+#: templates/emails/admin-created.php:84
 #: templates/emails/login-alert.php:29
 #: templates/emails/new-device.php:29
 msgid "Time"
 msgstr ""
 
-#: templates/emails/admin-created.php:84
+#: templates/emails/admin-created.php:88
 msgid "Review the users on your site"
 msgstr ""
 
-#: templates/emails/admin-created.php:86
+#: templates/emails/admin-created.php:90
 msgid "More changes like this may follow. See the activity log for the full list."
 msgstr ""
 
-#: templates/emails/admin-created.php:86
+#: templates/emails/admin-created.php:90
 msgid "Open the activity log"
 msgstr ""
 
-#: templates/emails/admin-created.php:88
+#: templates/emails/admin-created.php:92
 msgid "Full and custom temporary access can do this by design. If you did not expect it, revoke the access from the HappyAccess screen."
 msgstr ""
 
@@ -3172,6 +3221,10 @@ msgid_plural "This site has %d administrator accounts. Remove the ones nobody us
 msgstr[0] ""
 msgstr[1] ""
 
+#: build/index.js:28
+msgid "Every administrator here has two-step login set up. Login and security shows how the other roles are doing."
+msgstr ""
+
 #. translators: 1: administrators with two-step login. 2: all administrators.
 #: build/index.js:29
 #, js-format
@@ -3324,18 +3377,18 @@ msgstr ""
 msgid "Help and docs"
 msgstr ""
 
-#: build/index.js:31
-msgid "Password or email code"
-msgstr ""
-
-#: build/index.js:31
-msgid "Email code only"
-msgstr ""
-
 #. translators: %s: a line of PHP to add to wp-config.php.
 #: build/index.js:32
 #, js-format
 msgid "Anyone who can read this email inbox can log in as this role. If email stops working, add <code>%s</code> to wp-config.php to get back in."
+msgstr ""
+
+#: build/index.js:32
+msgid "Password or email code"
+msgstr ""
+
+#: build/index.js:32
+msgid "Email code only"
 msgstr ""
 
 #: build/index.js:32
@@ -3474,7 +3527,15 @@ msgid "Password"
 msgstr ""
 
 #: build/index.js:41
-msgid "The WordPress login form, with an \"Email me a login code\" link under it, then a second step that asks for an authenticator app code, with a link to use a backup code."
+msgid "The WordPress login form, with an \"Email me a login code\" link between the password and the Log in button, then a second step that asks for a code sent by email, with a link to use a backup code."
+msgstr ""
+
+#: build/index.js:41
+msgid "The WordPress login form, then a second step that asks for a code sent by email, with a link to use a backup code."
+msgstr ""
+
+#: build/index.js:41
+msgid "The WordPress login form, with an \"Email me a login code\" link between the password and the Log in button, then a second step that asks for an authenticator app code, with a link to use a backup code."
 msgstr ""
 
 #: build/index.js:41
@@ -3482,7 +3543,7 @@ msgid "The WordPress login form, then a second step that asks for an authenticat
 msgstr ""
 
 #: build/index.js:41
-msgid "The WordPress login form, with an \"Email me a login code\" link under it."
+msgid "The WordPress login form, with an \"Email me a login code\" link between the password and the Log in button."
 msgstr ""
 
 #: build/index.js:41
