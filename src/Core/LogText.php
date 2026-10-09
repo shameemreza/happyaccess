@@ -230,15 +230,82 @@ final class LogText {
 			$values[] = $value;
 		}
 
-		if ( isset( $entry['plural'] ) ) {
-			$count = isset( $entry['count'], $values[ $entry['count'] ] ) ? (int) $values[ $entry['count'] ] : 0;
-			$text  = translate_nooped_plural( $entry['plural'], $count, 'happyaccess' );
-		} else {
-			$text = $entry['text'];
-		}
-
+		$count = isset( $entry['plural'], $entry['count'], $values[ $entry['count'] ] ) ? (int) $values[ $entry['count'] ] : 0;
 		// Extra values are ignored, and missing ones read as blank.
-		return vsprintf( $text, array_pad( $values, self::MAX_ARGS, '' ) );
+		$values = array_pad( $values, self::MAX_ARGS, '' );
+
+		$line = self::format( self::entry_text( $entry, $count ), $values );
+		if ( null !== $line ) {
+			return $line;
+		}
+		// A translation with broken placeholders falls back to the English line, so one bad string can't stop a log write.
+		add_filter( 'gettext_happyaccess', array( __CLASS__, 'untranslated' ), PHP_INT_MAX, 2 );
+		add_filter( 'ngettext_happyaccess', array( __CLASS__, 'untranslated_plural' ), PHP_INT_MAX, 4 );
+		try {
+			$english = self::templates();
+		} finally {
+			remove_filter( 'gettext_happyaccess', array( __CLASS__, 'untranslated' ), PHP_INT_MAX );
+			remove_filter( 'ngettext_happyaccess', array( __CLASS__, 'untranslated_plural' ), PHP_INT_MAX );
+		}
+		$entry = is_array( $english[ $key ] ) ? $english[ $key ] : array( 'text' => $english[ $key ] );
+		$line  = self::format( self::entry_text( $entry, $count ), $values );
+		return null === $line ? '' : $line;
+	}
+
+	/**
+	 * The template of an entry, with the plural form for the count.
+	 *
+	 * @param array $entry Template entry.
+	 * @param int   $count Count that picks the plural form.
+	 * @return string
+	 */
+	private static function entry_text( array $entry, $count ) {
+		if ( isset( $entry['plural'] ) ) {
+			return translate_nooped_plural( $entry['plural'], $count, 'happyaccess' );
+		}
+		return (string) $entry['text'];
+	}
+
+	/**
+	 * Fills a template, or null when its placeholders don't fit the values.
+	 *
+	 * @param string $text   Template.
+	 * @param array  $values Values.
+	 * @return string|null
+	 */
+	private static function format( $text, array $values ) {
+		try {
+			$line = vsprintf( $text, $values );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		return is_string( $line ) ? $line : null;
+	}
+
+	/**
+	 * Gettext filter that keeps the English text.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $text        English text.
+	 * @return string
+	 */
+	public static function untranslated( $translation, $text ) {
+		unset( $translation );
+		return $text;
+	}
+
+	/**
+	 * Plural gettext filter that keeps the English text.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $single      English singular.
+	 * @param string $plural      English plural.
+	 * @param int    $number      Count.
+	 * @return string
+	 */
+	public static function untranslated_plural( $translation, $single, $plural, $number ) {
+		unset( $translation );
+		return 1 === (int) $number ? $single : $plural;
 	}
 
 	/**

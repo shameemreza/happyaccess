@@ -195,6 +195,44 @@ class LogTextTest extends WP_UnitTestCase {
 		$this->assertSame( '', LogText::render( 'not_a_text', array( 'Acme' ) ) );
 	}
 
+	/**
+	 * A language pack with broken placeholders in two templates.
+	 *
+	 * @param string $translation Translation.
+	 * @param string $text        Original.
+	 * @param string $domain      Text domain.
+	 * @return string
+	 */
+	public static function broken_translation( $translation, $text, $domain ) {
+		if ( 'happyaccess' !== $domain ) {
+			return $translation;
+		}
+		if ( 'Temporary access granted to %s' === $text ) {
+			return 'Accès %y pour %s';
+		}
+		if ( 'Temporary access ended for %s' === $text ) {
+			return 'Accès terminé pour %10$s';
+		}
+		return $translation;
+	}
+
+	public function test_a_broken_translation_falls_back_to_the_english_line() {
+		add_filter( 'gettext', array( __CLASS__, 'broken_translation' ), 10, 3 );
+		try {
+			$this->assertSame( 'Temporary access granted to Acme', LogText::render( 'grant_created', array( 'Acme' ) ) );
+			$this->assertSame( 'Temporary access ended for Acme', LogText::render( 'grant_ended', array( 'Acme' ) ) );
+
+			$id = AuditLog::add( 'grant_ended', array( 'summary_key' => 'grant_ended', 'summary_args' => array( 'Acme' ) ) );
+			$this->assertGreaterThan( 0, (int) $id, 'The row is still written.' );
+			$this->assertSame( 'Temporary access ended for Acme', AuditLog::query( array( 'event' => 'grant_ended' ) )['items'][0]['summary'] );
+
+			$this->assertSame( 'Temporary access extended for Acme', LogText::render( 'grant_extended', array( 'Acme' ) ), 'Other lines are left alone.' );
+		} finally {
+			remove_filter( 'gettext', array( __CLASS__, 'broken_translation' ), 10 );
+		}
+		$this->assertSame( 'Temporary access granted to Acme', LogText::render( 'grant_created', array( 'Acme' ) ) );
+	}
+
 	public function test_an_unknown_text_key_is_flagged_and_stores_no_line() {
 		$this->setExpectedIncorrectUsage( 'HappyAccess\Core\AuditLog::add' );
 		AuditLog::add( 'note', array( 'summary_key' => 'grant_craeted' ) );
