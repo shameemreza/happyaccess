@@ -115,7 +115,7 @@ The link never logs anyone in by itself. Only the button on the confirm screen d
 
 With the code:
 
-1. They open your login page and select "Log in with an access code" under the form.
+1. They open your login page and select "Log in with an access code" under the password field, above the Log in button.
 2. They type the 8-digit code and select Log in.
 
 They land on the dashboard, or on the page you set in After login, open. The admin bar shows "Temporary access ends in" with the time left, and an End session link that logs them out. Ending their session doesn't end the pass. They can log in again until it ends.

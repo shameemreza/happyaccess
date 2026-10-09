@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       HappyAccess
+ * Plugin Name:       HappyAccess - Temporary Login, Passwordless Login and 2FA
  * Plugin URI:        https://wordpress.org/plugins/happyaccess
  * Description:       Give support temporary access without sharing a password, let people log in with an email code, and add two-step login.
  * Version:           1.1.0

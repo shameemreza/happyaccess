@@ -16,11 +16,15 @@ Only people who can manage the site's options (administrators, on most sites) se
 
 The first time you open Users > HappyAccess, a short setup runs before the tabs show.
 
-1. On Features, keep Temporary access ticked and select Continue.
-2. On Consent, read the three points about what a support pass allows, tick "I understand, and I'll only give access to people I trust.", and select Finish setup.
-3. On Done, select Create your first support pass.
+1. On Features, tick what you want: Temporary access (ticked to start), Passwordless login and Two-step login. On a network where the main site decides two-step login, that choice doesn't show.
+2. With Temporary access ticked, select Continue. On Consent, read the three points about what a support pass allows, tick "I understand, and I'll only give access to people I trust.", and select Finish setup. Without Temporary access there's no Consent step, so select Finish setup on Features.
+3. On Done, pick where to go next. Each feature you turned on gets a button:
+   - **Give temporary access** opens the Temporary access tab.
+   - **Choose how each role logs in** opens the Login and security tab.
+   - **Set up two-step login for your account** opens the two-step section of your profile.
+   - **Choose who needs two-step login** opens the Login and security tab. It shows when Two-step login is on and Passwordless login is off.
 
-Nothing is saved until you select Finish setup.
+Nothing is saved until you select Finish setup. If you skip Temporary access now and turn it on later in Settings, HappyAccess shows the same three points and the checkbox before it turns on.
 
 ## The four tabs
 
@@ -38,8 +42,9 @@ The header has a Help and docs link back to these pages, and the Emergency lock 
 1. Go to Users > HappyAccess > Settings.
 2. Under "What HappyAccess does on this site", switch Temporary access, Passwordless login or Two-step login on or off.
 
-Each switch saves the moment you change it. Two of them ask first:
+Each switch saves the moment you change it. A few changes ask first:
 
+- **Turning Temporary access on for the first time:** if you skipped it in setup, HappyAccess shows the three consent points and the checkbox. Tick it and select Turn on.
 - **Turning Temporary access off:** every current pass ends right away, so HappyAccess asks before it does it.
 - **Turning Two-step login on while another two-step plugin is active:** HappyAccess names the plugin and asks before it turns on. See [other two-step plugins](two-step-login.md#other-two-step-plugins).
 

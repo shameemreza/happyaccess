@@ -37,7 +37,7 @@ With HappyAccess, you create a pass in Users > HappyAccess and send them the lin
     * **Full admin:** no limits, with an email alert on every login and a warning if they create another admin.
 * **Safe links:** the login link opens a confirm screen first, so email and chat link scanners can't use it up.
 * **Your choice of limits:** one-time passes, an IP address allowlist, and an email when they log in.
-* **See what they changed:** the Activity tab lists every post, page, product, order, setting, plugin, theme and user they changed, with times and IP addresses. Export it as CSV.
+* **See what they changed:** the Activity tab lists the posts, pages, products, settings, plugins, themes and users they changed, and order status changes, with times and IP addresses. Export it as CSV.
 * **Stay in control:** suspend, extend or end a pass at any time. The Emergency lock in the admin bar ends every pass at once.
 * **Your account stays private:** their account can't see or edit yours, and HappyAccess is hidden from their plugin list.
 * **Their work stays:** posts they wrote move to your account when the access ends. Nothing they made is deleted.
@@ -88,7 +88,7 @@ When an administrator's account logs in from a browser it hasn't used before, th
 * **Rate limits:** wrong codes are limited per IP address and per account, and the owner gets an email if a site sees a lot of wrong codes.
 * **Compatible:** works with hidden login URL plugins like WPS Hide Login, with page cache plugins, and with security plugins.
 * **Multisite:** network activated or per site.
-* **Accessible:** the admin screens follow your admin color scheme and are tested with screen reader checks.
+* **Accessible:** the admin screens follow your admin color scheme and are checked with automated accessibility tests.
 * **Light:** the login form script needs no jQuery and loads only on pages that show a HappyAccess form.
 
 = For support teams, agencies and developers =
@@ -246,7 +246,7 @@ If you give admin access to people outside your business, your privacy policy sh
 
 HappyAccess uses one outside service, and only when you turn it on.
 
-**Google reCAPTCHA v3** checks that a person, not a script, is using the HappyAccess access code screen, the login link screen and the email code forms. When it's on, those screens load Google's script, and each time someone submits one, Google gets the visitor's IP address, browser details and how they used the page. HappyAccess sends the answer to https://www.google.com/recaptcha/api/siteverify to check it. It's off by default, and it needs your own keys from Google. The two-step login screens don't use it, so a problem with Google never locks out someone who already entered their password.
+**Google reCAPTCHA v3** checks that a person, not a script, is using the HappyAccess access code screen, the login link screen and the email code forms. When it's on, those screens load Google's script, and each time someone submits one, Google gets the visitor's IP address, browser details and how they used the page. Google's script hands back a token, and to check it HappyAccess sends that token, the visitor's IP address and your secret key to https://www.google.com/recaptcha/api/siteverify, once for each submit. When you save a new secret key, or turn reCAPTCHA on, HappyAccess also sends that secret key to the same address once, with no visitor data, to check that Google knows it. It's off by default, and it needs your own keys from Google. The two-step login screens don't use it, so a problem with Google never locks out someone who already entered their password.
 
 * Terms: https://policies.google.com/terms
 * Privacy: https://policies.google.com/privacy

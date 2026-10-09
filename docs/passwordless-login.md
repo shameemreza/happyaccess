@@ -31,7 +31,7 @@ Temporary support accounts can't use passwordless login. They log in with their 
 
 In the Login and security tab, under "Show the email code option on", switch each place on or off. All of them are on by default.
 
-- **WordPress login page:** an "Email me a login code" link under the form on wp-login.php. It opens the "Log in with a code" screen.
+- **WordPress login page:** an "Email me a login code" link under the password field on wp-login.php, above the Log in button. It opens the "Log in with a code" screen.
 - **WooCommerce My Account:** "Email me a login code instead" under the login form. The code form opens in place, with no page reload, and they land back on My Account.
 - **WooCommerce checkout:** the same option on the classic checkout's login form. They land back on the checkout.
 
@@ -85,7 +85,7 @@ The WordPress login page always shows a text link.
 Under "How each role logs in", pick one of two choices for each role:
 
 - **Password or email code:** the default. People can use either.
-- **Email code only:** a password login is refused with the same message as a wrong password, so the message never shows which accounts use email codes. Keep the login page switched on under "Show the email code option on", so people in that role see "Email me a login code" under the form.
+- **Email code only:** a password login is refused with the same message as a wrong password, so the message never shows which accounts use email codes. Keep the login page switched on under "Show the email code option on", so people in that role see "Email me a login code" under the password field.
 
 When a person has several roles, Email code only wins if any of their roles has it.
 

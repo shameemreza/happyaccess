@@ -38,7 +38,7 @@ HappyAccess sets these cookies only during the login steps that need them. All o
 
 Google reCAPTCHA v3 is the only outside service, and it's off until you turn it on with your own keys.
 
-When it's on, the access code screen, the login link screen and the email code forms load Google's script. Each time someone submits one of them, Google gets the visitor's IP address, browser details and how they used the page. HappyAccess sends the answer to `https://www.google.com/recaptcha/api/siteverify` to check it.
+When it's on, the access code screen, the login link screen and the email code forms load Google's script. Each time someone submits one of them, Google gets the visitor's IP address, browser details and how they used the page. Google's script hands back a token, and to check it HappyAccess sends that token, the visitor's IP address and your secret key to `https://www.google.com/recaptcha/api/siteverify`, once for each submit.
 
 To turn it on:
 
@@ -46,7 +46,7 @@ To turn it on:
 2. Go to Users > HappyAccess > Settings and switch on reCAPTCHA.
 3. Paste the site key and the secret key, and select Save changes.
 
-HappyAccess checks the secret key with Google when you save, and refuses one Google doesn't know. The secret key is stored apart from the other settings and never shown again.
+When you save a new secret key, or turn reCAPTCHA on, HappyAccess sends that secret key to the same address once, with no visitor data, to check that Google knows it. A save with a key Google doesn't know is refused. The secret key is stored apart from the other settings and never shown again.
 
 A few things to know:
 
