@@ -274,6 +274,37 @@ class TwoStepMyAccountTest extends WP_UnitTestCase {
 		$this->assertSame( 3, substr_count( $html, 'class="happyaccess-ts-row"' ), 'Status and button share one line per method.' );
 	}
 
+	/**
+	 * WooCommerce styles a .form-row label and field only inside a form, so
+	 * on a block theme the label sat next to a thin field. Each panel with a
+	 * field is a form in My Account, and its buttons sit 12px apart.
+	 */
+	public function test_the_account_setup_fields_sit_in_woocommerce_form_rows_with_spaced_buttons() {
+		$customer = $this->customer();
+		wp_set_current_user( $customer->ID );
+
+		ob_start();
+		MyAccount::render();
+		$html = ob_get_clean();
+
+		$fields = array(
+			'app'     => 'happyaccess-ts-profile-code',
+			'email'   => 'happyaccess-ts-profile-email-code',
+			'recheck' => 'happyaccess-ts-recheck',
+		);
+		foreach ( $fields as $panel => $field ) {
+			$this->assertStringContainsString( '<form class="happyaccess-ts-panel" data-happyaccess-panel="' . $panel . '" hidden>', $html, $panel );
+			$this->assertMatchesRegularExpression( '#<p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide"><label for="' . $field . '"[^>]*>[^<]+</label><input [^>]*id="' . $field . '" class="woocommerce-Input woocommerce-Input--text input-text#', $html, $panel );
+		}
+		$this->assertSame( substr_count( $html, '<form' ), substr_count( $html, '</form>' ) );
+		$this->assertSame( 3, substr_count( $html, '<p class="happyaccess-ts-actions">' ) );
+		$this->assertMatchesRegularExpression( '#<p class="happyaccess-ts-actions"><button [^>]*data-happyaccess-action="app-confirm"[^>]*>Turn on two-step login</button> <button [^>]*data-happyaccess-action="cancel"#', $html );
+
+		$css = (string) file_get_contents( HAPPYACCESS_PLUGIN_DIR . 'assets/twostep-setup.css' );
+		$this->assertMatchesRegularExpression( '/\.happyaccess-ts-account \.happyaccess-ts-actions \{[^}]*display: flex;[^}]*gap: 12px;/', $css );
+		$this->assertMatchesRegularExpression( '/\.happyaccess-ts-account \.happyaccess-ts-panel \.form-row label \{[^}]*display: block;/', $css );
+	}
+
 	public function test_a_required_customer_sees_no_turn_off_for_the_last_method() {
 		$this->set_policy( array( 'customer' => 'required' ) );
 		$customer = $this->customer();

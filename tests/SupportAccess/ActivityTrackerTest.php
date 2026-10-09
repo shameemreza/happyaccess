@@ -16,8 +16,19 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 	private $grant_id;
 	private $temp;
 
+	/**
+	 * Settings globals as they were before a REST request ran rest_api_init,
+	 * which registers core's settings into the general options group.
+	 *
+	 * @var array
+	 */
+	private $settings_globals = array();
+
 	public function set_up() {
 		parent::set_up();
+		foreach ( array( 'new_allowed_options', 'wp_registered_settings' ) as $name ) {
+			$this->settings_globals[ $name ] = isset( $GLOBALS[ $name ] ) ? $GLOBALS[ $name ] : null;
+		}
 		Installer::install();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$made           = Grants::create( array( 'label' => 'Acme' ) );
@@ -28,6 +39,10 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 
 	public function tear_down() {
 		ActivityTracker::reset();
+		$GLOBALS['wp_rest_server'] = null;
+		foreach ( $this->settings_globals as $name => $value ) {
+			$GLOBALS[ $name ] = $value;
+		}
 		$GLOBALS['current_screen']  = null;
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 		parent::tear_down();
@@ -52,6 +67,11 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 				}
 			)
 		);
+	}
+
+	private function summaries_for( $event ) {
+		ActivityTracker::flush();
+		return wp_list_pluck( AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => $event, 'per_page' => 100 ) )['items'], 'summary' );
 	}
 
 	private function summaries() {
@@ -133,7 +153,7 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		$items = AuditLog::query( array( 'token_id' => $this->grant_id, 'event' => 'settings_saved' ) )['items'];
 		$this->assertCount( 1, $items );
 		$this->assertSame( array( 'blogname' ), $items[0]['meta']['options'] );
-		$this->assertSame( 'Saved settings: 1 options', $items[0]['summary'] );
+		$this->assertSame( 'Saved settings: 1 option', $items[0]['summary'], 'One option takes the singular.' );
 	}
 
 	public function test_the_role_table_is_left_to_the_roles_changed_event() {
@@ -259,6 +279,128 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 		define( 'DOING_AUTOSAVE', true );
 		wp_update_post( array( 'ID' => $id, 'post_title' => 'Draft v2' ) );
 		$this->assertContains( 'Updated Post: Draft v2 (#' . $id . ')', $this->summaries() );
+	}
+
+	public function test_a_rest_post_update_by_a_temp_user_is_logged_once() {
+		$id = self::factory()->post->create( array( 'post_title' => 'Delivery times', 'post_type' => 'page' ) );
+		wp_set_current_user( $this->temp );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/pages/' . $id );
+		$request->set_body_params( array( 'title' => 'Delivery times and costs' ) );
+		$this->assertSame( 200, rest_do_request( $request )->get_status() );
+
+		$this->assertSame( array( 'Updated Page: Delivery times and costs (#' . $id . ')' ), $this->summaries_for( 'post_updated' ) );
+	}
+
+	/**
+	 * WooCommerce saves a product whose post fields did not change without
+	 * wp_update_post(), so only its own update hook fires.
+	 */
+	public function test_a_meta_only_product_save_by_a_temp_user_is_logged() {
+		$id = self::factory()->post->create( array( 'post_title' => 'Canvas tote bag', 'post_type' => 'product' ) );
+		wp_set_current_user( $this->temp );
+
+		do_action( 'woocommerce_update_product', $id, null );
+
+		$this->assertCount( 1, $this->summaries_for( 'post_updated' ) );
+		$this->assertStringContainsString( 'Canvas tote bag (#' . $id . ')', $this->summaries_for( 'post_updated' )[0] );
+	}
+
+	/**
+	 * The product edit form runs wp_update_post() and then WooCommerce's
+	 * save, so both hooks fire for one change.
+	 */
+	public function test_the_edit_form_and_woocommerce_save_together_write_one_row() {
+		$id = self::factory()->post->create( array( 'post_title' => 'Canvas tote bag', 'post_type' => 'product' ) );
+		wp_set_current_user( $this->temp );
+
+		wp_update_post( array( 'ID' => $id, 'post_title' => 'Canvas tote bag' ) );
+		do_action( 'woocommerce_update_product', $id, null );
+
+		$this->assertCount( 1, $this->summaries_for( 'post_updated' ) );
+	}
+
+	public function test_a_product_save_by_the_owner_is_not_logged() {
+		$id = self::factory()->post->create( array( 'post_title' => 'Canvas tote bag', 'post_type' => 'product' ) );
+		do_action( 'woocommerce_update_product', $id, null );
+		$this->assertSame( array(), $this->summaries_for( 'post_updated' ) );
+	}
+
+	/**
+	 * Loads WooCommerce with its tables and roles, then changes only the
+	 * price through /wc/v3/products, as the product block editor does.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_rest_price_change_by_a_temp_user_is_logged_once() {
+		$this->load_woocommerce();
+
+		$product = new WC_Product_Simple();
+		$product->set_name( 'Canvas tote bag' );
+		$product->set_regular_price( '24.00' );
+		$id = $product->save();
+
+		wp_set_current_user( 0 );
+		wp_set_current_user( $this->temp );
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/products/' . $id );
+		$request->set_body_params( array( 'regular_price' => '19.00' ) );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( '19.00', wc_get_product( $id )->get_regular_price() );
+		$this->assertSame( array( 'Updated Product: Canvas tote bag (#' . $id . ')' ), $this->summaries_for( 'post_updated' ) );
+
+		// A name change goes through wp_update_post() too, and still writes one row.
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/products/' . $id );
+		$request->set_body_params( array( 'name' => 'Canvas tote', 'regular_price' => '18.00' ) );
+		ActivityTracker::flush();
+		$this->assertSame( 200, rest_do_request( $request )->get_status() );
+		$this->assertCount( 2, $this->summaries_for( 'post_updated' ) );
+		$this->assertContains( 'Updated Product: Canvas tote (#' . $id . ')', $this->summaries_for( 'post_updated' ) );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_rest_order_status_change_by_a_temp_user_is_logged() {
+		$this->load_woocommerce();
+		$order = wc_create_order();
+		$id    = $order->get_id();
+
+		wp_set_current_user( 0 );
+		wp_set_current_user( $this->temp );
+		$request = new WP_REST_Request( 'PUT', '/wc/v3/orders/' . $id );
+		$request->set_body_params( array( 'status' => 'completed' ) );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assertSame( array( 'Order #' . $id . ': pending to completed' ), $this->summaries_for( 'order_status_changed' ) );
+	}
+
+	/**
+	 * Loads WooCommerce with its tables and roles, and runs the init steps
+	 * it hooks to init, which already ran. Only in a separate process.
+	 *
+	 * @return void
+	 */
+	private function load_woocommerce() {
+		$woo = WP_PLUGIN_DIR . '/woocommerce/woocommerce.php';
+		if ( ! file_exists( $woo ) ) {
+			$this->markTestSkipped( 'WooCommerce is not installed next to HappyAccess.' );
+		}
+		require_once $woo;
+		WC_Install::create_tables();
+		WC_Install::create_roles();
+		wp_roles()->for_site();
+		WC()->init();
+		WC_Post_Types::register_taxonomies();
+		WC_Post_Types::register_post_types();
+		WC()->load_rest_api();
+		$GLOBALS['wp_rest_server'] = null;
 	}
 
 	public function test_revisions_and_unlisted_types_are_not_tracked() {

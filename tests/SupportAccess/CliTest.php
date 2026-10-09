@@ -70,6 +70,52 @@ class CliTest extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'duration', $args );
 	}
 
+	public function test_notify_off_is_accepted_as_text_or_as_the_false_wp_cli_makes_of_it() {
+		$this->assertSame( 'off', Cli::grant_args( array( 'label' => 'x', 'notify' => 'off' ) )['notify'] );
+		$this->assertSame( 'off', Cli::grant_args( array( 'label' => 'x', 'notify' => false ) )['notify'], '--no-notify, or a YAML "off", reaches the command as false.' );
+		$this->assertSame( 'first', Cli::grant_args( array( 'label' => 'x', 'notify' => 'first' ) )['notify'] );
+		$this->assertSame( 'every', Cli::grant_args( array( 'label' => 'x', 'notify' => 'every' ) )['notify'] );
+	}
+
+	public function test_notify_true_still_throws() {
+		$this->expectException( InvalidArgumentException::class );
+		Cli::grant_args( array( 'label' => 'x', 'notify' => true ) );
+	}
+
+	/**
+	 * WP-CLI reads the options list as YAML and checks the value against it
+	 * before the command runs. A bare off is the boolean false in YAML, so
+	 * --notify=off never matched. Each listed value must stay a string.
+	 */
+	public function test_the_notify_options_wp_cli_checks_are_all_strings() {
+		$doc   = ( new ReflectionMethod( Cli::class, 'grant' ) )->getDocComment();
+		$lines = array_map(
+			static function ( $line ) {
+				return trim( preg_replace( '/^\s*\*\s?/', '', $line ) );
+			},
+			explode( "\n", (string) $doc )
+		);
+		$start = array_search( '[--notify=<mode>]', $lines, true );
+		$this->assertNotFalse( $start );
+
+		$values = array();
+		$fences = 0;
+		for ( $i = $start + 1; $i < count( $lines ) && $fences < 2; $i++ ) {
+			if ( '---' === $lines[ $i ] ) {
+				++$fences;
+			} elseif ( 0 === strpos( $lines[ $i ], '- ' ) ) {
+				$values[] = trim( substr( $lines[ $i ], 2 ) );
+			}
+		}
+
+		foreach ( $values as $value ) {
+			$this->assertDoesNotMatchRegularExpression( '/^(off|on|yes|no|y|n|true|false|null|~)$/i', $value, 'A bare YAML boolean or null: ' . $value );
+		}
+		$this->assertSame( array( 'first', 'every', 'off' ), array_map( static function ( $value ) {
+			return trim( $value, '\'"' );
+		}, $values ) );
+	}
+
 	public function test_list_rows() {
 		Grants::create( array( 'label' => 'Acme' ) );
 		$rows = Cli::list_rows();

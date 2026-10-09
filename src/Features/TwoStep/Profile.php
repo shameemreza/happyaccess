@@ -25,7 +25,8 @@ defined( 'ABSPATH' ) || exit;
  * outside the profile form, through its form attribute.
  *
  * MyAccount prints the same section for the user's own account, with
- * WooCommerce classes in place of the wp-admin table. The elements the
+ * WooCommerce classes in place of the wp-admin table. There the panels
+ * with a field are forms, which the script never submits. The elements the
  * script looks for stay the same in both layouts.
  */
 final class Profile {
@@ -470,6 +471,8 @@ final class Profile {
 				'error'   => 'notice notice-error inline',
 				'warning' => 'notice notice-warning inline',
 				'field'   => '',
+				'panel'   => 'div',
+				'actions' => '',
 			);
 		}
 		$theme  = function_exists( 'wc_wp_theme_get_element_class_name' ) ? (string) wc_wp_theme_get_element_class_name( 'button' ) : '';
@@ -484,6 +487,8 @@ final class Profile {
 			'error'   => 'woocommerce-error',
 			'warning' => 'woocommerce-info',
 			'field'   => 'woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide',
+			'panel'   => 'form',
+			'actions' => 'happyaccess-ts-actions',
 		);
 	}
 
@@ -535,6 +540,41 @@ final class Profile {
 	}
 
 	/**
+	 * The opening of a panel with a field. In My Account it is a form,
+	 * because WooCommerce styles a form row's label and field only inside
+	 * one; the script stops it from submitting. On the profile it is a div,
+	 * since the section already sits inside the profile form.
+	 *
+	 * @param array  $ui   Classes of the layout.
+	 * @param string $name Panel name.
+	 * @return string
+	 */
+	private static function panel_open( array $ui, $name ) {
+		return '<' . $ui['panel'] . ' class="happyaccess-ts-panel" data-happyaccess-panel="' . esc_attr( $name ) . '" hidden>';
+	}
+
+	/**
+	 * The closing of a panel opened by panel_open().
+	 *
+	 * @param array $ui Classes of the layout.
+	 * @return string
+	 */
+	private static function panel_close( array $ui ) {
+		return '</' . $ui['panel'] . '>';
+	}
+
+	/**
+	 * The opening of a panel's button row. My Account spaces the buttons
+	 * through its class; the profile keeps core's spacing.
+	 *
+	 * @param array $ui Classes of the layout.
+	 * @return string
+	 */
+	private static function actions_open( array $ui ) {
+		return '' === $ui['actions'] ? '<p>' : '<p class="' . esc_attr( $ui['actions'] ) . '">';
+	}
+
+	/**
 	 * The section on another user's profile: the status and the reset.
 	 *
 	 * @param \WP_User $user The user whose profile is shown.
@@ -568,14 +608,14 @@ final class Profile {
 	 * @return string
 	 */
 	private static function app_panel( array $ui ) {
-		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="app" hidden>';
+		$html  = self::panel_open( $ui, 'app' );
 		$html .= '<p>' . esc_html__( 'Scan this QR code with your authenticator app.', 'happyaccess' ) . '</p>';
 		$html .= SetupSteps::qr_and_key( '', '' );
 		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-profile-code">' . esc_html__( 'Code from the app', 'happyaccess' ) . '</label>' . self::field_break( $ui );
 		$html .= SetupSteps::code_input( 'happyaccess-ts-profile-code', '', false, $ui['input'] . ' happyaccess-ts-code' ) . '</p>';
-		$html .= '<p>' . self::button( 'app-confirm', __( 'Turn on two-step login', 'happyaccess' ), $ui['primary'], true );
+		$html .= self::actions_open( $ui ) . self::button( 'app-confirm', __( 'Turn on two-step login', 'happyaccess' ), $ui['primary'], true );
 		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
-		return $html . '</div>';
+		return $html . self::panel_close( $ui );
 	}
 
 	/**
@@ -587,14 +627,14 @@ final class Profile {
 	 * @return string
 	 */
 	private static function email_panel( array $ui ) {
-		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="email" hidden>';
+		$html  = self::panel_open( $ui, 'email' );
 		$html .= '<p>' . esc_html__( 'We sent a code to the email address on your account. Enter it to turn on email codes.', 'happyaccess' ) . '</p>';
 		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-profile-email-code">' . esc_html__( 'Code from the email', 'happyaccess' ) . '</label>' . self::field_break( $ui );
 		$html .= SetupSteps::code_input( 'happyaccess-ts-profile-email-code', '', false, $ui['input'] . ' happyaccess-ts-code' ) . '</p>';
-		$html .= '<p>' . self::button( 'email-confirm', __( 'Turn on email codes', 'happyaccess' ), $ui['primary'], true );
+		$html .= self::actions_open( $ui ) . self::button( 'email-confirm', __( 'Turn on email codes', 'happyaccess' ), $ui['primary'], true );
 		$html .= ' ' . self::button( 'email-begin', __( 'Send a new code', 'happyaccess' ), $ui['link'] );
 		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
-		return $html . '</div>';
+		return $html . self::panel_close( $ui );
 	}
 
 	/**
@@ -618,14 +658,14 @@ final class Profile {
 	 * @return string
 	 */
 	private static function recheck_panel( array $ui ) {
-		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="recheck" hidden>';
+		$html  = self::panel_open( $ui, 'recheck' );
 		$html .= '<p>' . esc_html__( "Confirm it's you to change two-step login.", 'happyaccess' ) . '</p>';
 		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-recheck" data-label-password="' . esc_attr__( 'Current password', 'happyaccess' ) . '" data-label-code="' . esc_attr__( 'Code from your app, or a backup code', 'happyaccess' ) . '">' . esc_html__( 'Current password', 'happyaccess' ) . '</label>' . self::field_break( $ui );
 		$html .= '<input type="password" id="happyaccess-ts-recheck" class="' . esc_attr( $ui['input'] ) . '" value="" autocomplete="current-password" spellcheck="false" /></p>';
-		$html .= '<p>' . self::button( 'recheck', __( 'Confirm', 'happyaccess' ), $ui['primary'], true );
+		$html .= self::actions_open( $ui ) . self::button( 'recheck', __( 'Confirm', 'happyaccess' ), $ui['primary'], true );
 		$html .= ' <button type="button" class="' . esc_attr( $ui['link'] ) . '" data-happyaccess-action="recheck-mode" data-label-password="' . esc_attr__( 'Use a code instead', 'happyaccess' ) . '" data-label-code="' . esc_attr__( 'Use your password instead', 'happyaccess' ) . '">' . esc_html__( 'Use a code instead', 'happyaccess' ) . '</button>';
 		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
-		return $html . '</div>';
+		return $html . self::panel_close( $ui );
 	}
 
 	/**

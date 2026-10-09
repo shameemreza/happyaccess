@@ -53,10 +53,12 @@ final class Cli {
 		}
 
 		if ( isset( $assoc['notify'] ) ) {
-			if ( ! is_string( $assoc['notify'] ) || ! in_array( $assoc['notify'], array( 'first', 'every', 'off' ), true ) ) {
+			// WP-CLI hands over --no-notify, or an off it read as YAML, as false.
+			$notify = false === $assoc['notify'] ? 'off' : $assoc['notify'];
+			if ( ! is_string( $notify ) || ! in_array( $notify, array( 'first', 'every', 'off' ), true ) ) {
 				throw new \InvalidArgumentException( esc_html__( 'Use --notify=first, every or off.', 'happyaccess' ) );
 			}
-			$args['notify'] = $assoc['notify'];
+			$args['notify'] = $notify;
 		}
 
 		if ( isset( $assoc['expires'] ) ) {
@@ -124,7 +126,7 @@ final class Cli {
 	 * options:
 	 *   - first
 	 *   - every
-	 *   - off
+	 *   - "off"
 	 * ---
 	 *
 	 * ## EXAMPLES

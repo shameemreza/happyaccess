@@ -190,10 +190,27 @@
 	color: #1e1e1e;
 }
 
+/*
+ * The panels with a field are forms in My Account, so WooCommerce's form
+ * row styles reach the label and the field. The label goes above the field
+ * on themes that leave labels inline.
+ */
+.happyaccess-ts-account .happyaccess-ts-panel .form-row label {
+	display: block;
+}
+
 .happyaccess-ts-account .happyaccess-ts-panel .input-text {
+	display: block;
 	box-sizing: border-box;
 	inline-size: 100%;
 	max-inline-size: 20em;
+}
+
+.happyaccess-ts-account .happyaccess-ts-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
 }
 
 .happyaccess-ts-account .woocommerce-error p {

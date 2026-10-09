@@ -118,6 +118,18 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( ' required', $html, 'Nothing hidden can block the profile form.' );
 	}
 
+	public function test_the_profile_panels_keep_the_wp_admin_layout() {
+		$user = $this->user();
+		wp_set_current_user( $user->ID );
+
+		$html = Profile::section( $user );
+		$this->assertStringContainsString( '<div class="happyaccess-ts-panel" data-happyaccess-panel="app" hidden>', $html );
+		$this->assertStringContainsString( '<p><label for="happyaccess-ts-profile-code">Code from the app</label><br /><input type="text" id="happyaccess-ts-profile-code" class="regular-text happyaccess-ts-code"', $html );
+		$this->assertStringContainsString( '<p><button type="button" class="button button-primary" data-happyaccess-action="app-confirm" data-happyaccess-primary>Turn on two-step login</button> <button type="button" class="button-link" data-happyaccess-action="cancel">Cancel</button></p>', $html );
+		$this->assertStringNotContainsString( 'happyaccess-ts-actions', $html );
+		$this->assertStringNotContainsString( 'form-row', $html );
+	}
+
 	public function test_an_unreadable_app_secret_shows_a_notice_and_offers_set_up_again() {
 		$user = $this->user();
 		update_user_meta(

@@ -59,6 +59,16 @@ final class ActivityTracker {
 	private static $role_events = array();
 
 	/**
+	 * Posts that got a created or updated row in this request, with the hook
+	 * that wrote it: 'post' for transition_post_status, 'product' for
+	 * WooCommerce's product save. The product edit form fires both for one
+	 * change, so the second one is skipped.
+	 *
+	 * @var array<int,string>
+	 */
+	private static $saved_posts = array();
+
+	/**
 	 * How many quietly() calls are open right now.
 	 *
 	 * @var int
@@ -78,6 +88,7 @@ final class ActivityTracker {
 		add_action( 'switch_theme', array( __CLASS__, 'theme_switched' ), 10, 1 );
 		add_action( 'deleted_theme', array( __CLASS__, 'theme_deleted' ), 10, 2 );
 		add_action( 'transition_post_status', array( __CLASS__, 'post_transitioned' ), 10, 3 );
+		add_action( 'woocommerce_update_product', array( __CLASS__, 'product_saved' ), 10, 1 );
 		add_action( 'wp_trash_post', array( __CLASS__, 'post_trashed' ), 10, 1 );
 		add_action( 'before_delete_post', array( __CLASS__, 'post_deleted' ), 10, 1 );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'order_status_changed' ), 10, 3 );
@@ -255,7 +266,32 @@ final class ActivityTracker {
 		}
 
 		$fresh = in_array( $old_status, array( 'new', 'auto-draft' ), true );
+		if ( ! $fresh && isset( self::$saved_posts[ $post->ID ] ) && 'product' === self::$saved_posts[ $post->ID ] ) {
+			return;
+		}
+		self::$saved_posts[ $post->ID ] = 'post';
 		self::record_post( $fresh ? 'post_created' : 'post_updated', $fresh ? 'Created' : 'Updated', $post );
+	}
+
+	/**
+	 * Logs a product saved through WooCommerce's CRUD, as the REST API and
+	 * the product block editor do. When only prices, stock or other meta
+	 * change, WooCommerce skips wp_update_post(), so transition_post_status
+	 * never fires. Skipped when this request already logged the post.
+	 *
+	 * @param int $product_id Product id.
+	 * @return void
+	 */
+	public static function product_saved( $product_id ) {
+		if ( ! self::is_tracking() ) {
+			return;
+		}
+		$post = get_post( (int) $product_id );
+		if ( ! $post instanceof \WP_Post || ! self::is_tracked_post( $post ) || isset( self::$saved_posts[ $post->ID ] ) ) {
+			return;
+		}
+		self::$saved_posts[ $post->ID ] = 'product';
+		self::record_post( 'post_updated', 'Updated', $post );
 	}
 
 	/**
@@ -526,6 +562,7 @@ final class ActivityTracker {
 		$roles             = self::$role_events;
 		self::$options     = array();
 		self::$role_events = array();
+		self::$saved_posts = array();
 
 		foreach ( $roles as $entry ) {
 			$event = $entry['event'];
@@ -542,13 +579,15 @@ final class ActivityTracker {
 		}
 
 		foreach ( $groups as $grant_id => $group ) {
+			$count = count( $group['names'] );
 			AuditLog::add(
 				'settings_saved',
 				array(
 					'feature'  => 'support',
 					'token_id' => (int) $grant_id,
 					'user_id'  => (int) $group['user_id'],
-					'summary'  => sprintf( 'Saved settings: %d options', count( $group['names'] ) ),
+					/* translators: %d: number of options saved. */
+					'summary'  => sprintf( _n( 'Saved settings: %d option', 'Saved settings: %d options', $count, 'happyaccess' ), $count ),
 					'meta'     => array( 'options' => $group['names'] ),
 				)
 			);
@@ -563,6 +602,7 @@ final class ActivityTracker {
 	public static function reset() {
 		self::$options     = array();
 		self::$role_events = array();
+		self::$saved_posts = array();
 		self::$quiet       = 0;
 	}
 

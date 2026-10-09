@@ -337,6 +337,12 @@
 		}
 	}
 
+	// In My Account the panels with a field are forms, for WooCommerce's
+	// form row styles. They never submit: their buttons run the routes.
+	function onSubmit( event ) {
+		event.preventDefault();
+	}
+
 	function init() {
 		root = document.querySelector( '[data-happyaccess-twostep]' );
 		if ( ! root || ! config.restUrl || ! window.fetch ) {
@@ -344,6 +350,7 @@
 		}
 		root.addEventListener( 'click', onClick );
 		root.addEventListener( 'keydown', onKey );
+		root.addEventListener( 'submit', onSubmit );
 	}
 
 	if ( 'loading' === document.readyState ) {
