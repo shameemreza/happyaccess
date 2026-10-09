@@ -8,7 +8,6 @@
 namespace HappyAccess\Features\TwoStep;
 
 use HappyAccess\Core\Capabilities;
-use HappyAccess\Core\Features;
 use HappyAccess\Core\OtherTwoFactor;
 
 defined( 'ABSPATH' ) || exit;
@@ -19,8 +18,8 @@ defined( 'ABSPATH' ) || exit;
  * printed by Profile with WooCommerce classes, using the same REST routes.
  *
  * Feature registers it only while WooCommerce is active and two-step login
- * is on. The endpoint's rewrite rules are flushed once, on the first init
- * after the flag in Features::REWRITE_FLUSH_OPTION was set.
+ * is on. Features::maybe_flush_rewrites() flushes the endpoint's rewrite
+ * rules once, on the first init after the feature was turned on or off.
  */
 final class MyAccount {
 
@@ -36,7 +35,6 @@ final class MyAccount {
 	 */
 	public static function register() {
 		add_action( 'init', array( __CLASS__, 'add_endpoint' ) );
-		add_action( 'init', array( __CLASS__, 'maybe_flush' ), PHP_INT_MAX );
 		add_filter( 'woocommerce_get_query_vars', array( __CLASS__, 'query_vars' ) );
 		add_filter( 'woocommerce_account_menu_items', array( __CLASS__, 'menu_items' ) );
 		add_filter( 'woocommerce_endpoint_' . self::ENDPOINT . '_title', array( __CLASS__, 'title' ) );
@@ -52,22 +50,6 @@ final class MyAccount {
 	 */
 	public static function add_endpoint() {
 		add_rewrite_endpoint( self::ENDPOINT, EP_ROOT | EP_PAGES );
-	}
-
-	/**
-	 * Flushes the rewrite rules once when the flag is set, after every init
-	 * callback registered its rules. Only the request that deletes the flag
-	 * flushes, so two requests at once can't both do it.
-	 *
-	 * @return void
-	 */
-	public static function maybe_flush() {
-		if ( false === get_option( Features::REWRITE_FLUSH_OPTION, false ) ) {
-			return;
-		}
-		if ( delete_option( Features::REWRITE_FLUSH_OPTION ) ) {
-			flush_rewrite_rules( false );
-		}
 	}
 
 	/**
@@ -201,7 +183,9 @@ final class MyAccount {
 	}
 
 	/**
-	 * Whether WooCommerce keeps this user out of wp-admin. The same rule as
+	 * Whether WooCommerce keeps this user out of wp-admin and the shop has a
+	 * My Account page to send them to. Without that page there is no
+	 * endpoint to link, so the profile is used. The rule is the same as
 	 * WC_Admin::prevent_admin_access(): with the admin bar hidden for
 	 * shoppers (woocommerce_disable_admin_bar), a user without edit_posts,
 	 * manage_woocommerce or view_admin_dashboard is kept out, and the
@@ -213,7 +197,7 @@ final class MyAccount {
 	 * @return bool
 	 */
 	public static function uses_my_account( \WP_User $user ) {
-		if ( ! function_exists( 'wc_get_account_endpoint_url' ) ) {
+		if ( ! function_exists( 'wc_get_account_endpoint_url' ) || ! function_exists( 'wc_get_page_id' ) || wc_get_page_id( 'myaccount' ) < 1 ) {
 			return false;
 		}
 		$prevent = false;

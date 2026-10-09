@@ -103,6 +103,7 @@ final class Privacy {
 		'twostep_backup_used',
 		'twostep_backup_regenerated',
 		'twostep_skipped',
+		'new_device_login',
 	);
 
 	/**

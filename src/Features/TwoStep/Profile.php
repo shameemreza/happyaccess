@@ -214,7 +214,11 @@ final class Profile {
 				$user->user_email,
 				__( 'Two-step login was turned off', 'happyaccess' ),
 				'twostep-reset',
-				array( 'admin_name' => $admin->display_name )
+				array(
+					'admin_name' => $admin->display_name,
+					'setup_link' => self::link_for( $user ),
+					'setup_url'  => self::url_for( $user ),
+				)
 			);
 		}
 		return true;
@@ -541,7 +545,7 @@ final class Profile {
 			self::$reset_form_for = (int) $user->ID;
 			$html                .= '<tr><th scope="row">' . esc_html__( 'Recovery', 'happyaccess' ) . '</th><td>';
 			$html                .= '<button type="submit" form="happyaccess-ts-reset" class="button">' . esc_html__( 'Turn off two-step login for this user', 'happyaccess' ) . '</button>';
-			$html                .= '<p class="description">' . esc_html__( 'Use this when they lost their phone or their backup codes. They get an email, and they can set it up again from their profile.', 'happyaccess' ) . '</p>';
+			$html                .= '<p class="description">' . esc_html__( 'Use this when they lost their phone or their backup codes. They get an email, and they can set it up again from their account.', 'happyaccess' ) . '</p>';
 			$html                .= '</td></tr>';
 		}
 		return $html . '</tbody></table></div>';

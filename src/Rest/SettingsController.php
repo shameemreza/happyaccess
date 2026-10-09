@@ -44,6 +44,14 @@ final class SettingsController {
 	);
 
 	/**
+	 * Keys inside a group that hold a list of role slugs, such as
+	 * device_alert_roles. A list may be empty.
+	 */
+	const LIST_KEYS = array(
+		'two_step' => array( 'device_alert_roles' ),
+	);
+
+	/**
 	 * Consent is recorded by POST /setup only, so a settings save can't fake it.
 	 */
 	const CONSENT_KEYS = array( 'consent_given_at', 'consent_user_id' );
@@ -146,8 +154,9 @@ final class SettingsController {
 	/**
 	 * Checks a settings group: an object whose values are all plain text,
 	 * numbers or booleans. A list, or a value that is itself a list or an
-	 * object, is refused instead of being cast to something else. The one
-	 * exception is a key listed in MAP_KEYS, which may hold a flat object.
+	 * object, is refused instead of being cast to something else. The
+	 * exceptions are a key listed in MAP_KEYS, which may hold a flat object,
+	 * and a key listed in LIST_KEYS, which must hold a list of text.
 	 *
 	 * @param mixed            $value   Param value.
 	 * @param \WP_REST_Request $request Request.
@@ -165,6 +174,13 @@ final class SettingsController {
 			return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s must be an object.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
 		}
 		foreach ( $value as $key => $item ) {
+			if ( isset( self::LIST_KEYS[ $param ] ) && in_array( $key, self::LIST_KEYS[ $param ], true ) ) {
+				if ( is_array( $item ) && self::is_text_list( $item ) ) {
+					continue;
+				}
+				/* translators: %s: setting group name. */
+				return new \WP_Error( 'rest_invalid_param', sprintf( __( '%s has a value that must be a list of role names.', 'happyaccess' ), $param ), array( 'status' => 400 ) );
+			}
 			if ( isset( self::MAP_KEYS[ $param ] ) && in_array( $key, self::MAP_KEYS[ $param ], true ) ) {
 				if ( is_array( $item ) && self::is_flat_map( $item ) ) {
 					continue;
@@ -192,6 +208,25 @@ final class SettingsController {
 		}
 		foreach ( $map as $item ) {
 			if ( ! is_scalar( $item ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a value is a list of text: keys 0, 1, 2 and so on, and only
+	 * strings. An empty list counts.
+	 *
+	 * @param array $items Value.
+	 * @return bool
+	 */
+	private static function is_text_list( array $items ) {
+		if ( array() !== $items && array_keys( $items ) !== range( 0, count( $items ) - 1 ) ) {
+			return false;
+		}
+		foreach ( $items as $item ) {
+			if ( ! is_string( $item ) ) {
 				return false;
 			}
 		}

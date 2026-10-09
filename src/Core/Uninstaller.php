@@ -34,7 +34,7 @@ final class Uninstaller {
 	 * User meta of two-step login. Named here so the uninstaller doesn't
 	 * load the feature's classes.
 	 */
-	const TWOSTEP_META = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck' );
+	const TWOSTEP_META = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck', '_happyaccess_devices' );
 
 	/**
 	 * Accounts that could not be deleted and were stripped instead, by user id.

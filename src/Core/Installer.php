@@ -79,6 +79,13 @@ final class Installer {
 	);
 
 	/**
+	 * The plugin version this site last ran, autoloaded. 1.0.x used the same
+	 * name, and the migration reads and deletes that value, so this one is
+	 * written only once the migration is done.
+	 */
+	const VERSION_OPTION = 'happyaccess_version';
+
+	/**
 	 * Full table name.
 	 *
 	 * @param string $name One of tokens, logs, attempts, challenges.
@@ -132,6 +139,29 @@ final class Installer {
 		if ( version_compare( (string) get_option( 'happyaccess_db_version', '0.0.0' ), self::DB_VERSION, '<' ) ) {
 			self::migrate();
 		}
+	}
+
+	/**
+	 * Notes a new plugin version and asks for a rewrite flush, since a new
+	 * version may change the rules HappyAccess adds even without a database
+	 * change. Waits until the migration has run, because the migration
+	 * tells a 1.0.x site by the old value of this option.
+	 *
+	 * @return void
+	 */
+	public static function note_version() {
+		if ( self::DB_VERSION !== get_option( 'happyaccess_db_version' ) ) {
+			return;
+		}
+		if ( HAPPYACCESS_VERSION === get_option( self::VERSION_OPTION ) ) {
+			return;
+		}
+		Internal::run(
+			static function () {
+				update_option( self::VERSION_OPTION, HAPPYACCESS_VERSION, true );
+			}
+		);
+		Features::request_rewrite_flush();
 	}
 
 	/**

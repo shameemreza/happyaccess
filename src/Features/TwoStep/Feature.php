@@ -20,7 +20,8 @@ final class Feature {
 
 	/**
 	 * Registers the second step, the setup screen at login, the profile
-	 * section with its routes, and the CLI reset while the feature is on.
+	 * section with its routes, the new device alerts and the CLI reset
+	 * while the feature is on.
 	 * With WooCommerce active, also the My Account endpoint. WooCommerce has
 	 * loaded its main class by plugins_loaded, when this runs.
 	 * Every hook added here must be safe to add twice (same callback and
@@ -37,6 +38,7 @@ final class Feature {
 		SetupSteps::register();
 		Profile::register();
 		RestController::register();
+		DeviceAlerts::register();
 		Cli::register();
 		if ( class_exists( 'WooCommerce', false ) ) {
 			MyAccount::register();

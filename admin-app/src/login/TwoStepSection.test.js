@@ -88,6 +88,17 @@ async function renderSection( bootData = boot() ) {
 }
 
 const saveButton = () => screen.getByRole( 'button', { name: 'Save changes' } );
+// The alert checkboxes are named by role too, so the selects are found in their own group.
+const roleSelect = ( name ) =>
+	within(
+		screen.getByRole( 'group', {
+			name: 'How each role uses two-step login',
+		} )
+	).getByLabelText( name );
+const alertGroup = () =>
+	screen.getByRole( 'group', { name: 'New device alerts' } );
+const alertBox = ( name ) =>
+	within( alertGroup() ).getByRole( 'checkbox', { name } );
 const grace = () => screen.getByLabelText( 'Grace period for required roles' );
 
 beforeEach( () => {
@@ -129,14 +140,8 @@ describe( 'Two-step section', () => {
 		const user = userEvent.setup();
 		await renderSection();
 
-		await user.selectOptions(
-			screen.getByLabelText( 'Editor' ),
-			'Required'
-		);
-		await user.selectOptions(
-			screen.getByLabelText( 'Administrator' ),
-			'Off'
-		);
+		await user.selectOptions( roleSelect( 'Editor' ), 'Required' );
+		await user.selectOptions( roleSelect( 'Administrator' ), 'Off' );
 		await user.click( saveButton() );
 
 		await waitFor( () => expect( liveText() ).toBe( 'Settings saved' ) );
@@ -148,9 +153,91 @@ describe( 'Two-step section', () => {
 			},
 		] );
 		expect( screen.getByText( 'Saved' ) ).toBeInTheDocument();
-		expect( screen.getByLabelText( 'Editor' ) ).toHaveDisplayValue(
-			'Required'
+		expect( roleSelect( 'Editor' ) ).toHaveDisplayValue( 'Required' );
+	} );
+
+	it( 'ticks only Administrator for new device alerts until the list is saved', async () => {
+		await renderSection();
+
+		expect(
+			within( alertGroup() ).getByText(
+				'Email a user when their account logs in from a new device'
+			)
+		).toBeInTheDocument();
+		expect( alertBox( 'Administrator' ) ).toBeChecked();
+		expect( alertBox( 'Editor' ) ).not.toBeChecked();
+		expect( alertBox( 'Customer' ) ).not.toBeChecked();
+		expect(
+			screen.getByText(
+				'The email shows the time, browser and IP address.'
+			)
+		).toBeInTheDocument();
+	} );
+
+	it( 'shows the saved alert roles, and an empty list ticks nothing', async () => {
+		mockServer(
+			settingsFixture( {
+				two_step: twoStep( { device_alert_roles: [ 'editor' ] } ),
+			} )
 		);
+		const shown = await renderSection();
+		expect( alertBox( 'Administrator' ) ).not.toBeChecked();
+		expect( alertBox( 'Editor' ) ).toBeChecked();
+		shown.unmount();
+
+		mockServer(
+			settingsFixture( {
+				two_step: twoStep( { device_alert_roles: [] } ),
+			} )
+		);
+		await renderSection();
+		expect(
+			within( alertGroup() ).queryAllByRole( 'checkbox', {
+				checked: true,
+			} )
+		).toHaveLength( 0 );
+	} );
+
+	it( 'saves the alert roles as the whole list', async () => {
+		const user = userEvent.setup();
+		await renderSection();
+
+		await user.click( alertBox( 'Editor' ) );
+		expect( screen.getByText( 'Unsaved changes' ) ).toBeInTheDocument();
+		await user.click( saveButton() );
+
+		await waitFor( () => expect( liveText() ).toBe( 'Settings saved' ) );
+		expect( posts ).toEqual( [
+			{ two_step: { device_alert_roles: [ 'administrator', 'editor' ] } },
+		] );
+		expect( alertBox( 'Editor' ) ).toBeChecked();
+		expect( screen.getByText( 'Saved' ) ).toBeInTheDocument();
+	} );
+
+	it( 'saves an empty list when every role is unticked', async () => {
+		const user = userEvent.setup();
+		await renderSection();
+
+		await user.click( alertBox( 'Administrator' ) );
+		await user.click( saveButton() );
+
+		await waitFor( () => expect( posts ).toHaveLength( 1 ) );
+		expect( posts[ 0 ] ).toEqual( {
+			two_step: { device_alert_roles: [] },
+		} );
+		expect( alertBox( 'Administrator' ) ).not.toBeChecked();
+	} );
+
+	it( 'has nothing to save after a role is ticked and unticked again', async () => {
+		const user = userEvent.setup();
+		await renderSection();
+
+		await user.click( alertBox( 'Customer' ) );
+		expect( saveButton() ).not.toHaveAttribute( 'aria-disabled', 'true' );
+		await user.click( alertBox( 'Customer' ) );
+
+		expect( saveButton() ).toHaveAttribute( 'aria-disabled', 'true' );
+		expect( screen.queryByText( 'Unsaved changes' ) ).toBeNull();
 	} );
 
 	it( 'offers four grace periods, 3 logins by default', async () => {
@@ -235,16 +322,10 @@ describe( 'Two-step section', () => {
 		await renderSection();
 		expect( screen.queryByText( REQUIRED_NOTE ) ).toBeNull();
 
-		await user.selectOptions(
-			screen.getByLabelText( 'Editor' ),
-			'Required'
-		);
+		await user.selectOptions( roleSelect( 'Editor' ), 'Required' );
 		expect( screen.getByText( REQUIRED_NOTE ) ).toBeInTheDocument();
 
-		await user.selectOptions(
-			screen.getByLabelText( 'Editor' ),
-			'Optional'
-		);
+		await user.selectOptions( roleSelect( 'Editor' ), 'Optional' );
 		expect( screen.queryByText( REQUIRED_NOTE ) ).toBeNull();
 	} );
 

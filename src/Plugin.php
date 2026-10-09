@@ -10,6 +10,7 @@ namespace HappyAccess;
 use HappyAccess\Admin\Page;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Cron;
+use HappyAccess\Core\Features;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Privacy;
 use HappyAccess\Core\Uninstaller;
@@ -52,6 +53,8 @@ final class Plugin {
 		add_filter( 'wpmu_drop_tables', array( Uninstaller::class, 'drop_tables' ), 10, 2 );
 		add_filter( 'plugin_action_links_' . HAPPYACCESS_PLUGIN_BASENAME, array( self::class, 'action_links' ) );
 		Installer::maybe_upgrade();
+		Installer::note_version();
+		add_action( 'init', array( Features::class, 'maybe_flush_rewrites' ), PHP_INT_MAX );
 		Capabilities::register();
 		Cron::register();
 		Privacy::register();

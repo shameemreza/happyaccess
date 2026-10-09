@@ -238,6 +238,32 @@ class SettingsTest extends WP_UnitTestCase {
 		$this->assertSame( array(), Settings::get( 'two_step.role_policy' ) );
 	}
 
+	public function test_device_alert_roles_default_to_administrator_until_saved() {
+		$this->assertSame( array( 'administrator' ), Settings::get( 'two_step.device_alert_roles' ) );
+
+		Settings::update( array( 'two_step' => array( 'grace_days' => 9 ) ) );
+		$this->assertSame( array( 'administrator' ), Settings::get( 'two_step.device_alert_roles' ) );
+	}
+
+	public function test_device_alert_roles_keep_known_roles_once_each_and_an_empty_list_stays_empty() {
+		Settings::update( array( 'two_step' => array( 'device_alert_roles' => array( 'editor', 'not_a_role', 'editor', 7, array( 'author' ), 'author' ) ) ) );
+		$this->assertSame( array( 'editor', 'author' ), Settings::get( 'two_step.device_alert_roles' ) );
+
+		Settings::update( array( 'two_step' => array( 'device_alert_roles' => array() ) ) );
+		$this->assertSame( array(), Settings::get( 'two_step.device_alert_roles' ) );
+		Settings::flush_cache();
+		$this->assertSame( array(), Settings::get( 'two_step.device_alert_roles' ), 'A saved empty list means no alerts, not the default.' );
+
+		Settings::update( array( 'two_step' => array( 'device_alert_roles' => 'administrator' ) ) );
+		$this->assertSame( array(), Settings::get( 'two_step.device_alert_roles' ) );
+	}
+
+	public function test_a_saved_device_alert_list_replaces_the_old_one() {
+		Settings::update( array( 'two_step' => array( 'device_alert_roles' => array( 'administrator', 'editor', 'author' ) ) ) );
+		Settings::update( array( 'two_step' => array( 'device_alert_roles' => array( 'subscriber' ) ) ) );
+		$this->assertSame( array( 'subscriber' ), Settings::get( 'two_step.device_alert_roles' ) );
+	}
+
 	public function test_toggle_style_takes_link_or_button_and_nothing_else() {
 		Settings::update( array( 'passwordless' => array( 'toggle_style' => 'button' ) ) );
 		$this->assertSame( 'button', Settings::get( 'passwordless.toggle_style' ) );

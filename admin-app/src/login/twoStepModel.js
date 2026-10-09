@@ -14,7 +14,17 @@ export const TWO_STEP_DEFAULTS = {
 	grace_logins: 3,
 	grace_days: 7,
 	block_xmlrpc: true,
+	device_alert_roles: [ 'administrator' ],
 };
+
+/**
+ * @param {string[]} a One list of role slugs.
+ * @param {string[]} b Another.
+ * @return {boolean} Whether both hold the same roles, in any order.
+ */
+export function sameRoles( a, b ) {
+	return a.length === b.length && a.every( ( slug ) => b.includes( slug ) );
+}
 
 /**
  * @return {Array<{value: string, label: string}>} The three choices for a role.

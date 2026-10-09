@@ -545,6 +545,37 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( 3, $data['two_step']['grace_logins'] );
 	}
 
+	public function test_save_takes_the_device_alert_role_list() {
+		$response = $this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array( 'editor', 'not_a_role' ) ) ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'editor' ), Settings::get( 'two_step.device_alert_roles' ) );
+		$this->assertSame( array( 'editor' ), $response->get_data()['two_step']['device_alert_roles'] );
+
+		$response = $this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => array() ) ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array(), Settings::get( 'two_step.device_alert_roles' ) );
+	}
+
+	public function provide_bad_device_alert_lists() {
+		return array(
+			'a map'          => array( array( 'administrator' => true ) ),
+			'a nested value' => array( array( array( 'administrator' ) ) ),
+			'a number'       => array( array( 5 ) ),
+			'a plain string' => array( 'administrator' ),
+		);
+	}
+
+	/**
+	 * @dataProvider provide_bad_device_alert_lists
+	 */
+	public function test_save_refuses_a_device_alert_list_that_is_not_a_list_of_names( $value ) {
+		$response = $this->request( 'POST', '/settings', array( 'two_step' => array( 'device_alert_roles' => $value ) ) );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( array( 'administrator' ), Settings::get( 'two_step.device_alert_roles' ) );
+	}
+
 	public function test_save_refuses_a_nested_value_in_two_step_outside_the_role_map() {
 		$response = $this->request( 'POST', '/settings', array( 'two_step' => array( 'grace_days' => array( 5 ) ) ) );
 		$this->assertSame( 400, $response->get_status() );

@@ -199,6 +199,39 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Two-step login was turned off for your account by Ada Admin.', $this->mails[0]['message'] );
 	}
 
+	public function test_the_reset_email_links_to_where_the_user_sets_it_up_again() {
+		$admin = $this->admin();
+		$user  = $this->user( 'editor', array( 'user_email' => 'sam@example.org' ) );
+		UserState::enable_app( $user->ID, Totp::new_secret() );
+		wp_set_current_user( $admin->ID );
+
+		Profile::reset_user( $user->ID, wp_create_nonce( Profile::NONCE . '_' . $user->ID ) );
+
+		$message = $this->mails[0]['message'];
+		$this->assertStringNotContainsString( 'from your profile.', $message );
+		$this->assertStringContainsString( 'You can set it up again from ' . Profile::link_for( $user ) . '.', $message );
+
+		$site_name  = 'Test site';
+		$admin_name = 'Ada Admin';
+		$setup_url  = Profile::url_for( $user );
+		ob_start();
+		include HAPPYACCESS_PLUGIN_DIR . 'templates/emails/twostep-reset-text.php';
+		$text = (string) ob_get_clean();
+		$this->assertStringNotContainsString( 'your profile', $text );
+		$this->assertStringContainsString( 'You can set it up again from your account: ' . $setup_url, $text );
+	}
+
+	public function test_the_admin_reset_help_fits_customers_too() {
+		$admin = $this->admin();
+		$user  = $this->user();
+		UserState::enable_app( $user->ID, Totp::new_secret() );
+		wp_set_current_user( $admin->ID );
+
+		$html = Profile::section( $user );
+		$this->assertStringNotContainsString( 'from their profile', $html );
+		$this->assertStringContainsString( 'They get an email, and they can set it up again from their account.', $html );
+	}
+
 	public function test_a_non_admin_cannot_turn_off_another_users_two_step() {
 		$editor = $this->user();
 		$user   = $this->user();

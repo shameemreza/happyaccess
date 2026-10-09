@@ -6,6 +6,7 @@
  *
  * @var string $site_name  Site name.
  * @var string $admin_name Display name of the admin who turned it off.
+ * @var string $setup_link Link to where the user sets it up again, already escaped.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -24,8 +25,14 @@ printf(
 <?php
 printf(
 	/* translators: %s: site name. */
-	esc_html__( 'You can now log in to %s with your password alone. Set up two-step login again from your profile.', 'happyaccess' ),
+	esc_html__( 'You can now log in to %s with your password alone.', 'happyaccess' ),
 	esc_html( $site_name )
+);
+echo ' ';
+printf(
+	/* translators: %s: link to the user's profile or account page. */
+	esc_html__( 'You can set it up again from %s.', 'happyaccess' ),
+	$setup_link // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Profile::link_for().
 );
 ?>
 </p>

@@ -321,41 +321,17 @@ class TwoStepMyAccountTest extends WP_UnitTestCase {
 		$this->assertSame( 'happyaccess_recheck_required', $this->call( 'backup/regenerate' )->as_error()->get_error_code() );
 	}
 
-	public function test_turning_two_step_on_sets_a_flush_flag_that_is_not_autoloaded() {
-		Features::set( 'two_step', false );
-		delete_option( Features::REWRITE_FLUSH_OPTION );
-
-		Features::set( 'two_step', true );
-		$this->assertNotFalse( get_option( Features::REWRITE_FLUSH_OPTION ) );
-		$this->assertArrayNotHasKey( Features::REWRITE_FLUSH_OPTION, wp_load_alloptions() );
-
-		delete_option( Features::REWRITE_FLUSH_OPTION );
-		Settings::update( array( 'security' => array( 'max_attempts' => 6 ) ) );
-		Features::set( 'two_step', true );
-		$this->assertFalse( get_option( Features::REWRITE_FLUSH_OPTION ), 'Only a change from off to on sets it.' );
-	}
-
-	public function test_a_plugin_upgrade_sets_the_flush_flag() {
-		delete_option( Features::REWRITE_FLUSH_OPTION );
-		update_option( 'happyaccess_db_version', '0.0.0' );
-
-		Installer::migrate();
-
-		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
-		$this->assertNotFalse( get_option( Features::REWRITE_FLUSH_OPTION ) );
-	}
-
 	public function test_the_rewrite_rules_flush_once_with_the_endpoint() {
 		$this->set_permalink_structure( '/%postname%/' );
 		MyAccount::add_endpoint();
 		add_action( 'generate_rewrite_rules', array( $this, 'count_build' ) );
-		update_option( Features::REWRITE_FLUSH_OPTION, '1', false );
+		update_option( Features::REWRITE_FLUSH_OPTION, '1', true );
 
-		MyAccount::maybe_flush();
-		MyAccount::maybe_flush();
+		Features::maybe_flush_rewrites();
+		Features::maybe_flush_rewrites();
 
 		$this->assertSame( 1, $this->built, 'Flushed once, not on every request.' );
-		$this->assertFalse( get_option( Features::REWRITE_FLUSH_OPTION ) );
+		$this->assertSame( '0', get_option( Features::REWRITE_FLUSH_OPTION ) );
 		$this->assertStringContainsString( 'two-step-login', implode( ' ', array_keys( (array) get_option( 'rewrite_rules' ) ) ) );
 	}
 
@@ -437,6 +413,21 @@ class TwoStepMyAccountTest extends WP_UnitTestCase {
 		remove_filter( 'woocommerce_disable_admin_bar', '__return_false' );
 		add_filter( 'woocommerce_prevent_admin_access', '__return_true' );
 		$this->assertTrue( MyAccount::uses_my_account( $admin ) );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_without_a_my_account_page_the_links_stay_on_the_profile() {
+		$this->load_woocommerce();
+		$customer = $this->customer();
+		update_option( 'woocommerce_myaccount_page_id', 0 );
+
+		$this->assertFalse( MyAccount::uses_my_account( $customer ) );
+		$this->assertSame( Profile::url(), Profile::url_for( $customer ) );
 	}
 
 	/**

@@ -45,6 +45,12 @@ final class Settings {
 	);
 
 	/**
+	 * Settings that hold a list of role slugs. A saved list replaces the
+	 * stored one whole, and an empty list stays empty.
+	 */
+	const ROLE_LISTS = array( 'two_step.device_alert_roles' );
+
+	/**
 	 * Cleaned settings per site for this request.
 	 *
 	 * @var array
@@ -95,11 +101,13 @@ final class Settings {
 				'toggle_style'  => 'link',
 			),
 			'two_step'     => array(
-				'role_policy'  => array(),
-				'grace_type'   => 'logins',
-				'grace_logins' => 3,
-				'grace_days'   => 7,
-				'block_xmlrpc' => true,
+				'role_policy'        => array(),
+				'grace_type'         => 'logins',
+				'grace_logins'       => 3,
+				'grace_days'         => 7,
+				'block_xmlrpc'       => true,
+				// Applies only until the list is first saved.
+				'device_alert_roles' => array( 'administrator' ),
 			),
 		);
 	}
@@ -163,9 +171,9 @@ final class Settings {
 	/**
 	 * Merges changes into the stored settings and saves them. A temp user's
 	 * request can't change them, unless HappyAccess itself makes the write.
-	 * Turning two-step login on asks for a rewrite flush, for its My Account
-	 * endpoint. Every settings write comes through here, the switch and the
-	 * settings screen alike.
+	 * Turning two-step login on or off asks for a rewrite flush, so its My
+	 * Account endpoint is added or taken away. Every settings write comes
+	 * through here, the switch and the settings screen alike.
 	 *
 	 * @param array $changes Nested array of changes.
 	 * @return array The saved settings.
@@ -183,7 +191,7 @@ final class Settings {
 			}
 		);
 		self::flush_cache();
-		if ( ! $was_on && true === self::get( 'features.two_step' ) ) {
+		if ( ( true === self::get( 'features.two_step' ) ) !== $was_on ) {
 			Features::request_rewrite_flush();
 		}
 		return $merged;
@@ -196,7 +204,15 @@ final class Settings {
 	 * @return array
 	 */
 	public static function merge( array $changes ) {
-		return self::clean( self::defaults(), array_replace_recursive( self::all(), $changes ), '' );
+		$merged = array_replace_recursive( self::all(), $changes );
+		// array_replace_recursive() mixes two lists key by key, so a new list replaces the old one instead.
+		foreach ( self::ROLE_LISTS as $path ) {
+			list( $group, $key ) = explode( '.', $path );
+			if ( isset( $changes[ $group ] ) && is_array( $changes[ $group ] ) && array_key_exists( $key, $changes[ $group ] ) ) {
+				$merged[ $group ][ $key ] = $changes[ $group ][ $key ];
+			}
+		}
+		return self::clean( self::defaults(), $merged, '' );
 	}
 
 	/**
@@ -214,6 +230,10 @@ final class Settings {
 			$has  = array_key_exists( $key, $values );
 			if ( 'passwordless.role_policy' === $path || 'two_step.role_policy' === $path ) {
 				$out[ $key ] = self::clean_role_policy( $path, $has ? $values[ $key ] : array() );
+				continue;
+			}
+			if ( in_array( $path, self::ROLE_LISTS, true ) ) {
+				$out[ $key ] = $has ? self::clean_role_list( $values[ $key ] ) : $default_value;
 				continue;
 			}
 			if ( is_array( $default_value ) ) {
@@ -247,6 +267,27 @@ final class Settings {
 			}
 			if ( in_array( $choice, self::CHOICES[ $path ], true ) ) {
 				$out[ $slug ] = $choice;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Cleans a list of role slugs: slugs that are not roles of this site,
+	 * repeats and anything that isn't text are dropped.
+	 *
+	 * @param mixed $slugs Incoming value.
+	 * @return string[]
+	 */
+	private static function clean_role_list( $slugs ) {
+		if ( ! is_array( $slugs ) ) {
+			return array();
+		}
+		$roles = wp_roles()->roles;
+		$out   = array();
+		foreach ( $slugs as $slug ) {
+			if ( is_string( $slug ) && array_key_exists( $slug, $roles ) && ! in_array( $slug, $out, true ) ) {
+				$out[] = $slug;
 			}
 		}
 		return $out;

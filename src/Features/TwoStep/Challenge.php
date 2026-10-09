@@ -210,6 +210,22 @@ final class Challenge {
 	}
 
 	/**
+	 * Whether a finished login happened away from a login form in a new
+	 * window: an application password, XML-RPC, or the re-auth popup
+	 * (interim login) of a session that already existed. The code step
+	 * carries the interim flag in its form, so it is in the request too.
+	 *
+	 * @param \WP_User $user The user who logged in.
+	 * @return bool
+	 */
+	public static function is_side_login( \WP_User $user ) {
+		if ( isset( self::$app_password_users[ $user->ID ] ) || 'xmlrpc' === self::context() ) {
+			return true;
+		}
+		return ! empty( $_REQUEST['interim-login'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read as a flag only.
+	}
+
+	/**
 	 * The authenticate filter at priority 50, after the password checks and
 	 * the role policy. Refuses the logins that can't show a second step: an
 	 * XML-RPC login while the setting blocks it, and AJAX, REST or WP-CLI
@@ -1386,16 +1402,16 @@ final class Challenge {
 	}
 
 	/**
-	 * Sets the pending-login cookie: HttpOnly, SameSite Lax, Secure on HTTPS.
-	 * The pre-filter lets tests and hosts that manage headers themselves
-	 * take over.
+	 * Sets a two-step cookie, the pending login or the device id: HttpOnly,
+	 * SameSite Lax, Secure on HTTPS. The pre-filter lets tests and hosts
+	 * that manage headers themselves take over.
 	 *
 	 * @param string $name    Cookie name.
 	 * @param string $value   Value. Empty with a past time removes it.
 	 * @param int    $expires Unix time.
 	 * @return void
 	 */
-	private static function send_cookie( $name, $value, $expires ) {
+	public static function send_cookie( $name, $value, $expires ) {
 		$options = array(
 			'expires'  => (int) $expires,
 			'path'     => COOKIEPATH,
@@ -1406,7 +1422,7 @@ final class Challenge {
 		);
 
 		/**
-		 * Lets code take over sending the pending-login cookie.
+		 * Lets code take over sending a two-step cookie.
 		 *
 		 * @param bool   $handled Return true when the cookie was sent elsewhere.
 		 * @param string $name    Cookie name.

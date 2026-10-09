@@ -44,5 +44,8 @@ class HappyAccess_Test_Reset_State_Listener implements TestListener {
 		if ( class_exists( '\HappyAccess\Features\TwoStep\Enforcement', false ) ) {
 			\HappyAccess\Features\TwoStep\Enforcement::flush_cache();
 		}
+		if ( class_exists( '\HappyAccess\Features\TwoStep\DeviceAlerts', false ) ) {
+			\HappyAccess\Features\TwoStep\DeviceAlerts::reset();
+		}
 	}
 }

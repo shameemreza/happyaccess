@@ -514,7 +514,7 @@ class UninstallerTest extends WP_UnitTestCase {
 	 * @return string[] The keys.
 	 */
 	private function two_step_meta( $user_id ) {
-		$keys = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck' );
+		$keys = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck', '_happyaccess_devices' );
 		foreach ( $keys as $key ) {
 			update_user_meta( $user_id, $key, array( 'x' => 1 ) );
 		}
