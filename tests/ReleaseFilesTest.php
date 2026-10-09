@@ -101,10 +101,11 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 		$this->assertSame( 'Give support temporary access without sharing a password, let people log in with an email code, and add two-step login.', $header['description'] );
 	}
 
-	public function test_tested_up_to_is_7_1_in_the_header_and_the_readme() {
+	public function test_tested_up_to_is_7_1_in_the_readme_only() {
 		$header = get_file_data( $this->root() . 'happyaccess.php', array( 'tested' => 'Tested up to' ) );
 
-		$this->assertSame( '7.1', $header['tested'] );
+		// The directory reads it from readme.txt; a second copy in the header can override it.
+		$this->assertSame( '', $header['tested'] );
 		$this->assertSame( '7.1', $this->readme_headers()['tested'] );
 	}
 
