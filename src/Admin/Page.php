@@ -297,6 +297,7 @@ final class Page {
 			'otherTwoFactor' => OtherTwoFactor::plugin_active(),
 			'otherTwoStep'   => OtherTwoFactor::active_plugins(),
 			'twoStepNetwork' => self::two_step_network(),
+			'authorCard'     => AuthorCard::boot_data(),
 		);
 	}
 

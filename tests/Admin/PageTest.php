@@ -201,7 +201,7 @@ class PageTest extends WP_UnitTestCase {
 
 		$data = Page::boot_data();
 
-		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor', 'otherTwoStep' ) as $key ) {
+		foreach ( array( 'siteName', 'homeUrl', 'loginUrl', 'codeUrl', 'adminUrl', 'currentUser', 'timezone', 'features', 'needsSetup', 'menus', 'maxDays', 'isMultisite', 'roles', 'loginRoles', 'loginReady', 'woocommerce', 'otherTwoFactor', 'otherTwoStep', 'authorCard' ) as $key ) {
 			$this->assertArrayHasKey( $key, $data );
 		}
 		$this->assertSame( 30, $data['maxDays'] );

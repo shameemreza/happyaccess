@@ -37,6 +37,7 @@ final class Routes {
 		GrantsController::routes();
 		ActivityController::routes();
 		SettingsController::routes();
+		AuthorCardController::routes();
 	}
 
 	/**

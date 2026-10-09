@@ -6,6 +6,7 @@ import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
 import Switch from '../settings/Switch';
 import RolePolicyTable, { EITHER } from './RolePolicyTable';
+import AuthorCard from '../AuthorCard';
 import TwoStepCoverage from './TwoStepCoverage';
 import TwoStepSection from './TwoStepSection';
 import WhatPeopleSee from './WhatPeopleSee';
@@ -365,6 +366,7 @@ export default function LoginTab( { boot } ) {
 						}
 					/>
 				) }
+				<AuthorCard />
 			</div>
 		</div>
 	);

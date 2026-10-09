@@ -37,6 +37,12 @@ final class Uninstaller {
 	const TWOSTEP_META = array( '_happyaccess_twostep', '_happyaccess_totp', '_happyaccess_backup_codes', '_happyaccess_twostep_recheck', '_happyaccess_devices' );
 
 	/**
+	 * The author card choice (Admin\AuthorCard::META). Like the two-step meta
+	 * it belongs to the person, so on a network it follows the main site.
+	 */
+	const AUTHOR_CARD_META = '_happyaccess_author_card';
+
+	/**
 	 * Accounts that could not be deleted and were stripped instead, by user id.
 	 * A stripped account no longer belongs to any site, so a later sweep must
 	 * not take it for an account of a deleted site.
@@ -376,7 +382,7 @@ final class Uninstaller {
 		global $wpdb;
 
 		if ( ! is_multisite() || get_current_blog_id() === (int) get_main_site_id() ) {
-			foreach ( self::TWOSTEP_META as $key ) {
+			foreach ( array_merge( self::TWOSTEP_META, array( self::AUTHOR_CARD_META ) ) as $key ) {
 				delete_metadata( 'user', 0, $key, '', true );
 			}
 		}

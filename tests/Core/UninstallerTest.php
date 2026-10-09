@@ -586,4 +586,30 @@ class UninstallerTest extends WP_UnitTestCase {
 			$this->assertTrue( metadata_exists( 'user', $user_id, $key ), $key . ' was deleted' );
 		}
 	}
+
+	public function test_with_delete_on_the_author_card_meta_and_options_go() {
+		$this->delete_data( true );
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, '_happyaccess_author_card', 'dismissed' );
+		update_option( 'happyaccess_installed_at', '2026-09-21 14:13:20', false );
+		update_option( 'happyaccess_first_expiry_seen', '2026-09-22 14:13:20', false );
+
+		Uninstaller::run();
+
+		$this->assertFalse( metadata_exists( 'user', $user_id, '_happyaccess_author_card' ) );
+		$this->assertFalse( get_option( 'happyaccess_installed_at' ) );
+		$this->assertFalse( get_option( 'happyaccess_first_expiry_seen' ) );
+	}
+
+	public function test_with_delete_off_the_author_card_meta_and_options_stay() {
+		$this->delete_data( false );
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, '_happyaccess_author_card', 'rated' );
+		update_option( 'happyaccess_installed_at', '2026-09-21 14:13:20', false );
+
+		Uninstaller::run();
+
+		$this->assertSame( 'rated', get_user_meta( $user_id, '_happyaccess_author_card', true ) );
+		$this->assertSame( '2026-09-21 14:13:20', get_option( 'happyaccess_installed_at' ) );
+	}
 }

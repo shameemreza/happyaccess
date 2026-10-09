@@ -94,6 +94,102 @@
 		font-size: 13px;
 	}
 
+	// The author card closes the right-hand column of a tab.
+	.ha-support__side > .ha-author,
+	.ha-support__side > .ha-author-credit {
+		margin-block-start: 24px;
+	}
+
+	.ha-author {
+		position: relative;
+		padding: 16px 20px 20px;
+		border: 1px solid var(--ha-line);
+		border-radius: 8px;
+		background: #fff;
+	}
+
+	.ha-author__top {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	// Room for the close button, so the name never runs under it.
+	.ha-author--ask .ha-author__top {
+		padding-inline-end: 28px;
+	}
+
+	.ha-author__photo {
+		flex-shrink: 0;
+		inline-size: 40px;
+		block-size: 40px;
+		border-radius: 50%;
+		object-fit: cover;
+	}
+
+	.ha-author__who {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		line-height: 1.4;
+	}
+
+	.ha-author__name {
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.ha-author__role {
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+
+	.ha-author-credit a {
+		font-weight: 500;
+	}
+
+	.ha-author__hide.components-button {
+		position: absolute;
+		inset-block-start: 8px;
+		inset-inline-end: 8px;
+		color: var(--ha-muted);
+	}
+
+	.ha-author__docs {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		margin-block-start: 4px;
+		margin-inline-start: 52px;
+	}
+
+	.ha-author__line {
+		margin: 12px 0 0;
+		color: var(--ha-text);
+	}
+
+	.ha-author__line:focus {
+		outline: none;
+	}
+
+	.ha-author__line:focus-visible {
+		outline: 2px solid var(--ha-accent);
+		outline-offset: 2px;
+	}
+
+	.ha-author__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-block-start: 12px;
+	}
+
+	.ha-author-credit {
+		margin: 0;
+		color: var(--ha-muted);
+		font-size: 12px;
+	}
+
 	// Links and buttons stay at least 24px tall, and 44px for touch.
 	.ha-header__help,
 	.ha-disclosure,
@@ -114,6 +210,7 @@
 	@media (pointer: coarse) {
 
 		.ha-header__help,
+		.ha-author__docs,
 		.ha-disclosure,
 		.ha-row__link,
 		.ha-active__foot a,

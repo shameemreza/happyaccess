@@ -12,6 +12,7 @@ import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
 import { networkNote, otherPluginsQuestion } from '../login/twoStepModel';
 import { InlineConfirm } from '../support/GrantRow';
+import AuthorCard from '../AuthorCard';
 import LoginPreview from './LoginPreview';
 import {
 	buildPatch,
@@ -793,7 +794,10 @@ export default function SettingsTab( {
 					</form>
 				</section>
 			</div>
-			<LoginPreview supportAccess={ supportOn } />
+			<div className="ha-side">
+				<LoginPreview supportAccess={ supportOn } />
+				<AuthorCard />
+			</div>
 		</div>
 	);
 }

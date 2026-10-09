@@ -9,6 +9,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useGrants } from '../data/DataProvider';
 import { useDelayedFlag } from '../hooks/useDelayedFlag';
 import { useNow } from '../hooks/useNow';
+import AuthorCard from '../AuthorCard';
 import ActiveList from './ActiveList';
 import GrantForm from './GrantForm';
 import { LOADING_DELAY } from '../LoadingLine';
@@ -222,6 +223,7 @@ export default function SupportTab( {
 						onRevokeAll={ handleRevokeAll }
 						onViewActivity={ onViewActivity }
 					/>
+					<AuthorCard />
 				</div>
 			</div>
 		</div>

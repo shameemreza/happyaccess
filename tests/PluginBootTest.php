@@ -107,6 +107,7 @@ class PluginBootTest extends WP_UnitTestCase {
 		$this->assertNotFalse( has_action( 'rest_api_init', array( Routes::class, 'routes' ) ) );
 		$this->assertNotFalse( has_action( 'admin_menu', array( Page::class, 'add_menu' ) ) );
 		$this->assertNotFalse( has_filter( 'map_meta_cap', array( Capabilities::class, 'map' ) ) );
+		$this->assertNotFalse( has_action( 'happyaccess_grant_ended', array( \HappyAccess\Admin\AuthorCard::class, 'note_expiry' ) ) );
 	}
 
 	public function test_the_plugin_file_boots_the_new_code_and_loads_no_legacy_class() {

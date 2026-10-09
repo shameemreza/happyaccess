@@ -7,6 +7,7 @@
 
 namespace HappyAccess;
 
+use HappyAccess\Admin\AuthorCard;
 use HappyAccess\Admin\Page;
 use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Cron;
@@ -65,6 +66,7 @@ final class Plugin {
 		TwoStepFeature::register();
 		Routes::register();
 		Page::register();
+		AuthorCard::register();
 	}
 
 	/**

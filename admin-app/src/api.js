@@ -228,3 +228,5 @@ export const runSetup = ( { features, consent } ) =>
 export const getCatalog = () => request( '/catalog' );
 export const getCoverage = () => request( '/twostep/coverage' );
 export const emergencyLock = () => request( '/lock', 'POST' );
+export const saveAuthorCard = ( choice ) =>
+	request( '/author-card', 'POST', { choice } );

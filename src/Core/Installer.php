@@ -86,6 +86,12 @@ final class Installer {
 	const VERSION_OPTION = 'happyaccess_version';
 
 	/**
+	 * When this site first ran 1.1.0 or later, as a UTC datetime. A site
+	 * upgraded from 1.0.x gets the time of the upgrade. Not autoloaded.
+	 */
+	const INSTALLED_OPTION = 'happyaccess_installed_at';
+
+	/**
 	 * Full table name.
 	 *
 	 * @param string $name One of tokens, logs, attempts, challenges.
@@ -357,6 +363,7 @@ final class Installer {
 			return 'legacy_codes_remain';
 		}
 		update_option( 'happyaccess_db_version', self::DB_VERSION );
+		self::note_install_time();
 		// A new version may change the rewrite rules HappyAccess adds.
 		Features::request_rewrite_flush();
 
@@ -457,6 +464,20 @@ final class Installer {
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::LOCK_OPTION, self::$lock_value ) );
 		self::$lock_value = '';
 		self::forget_option( self::LOCK_OPTION );
+	}
+
+	/**
+	 * Stores the first install time, once. Later activations and upgrades
+	 * keep the first value.
+	 *
+	 * @return void
+	 */
+	public static function note_install_time() {
+		Internal::run(
+			static function () {
+				add_option( self::INSTALLED_OPTION, Clock::mysql(), '', false );
+			}
+		);
 	}
 
 	/**

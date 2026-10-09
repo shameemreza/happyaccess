@@ -7,6 +7,7 @@ import {
 } from '@wordpress/element';
 import ActivityTab from './activity/ActivityTab';
 import { AnnounceProvider } from './Announcer';
+import { AuthorCardProvider } from './AuthorCard';
 import DataProvider, { useActivityCache, useGrants } from './data/DataProvider';
 import Header from './Header';
 import LoginTab from './login/LoginTab';
@@ -163,59 +164,63 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 
 	return (
 		<AnnounceProvider>
-			<DataProvider enabled={ ! needsSetup }>
-				<RefreshOnLock count={ lockCount } />
-				<Header onLocked={ onLocked } />
-				{ needsSetup ? (
-					<Setup onFinish={ finishSetup } />
-				) : (
-					<>
-						<TabNav
-							tabs={ tabs }
-							current={ active.slug }
-							onSelect={ select }
-						/>
-						{ 'support' === active.slug && (
-							<SupportTab
-								boot={ appBoot }
-								focusOnOpen={ afterSetup }
-								refreshKey={ lockCount }
-								onViewActivity={ openActivity }
+			<AuthorCardProvider card={ boot.authorCard }>
+				<DataProvider enabled={ ! needsSetup }>
+					<RefreshOnLock count={ lockCount } />
+					<Header onLocked={ onLocked } />
+					{ needsSetup ? (
+						<Setup onFinish={ finishSetup } />
+					) : (
+						<>
+							<TabNav
+								tabs={ tabs }
+								current={ active.slug }
+								onSelect={ select }
 							/>
-						) }
-						{ 'activity' === active.slug && (
-							<ActivityTab
-								boot={ appBoot }
-								loginReady={ loginReady }
-								onOpenSettings={ openSettings }
-							/>
-						) }
-						{ 'login' === active.slug && (
-							<LoginTab boot={ appBoot } />
-						) }
-						{ 'settings' === active.slug && (
-							<SettingsTab
-								onFeaturesChange={ updateFeatures }
-								otherTwoStep={ appBoot.otherTwoStep }
-								twoStepNetwork={ appBoot.twoStepNetwork }
-							/>
-						) }
-						{ ! [
-							'support',
-							'activity',
-							'login',
-							'settings',
-						].includes( active.slug ) && (
-							<section
-								className="ha-panel"
-								aria-labelledby="ha-panel-title"
-							>
-								<h2 id="ha-panel-title">{ active.label }</h2>
-							</section>
-						) }
-					</>
-				) }
-			</DataProvider>
+							{ 'support' === active.slug && (
+								<SupportTab
+									boot={ appBoot }
+									focusOnOpen={ afterSetup }
+									refreshKey={ lockCount }
+									onViewActivity={ openActivity }
+								/>
+							) }
+							{ 'activity' === active.slug && (
+								<ActivityTab
+									boot={ appBoot }
+									loginReady={ loginReady }
+									onOpenSettings={ openSettings }
+								/>
+							) }
+							{ 'login' === active.slug && (
+								<LoginTab boot={ appBoot } />
+							) }
+							{ 'settings' === active.slug && (
+								<SettingsTab
+									onFeaturesChange={ updateFeatures }
+									otherTwoStep={ appBoot.otherTwoStep }
+									twoStepNetwork={ appBoot.twoStepNetwork }
+								/>
+							) }
+							{ ! [
+								'support',
+								'activity',
+								'login',
+								'settings',
+							].includes( active.slug ) && (
+								<section
+									className="ha-panel"
+									aria-labelledby="ha-panel-title"
+								>
+									<h2 id="ha-panel-title">
+										{ active.label }
+									</h2>
+								</section>
+							) }
+						</>
+					) }
+				</DataProvider>
+			</AuthorCardProvider>
 		</AnnounceProvider>
 	);
 }

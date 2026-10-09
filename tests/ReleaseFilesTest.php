@@ -215,6 +215,7 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 			'blocks/login/block.json',
 			'blocks/login/render.php',
 			'assets/login.js',
+			'assets/author.jpg',
 			'assets/vendor/qrcode.js',
 			'assets/vendor/qrcode-LICENSE.txt',
 			'languages/happyaccess.pot',

@@ -981,4 +981,12 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( '', $row['label'], 'The old note must not come back.' );
 		$this->assertSame( 8, Settings::get( 'security.max_attempts' ), 'Legacy options are not read again.' );
 	}
+
+	public function test_the_upgrade_from_1_0_x_notes_the_install_time() {
+		$this->assertFalse( get_option( Installer::INSTALLED_OPTION ) );
+
+		Installer::migrate();
+
+		$this->assertSame( Clock::mysql(), get_option( Installer::INSTALLED_OPTION ) );
+	}
 }

@@ -69,4 +69,18 @@ class InstallerTest extends WP_UnitTestCase {
 
 		$this->assertFalse( get_transient( Installer::FAILED_TRANSIENT ) );
 	}
+
+	public function test_activation_notes_the_install_time_once() {
+		\HappyAccess\Core\Clock::freeze( 1790000000 );
+		delete_option( Installer::INSTALLED_OPTION );
+
+		Installer::activate( false );
+		$this->assertSame( '2026-09-21 14:13:20', get_option( Installer::INSTALLED_OPTION ) );
+
+		\HappyAccess\Core\Clock::freeze( 1790000000 + DAY_IN_SECONDS );
+		Installer::activate( false );
+		\HappyAccess\Core\Clock::freeze( null );
+
+		$this->assertSame( '2026-09-21 14:13:20', get_option( Installer::INSTALLED_OPTION ), 'A second activation keeps the first time.' );
+	}
 }

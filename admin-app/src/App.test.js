@@ -90,6 +90,87 @@ describe( 'App shell', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'places the author card at the end of each tab side column, never in the header', async () => {
+		const user = userEvent.setup();
+		const { container } = render(
+			<App
+				loginReady
+				boot={ boot( {
+					authorCard: { state: 'ask', photo: '/author.jpg' },
+					loginRoles: [
+						{
+							slug: 'administrator',
+							name: 'Administrator',
+							isAdmin: true,
+						},
+					],
+					features: { support_access: true, passwordless: true },
+				} ) }
+			/>
+		);
+		const card = () => container.querySelector( '.ha-author' );
+		const header = screen.getByRole( 'banner' );
+
+		// Temporary access: under the Who has access list.
+		expect( card().parentElement ).toHaveClass( 'ha-support__side' );
+		expect( card().parentElement.lastElementChild ).toBe( card() );
+		expect( card() ).toHaveTextContent(
+			'Is HappyAccess helping you? A quick rating helps others find it.'
+		);
+		expect( header.querySelector( '.ha-author' ) ).toBeNull();
+		expect( apiFetch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( { path: '/happyaccess/v1/author-card' } )
+		);
+
+		// Activity is full width, with no card.
+		await user.click( screen.getByRole( 'link', { name: 'Activity' } ) );
+		await waitFor( () =>
+			expect( container.querySelector( '.ha-support' ) ).toBeNull()
+		);
+		expect( card() ).toBeNull();
+
+		// Login and security: last in the side panel.
+		await user.click(
+			screen.getByRole( 'link', { name: 'Login and security' } )
+		);
+		await screen.findByRole( 'heading', { name: 'Passwordless login' } );
+		expect( card().parentElement ).toHaveClass( 'ha-side' );
+		expect( card().parentElement.lastElementChild ).toBe( card() );
+
+		// Settings: under the login preview.
+		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+		expect( card().parentElement ).toHaveClass( 'ha-side' );
+		expect( card().previousElementSibling ).toHaveClass( 'ha-loginprev' );
+		expect( card().parentElement.lastElementChild ).toBe( card() );
+		expect(
+			header.querySelector( '.ha-author, .ha-author-credit' )
+		).toBeNull();
+	} );
+
+	it( 'keeps a dismiss in step across tabs, with the small credit line in the side column', async () => {
+		const user = userEvent.setup();
+		const { container } = render(
+			<App
+				boot={ boot( {
+					authorCard: { state: 'ask', photo: '/author.jpg' },
+				} ) }
+			/>
+		);
+
+		await user.click( screen.getByRole( 'button', { name: 'Hide this' } ) );
+		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+
+		expect( container.querySelector( '.ha-author' ) ).toBeNull();
+		const credit = container.querySelector( '.ha-author-credit' );
+		expect( credit ).toHaveTextContent( 'Built by Shameem Reza' );
+		expect( credit.parentElement ).toHaveClass( 'ha-side' );
+		expect(
+			screen.getByRole( 'banner' ).querySelector( '.ha-author-credit' )
+		).toBeNull();
+	} );
+
 	it( 'renders four tabs when Login is available', () => {
 		render(
 			<App
