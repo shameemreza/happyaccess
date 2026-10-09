@@ -41,7 +41,7 @@ export default function Header( { onLocked } ) {
 			</div>
 			<a
 				className="ha-header__help"
-				href="https://wordpress.org/plugins/happyaccess/"
+				href="https://github.com/shameemreza/happyaccess/tree/main/docs"
 			>
 				{ __( 'Help and docs', 'happyaccess' ) }
 			</a>

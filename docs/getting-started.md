@@ -1,0 +1,65 @@
+# Getting started
+
+HappyAccess does three jobs: temporary access for support people, passwordless login, and two-step login. Each one is a switch, and anything you leave off adds no code to your pages.
+
+HappyAccess needs WordPress 6.7 or later and PHP 7.4 or later.
+
+## Install it
+
+1. In your dashboard, go to Plugins > Add New Plugin and search for "HappyAccess".
+2. Select Install Now, then Activate.
+3. Go to Users > HappyAccess. The Settings link under HappyAccess on the Plugins screen opens the same page.
+
+Only people who can manage the site's options (administrators, on most sites) see the page. Temporary support accounts never see it.
+
+## Run the first setup
+
+The first time you open Users > HappyAccess, a short setup runs before the tabs show.
+
+1. On Features, keep Temporary access ticked and select Continue.
+2. On Consent, read the three points about what a support pass allows, tick "I understand, and I'll only give access to people I trust.", and select Finish setup.
+3. On Done, select Create your first support pass.
+
+Nothing is saved until you select Finish setup.
+
+## The four tabs
+
+![The HappyAccess Temporary access tab, with the Give temporary access form on the left and the Who has access list on the right](../.github/assets/screenshots/temporary-access.png)
+
+- **Temporary access:** create a pass, and see who has access with the time each pass has left. It shows while Temporary access is on.
+- **Activity:** what temporary users did, plus logins, setting changes and other HappyAccess events. Filter it, search it and export it as CSV.
+- **Login and security:** the passwordless and two-step settings, with a preview of what people see at login. It shows only while Passwordless login or Two-step login is on.
+- **Settings:** the feature switches, the safety and privacy options, and reCAPTCHA.
+
+The header has a Help and docs link back to these pages, and the Emergency lock button, which ends every pass at once.
+
+## Turn features on and off
+
+1. Go to Users > HappyAccess > Settings.
+2. Under "What HappyAccess does on this site", switch Temporary access, Passwordless login or Two-step login on or off.
+
+Each switch saves the moment you change it. Two of them ask first:
+
+- **Turning Temporary access off:** every current pass ends right away, so HappyAccess asks before it does it.
+- **Turning Two-step login on while another two-step plugin is active:** HappyAccess names the plugin and asks before it turns on. See [other two-step plugins](two-step-login.md#other-two-step-plugins).
+
+Once Passwordless login or Two-step login is on, set it up in the Login and security tab. See [Passwordless login](passwordless-login.md) and [Two-step login](two-step-login.md).
+
+## Safety and privacy options
+
+The rest of the Settings tab waits for Save changes.
+
+- **Wrong codes before a pause:** how many wrong codes an IP address can try before it has to wait. The choices are 5 tries then 30 minutes (the default), 3 tries then 30 minutes, and 10 tries then 15 minutes.
+- **Keep activity for:** 30 days (the default), 90 days or 1 year. Older log entries are deleted once an hour.
+- **Visitor IP comes from:** leave it on Direct connection unless your site sits behind a proxy. Pick Cloudflare only when your server accepts traffic from Cloudflare alone.
+- **Default pass length:** how long a pass lasts when nothing else sets it, for example `wp happyaccess grant` without `--expires`. The form on the Temporary access tab always starts at 3 days.
+- **Shorten IP addresses in the log:** stores 203.0.113.0 instead of 203.0.113.42, and cuts IPv6 addresses the same way.
+- **Keep a log:** turning it off also stops the record of what support people change.
+- **Delete all HappyAccess data when the plugin is deleted:** off by default. Passes always end when you delete the plugin. With this on, the tables, settings and user data go too.
+- **reCAPTCHA:** an optional Google check on the access code, login link and email code screens. It's off until you add your own keys. See [Privacy and security](privacy-and-security.md#outside-services).
+
+## Next steps
+
+- [Give someone temporary access](temporary-access.md).
+- [Set up passwordless login](passwordless-login.md).
+- [Set up two-step login](two-step-login.md).

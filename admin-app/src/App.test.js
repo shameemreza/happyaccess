@@ -76,7 +76,10 @@ describe( 'App shell', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByRole( 'link', { name: 'Help and docs' } )
-		).toBeInTheDocument();
+		).toHaveAttribute(
+			'href',
+			'https://github.com/shameemreza/happyaccess/tree/main/docs'
+		);
 		expect(
 			screen.getByText(
 				'Temporary access, passwordless login and two-step login, in one place.'

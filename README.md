@@ -9,6 +9,8 @@ HappyAccess is a free WordPress plugin that fixes the three login problems most 
 
 Each feature is a switch in Settings. Turn on only what you need, and anything you leave off adds no code to your pages. There's no paid version and no account to sign up for. Install it from [WordPress.org](https://wordpress.org/plugins/happyaccess/).
 
+Docs: the [HappyAccess docs](docs/README.md) cover setup, each feature, every way back in when someone is locked out, and the WP-CLI commands and hooks for developers.
+
 ## Watch it
 
 <!-- promo video goes here -->
@@ -222,6 +224,7 @@ HappyAccess started as my fix for that. You give support a link or a code instea
 ## Links
 
 - [HappyAccess on WordPress.org](https://wordpress.org/plugins/happyaccess/).
+- [Docs](docs/README.md).
 - [Support forum](https://wordpress.org/support/plugin/happyaccess/).
 - [Security policy](SECURITY.md).
 - [Contributing](CONTRIBUTING.md).
