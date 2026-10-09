@@ -1482,6 +1482,59 @@ class ChallengeTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_redirect_keeps_a_pipe_encoded_the_way_woocommerce_does() {
+		$woo = WP_PLUGIN_DIR . '/woocommerce/woocommerce.php';
+		if ( ! file_exists( $woo ) ) {
+			$this->markTestSkipped( 'WooCommerce is not installed next to HappyAccess.' );
+		}
+		require_once $woo;
+		$page = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'my-account',
+			)
+		);
+		update_option( 'woocommerce_myaccount_page_id', $page );
+		add_filter( 'allowed_redirect_hosts', array( $this, 'allow_shop_host' ) );
+
+		if ( null === get_role( 'customer' ) ) {
+			add_role( 'customer', 'Customer', array( 'read' => true ) );
+		}
+		$made  = $this->app_user( 'customer' );
+		$_POST = array(
+			'username'                => $made['user']->user_login,
+			'password'                => self::PASSWORD,
+			'login'                   => 'Log in',
+			'redirect'                => 'https://shop.test/?f=a|b',
+			'woocommerce-login-nonce' => wp_create_nonce( 'woocommerce-login' ),
+		);
+		$_REQUEST = $_POST;
+		$url      = '';
+		try {
+			WC_Form_Handler::process_login();
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			$url = $stop->url;
+		}
+		$_POST    = array();
+		$_REQUEST = array();
+
+		$args = $this->query( $url );
+		$this->assertSame( 'twostep', $args['step'] );
+		$this->assertSame( 'https://shop.test/?f=a%7Cb', $args['redirect_to'] );
+	}
+
+	public function allow_shop_host( $hosts ) {
+		$hosts[] = 'shop.test';
+		return $hosts;
+	}
+
+	/**
 	 * Loads WooCommerce with a My Account page, and a session in memory so
 	 * its notices work. Only in a separate process.
 	 *

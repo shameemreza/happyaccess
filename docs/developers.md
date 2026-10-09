@@ -102,7 +102,11 @@ Return a valid IPv4 or IPv6 address. Anything else is ignored. Only read a proxy
 
 ```
 add_filter( 'happyaccess_client_ip', function ( $ip ) {
-	return isset( $_SERVER['HTTP_TRUE_CLIENT_IP'] ) ? $_SERVER['HTTP_TRUE_CLIENT_IP'] : $ip;
+	if ( ! isset( $_SERVER['HTTP_TRUE_CLIENT_IP'] ) ) {
+		return $ip;
+	}
+	$header = sanitize_text_field( wp_unslash( $_SERVER['HTTP_TRUE_CLIENT_IP'] ) );
+	return false !== filter_var( $header, FILTER_VALIDATE_IP ) ? $header : $ip;
 } );
 ```
 

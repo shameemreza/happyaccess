@@ -35,15 +35,19 @@ final class ClientIp {
 	/**
 	 * IP from a server array.
 	 *
-	 * Expects a WP-slashed array like $_SERVER. With no proxy header configured
-	 * the result is REMOTE_ADDR. When the owner picked a header, the list is
-	 * read from the right: the nearest public hop wins, because the client
-	 * controls the left side of X-Forwarded-For and can put anything there.
-	 * If no entry is public, the rightmost valid IP is used. If none is valid,
-	 * REMOTE_ADDR is used. Sites behind Cloudflare should pick CF-Connecting-IP,
-	 * which holds a single value set by Cloudflare.
+	 * get() passes only REMOTE_ADDR and the picked header, already unslashed
+	 * and cleaned with sanitize_text_field(). A raw $_SERVER works too, since
+	 * each value is unslashed again and an IP has no backslashes to lose.
 	 *
-	 * @param array $server Usually $_SERVER.
+	 * With no proxy header configured the result is REMOTE_ADDR. When the
+	 * owner picked a header, the list is read from the right: the nearest
+	 * public hop wins, because the client controls the left side of
+	 * X-Forwarded-For and can put anything there. If no entry is public, the
+	 * rightmost valid IP is used. If none is valid, REMOTE_ADDR is used. Sites
+	 * behind Cloudflare should pick CF-Connecting-IP, which holds a single
+	 * value set by Cloudflare.
+	 *
+	 * @param array $server Server values, as get() builds them or a raw $_SERVER.
 	 * @return string
 	 */
 	public static function from_server( array $server ) {

@@ -973,7 +973,8 @@ final class Challenge {
 			}
 		}
 		if ( isset( $_POST['redirect'] ) && is_string( $_POST['redirect'] ) ) {
-			$post['redirect'] = wp_sanitize_redirect( trim( wp_unslash( $_POST['redirect'] ), Screens::REDIRECT_TRIM ) );
+			// Read as WooCommerce reads it, so remove_query_arg() in woo_target() encodes a character like | instead of losing it.
+			$post['redirect'] = esc_url_raw( wp_unslash( $_POST['redirect'] ) );
 		}
 		if ( ! empty( $_POST['rememberme'] ) ) {
 			$post['rememberme'] = '1';
