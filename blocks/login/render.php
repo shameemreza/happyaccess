@@ -24,6 +24,7 @@ $happyaccess_html = Forms::render(
 		'redirect_to' => isset( $attributes['redirectTo'] ) && is_string( $attributes['redirectTo'] ) ? $attributes['redirectTo'] : '',
 		'context'     => 'block',
 		'style'       => isset( $attributes['toggleStyle'] ) && is_string( $attributes['toggleStyle'] ) ? $attributes['toggleStyle'] : '',
+		'preview'     => $happyaccess_preview,
 	)
 );
 

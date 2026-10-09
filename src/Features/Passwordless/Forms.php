@@ -122,8 +122,9 @@ final class Forms {
 	/**
 	 * The form markup. Loads the script and stylesheet when it returns any.
 	 *
-	 * @param array $args redirect_to (string), context (woo_account, woo_checkout, shortcode or block)
-	 *                    and style (link or button; anything else, or empty, means the site setting).
+	 * @param array $args redirect_to (string), context (woo_account, woo_checkout, shortcode or block),
+	 *                    style (link or button; anything else, or empty, means the site setting)
+	 *                    and preview (true in the block editor).
 	 * @return string
 	 */
 	public static function render( array $args ) {
@@ -155,9 +156,14 @@ final class Forms {
 		$style = isset( $args['style'] ) && is_string( $args['style'] ) && in_array( $args['style'], self::STYLES, true ) ? $args['style'] : (string) Settings::get( 'passwordless.toggle_style' );
 
 		++self::$count;
+		$form_id = 'happyaccess-pl-' . self::$count;
+		if ( ! empty( $args['preview'] ) ) {
+			// Each editor preview is its own request, so a counter would repeat ids between blocks.
+			$form_id = wp_unique_id( 'happyaccess-pl-' ) . '-' . strtolower( wp_generate_password( 8, false ) );
+		}
 		$woo  = 0 === strpos( $context, 'woo_' );
 		$vars = array(
-			'form_id'      => 'happyaccess-pl-' . self::$count,
+			'form_id'      => $form_id,
 			'context'      => $context,
 			'redirect'     => $redirect,
 			'button_class' => self::button_class(),

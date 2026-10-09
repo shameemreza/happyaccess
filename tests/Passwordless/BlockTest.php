@@ -157,6 +157,68 @@ class PasswordlessBlockTest extends WP_UnitTestCase {
 		$this->assertSame( '', trim( $this->render() ) );
 	}
 
+	public function test_an_editor_script_handle_is_left_alone() {
+		$meta = array(
+			'name'         => self::NAME,
+			'file'         => HAPPYACCESS_PLUGIN_DIR . 'blocks/login/block.json',
+			'editorScript' => 'my-registered-handle',
+		);
+		$this->assertSame( $meta, Feature::block_metadata( $meta ), 'Only a file: path needs its build.' );
+
+		$meta['editorScript'] = 'fil';
+		$this->assertSame( $meta, Feature::block_metadata( $meta ) );
+	}
+
+	public function test_a_front_end_form_keeps_the_counted_id() {
+		$this->boot();
+		$this->assertSame( 1, preg_match( '/<div class="happyaccess-pl" id="happyaccess-pl-\d+"/', $this->render() ) );
+	}
+
+	/**
+	 * Outside a REST dispatch of the block renderer, context=edit in the
+	 * address is no preview.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_context_edit_alone_is_no_preview() {
+		define( 'REST_REQUEST', true );
+		$this->boot();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$_GET['context'] = 'edit';
+
+		$this->assertFalse( Feature::is_editor_preview() );
+		$this->assertSame( '', trim( $this->render() ) );
+	}
+
+	/**
+	 * Another REST route that renders the block in edit context, such as a
+	 * post read for editing, gets nothing for a logged-in user.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_post_read_for_editing_over_rest_is_no_preview() {
+		define( 'REST_REQUEST', true );
+		$this->boot();
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $editor );
+		$post = self::factory()->post->create(
+			array(
+				'post_author'  => $editor,
+				'post_content' => '<!-- wp:happyaccess/login /-->',
+			)
+		);
+		$request = new WP_REST_Request( 'GET', '/wp/v2/posts/' . $post );
+		$request->set_query_params( array( 'context' => 'edit' ) );
+		$_GET['context'] = 'edit';
+
+		$response = rest_do_request( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertStringNotContainsString( 'happyaccess-pl', $response->get_data()['content']['rendered'] );
+		$this->assertFalse( Feature::is_editor_preview(), 'Nothing is left over after the request.' );
+	}
+
 	public function test_the_editor_script_is_dropped_when_its_build_is_missing() {
 		$dir = trailingslashit( get_temp_dir() ) . 'happyaccess-block-' . wp_generate_password( 6, false );
 		wp_mkdir_p( $dir . '/build' );
@@ -221,6 +283,12 @@ class PasswordlessBlockTest extends WP_UnitTestCase {
 		$html = $response->get_data()['rendered'];
 		$this->assertStringContainsString( 'happyaccess-pl', $html );
 		$this->assertStringContainsString( 'happyaccess-pl__toggle--button', $html );
+		$this->assertSame( 1, preg_match( '/<div class="happyaccess-pl" id="(happyaccess-pl-\d+-[a-z0-9]{8})"/', $html, $first ), 'The preview id has a random part, since every preview is its own request.' );
+		$this->assertStringContainsString( 'aria-controls="' . $first[1] . '-panel"', $html );
+
+		$again = rest_do_request( $request )->get_data()['rendered'];
+		$this->assertSame( 1, preg_match( '/<div class="happyaccess-pl" id="(happyaccess-pl-[^"]+)"/', $again, $second ) );
+		$this->assertNotSame( $first[1], $second[1] );
 		$this->assertStringNotContainsString( 'happyaccess-pl__toggle-row" hidden', $html, 'The preview shows the toggle, since no script runs in the editor.' );
 		$this->assertStringNotContainsString( 'happyaccess-pl__fallback', $html );
 	}

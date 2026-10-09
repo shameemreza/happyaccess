@@ -21,6 +21,14 @@ final class Feature {
 	const BLOCK = 'happyaccess/login';
 
 	/**
+	 * For each REST request being served, inner ones last, whether it is
+	 * the block renderer asking for this block with context=edit.
+	 *
+	 * @var bool[]
+	 */
+	private static $rest_previews = array();
+
+	/**
 	 * Registers the login steps, forms, REST routes and role policy while
 	 * the feature is on. Every hook added here must be safe to add twice
 	 * (same callback and priority), so register() needs no run-once flag.
@@ -39,6 +47,36 @@ final class Feature {
 		RestController::register();
 
 		add_action( 'init', array( __CLASS__, 'register_block' ) );
+		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'note_rest_request' ), 10, 3 );
+		add_filter( 'rest_request_after_callbacks', array( __CLASS__, 'forget_rest_request' ), 10, 1 );
+	}
+
+	/**
+	 * Notes, before a REST route runs, whether it is the block renderer
+	 * asking for this block's editor preview.
+	 *
+	 * @param mixed            $response Response so far, passed on as it is.
+	 * @param array            $handler  Route handler.
+	 * @param \WP_REST_Request $request  The request.
+	 * @return mixed
+	 */
+	public static function note_rest_request( $response, $handler = array(), $request = null ) {
+		unset( $handler );
+		self::$rest_previews[] = $request instanceof \WP_REST_Request
+			&& '/wp/v2/block-renderer/' . self::BLOCK === $request->get_route()
+			&& 'edit' === $request->get_param( 'context' );
+		return $response;
+	}
+
+	/**
+	 * Drops the note for the REST route that just ran.
+	 *
+	 * @param mixed $response Response, passed on as it is.
+	 * @return mixed
+	 */
+	public static function forget_rest_request( $response ) {
+		array_pop( self::$rest_previews );
+		return $response;
 	}
 
 	/**
@@ -76,9 +114,14 @@ final class Feature {
 			return $metadata;
 		}
 
+		// A script handle needs no build file here; only a file: path does.
+		if ( 0 !== strpos( $metadata['editorScript'], 'file:' ) ) {
+			return $metadata;
+		}
+
 		$script = substr( $metadata['editorScript'], 5 );
 		$asset  = dirname( (string) $metadata['file'] ) . '/' . preg_replace( '/\.js$/', '.asset.php', $script );
-		if ( 0 !== strpos( $metadata['editorScript'], 'file:' ) || ! is_readable( $asset ) ) {
+		if ( ! is_readable( $asset ) ) {
 			unset( $metadata['editorScript'] );
 		}
 		return $metadata;
@@ -86,17 +129,18 @@ final class Feature {
 
 	/**
 	 * Whether this request is the block editor asking for a preview. The
-	 * editor loads it through the REST block renderer with context=edit,
-	 * which only users who can edit posts may call.
+	 * editor loads it through the REST block renderer route for this block
+	 * with context=edit, which only users who can edit posts may call.
+	 * Another route that renders the block, such as a post read in edit
+	 * context, is no preview.
 	 *
 	 * @return bool
 	 */
 	public static function is_editor_preview() {
-		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
+		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST || array() === self::$rest_previews ) {
 			return false;
 		}
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only; the REST route checks the capability.
-		return isset( $_GET['context'] ) && 'edit' === $_GET['context'] && current_user_can( 'edit_posts' );
+		return true === end( self::$rest_previews ) && current_user_can( 'edit_posts' );
 	}
 
 	/**
