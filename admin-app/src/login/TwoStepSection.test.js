@@ -174,6 +174,14 @@ describe( 'Two-step section', () => {
 		).toBeInTheDocument();
 	} );
 
+	it( 'describes the alerts group with its instruction and its help text', async () => {
+		await renderSection();
+
+		expect( alertGroup() ).toHaveAccessibleDescription(
+			'Email a user when their account logs in from a new device The email shows the time, browser and IP address.'
+		);
+	} );
+
 	it( 'shows the saved alert roles, and an empty list ticks nothing', async () => {
 		mockServer(
 			settingsFixture( {

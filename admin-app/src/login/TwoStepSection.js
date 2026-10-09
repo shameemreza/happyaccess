@@ -332,12 +332,12 @@ export default function TwoStepSection( { boot } ) {
 					className="ha-login__group"
 					role="group"
 					aria-labelledby={ `${ ids }-alerts` }
-					aria-describedby={ `${ ids }-alerts-help` }
+					aria-describedby={ `${ ids }-alerts-desc ${ ids }-alerts-help` }
 				>
 					<h3 id={ `${ ids }-alerts` } className="ha-login__heading">
 						{ __( 'New device alerts', 'happyaccess' ) }
 					</h3>
-					<p className="ha-help">
+					<p id={ `${ ids }-alerts-desc` } className="ha-help">
 						{ __(
 							'Email a user when their account logs in from a new device',
 							'happyaccess'

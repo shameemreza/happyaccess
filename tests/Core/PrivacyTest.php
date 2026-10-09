@@ -12,6 +12,9 @@ use HappyAccess\Core\Privacy;
 use HappyAccess\Features\SupportAccess\CapabilityGuard;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
+use HappyAccess\Features\TwoStep\BackupCodes;
+use HappyAccess\Features\TwoStep\Totp;
+use HappyAccess\Features\TwoStep\UserState;
 
 class PrivacyTest extends WP_UnitTestCase {
 
@@ -425,5 +428,148 @@ class PrivacyTest extends WP_UnitTestCase {
 	public function test_user_events_are_not_in_the_grant_lists() {
 		$grant_lists = array_merge( Privacy::ADMIN_EVENTS, Privacy::AGENT_EVENTS, Privacy::CORE_EVENTS );
 		$this->assertSame( array(), array_values( array_intersect( Privacy::USER_EVENTS, $grant_lists ) ) );
+	}
+
+	public function test_policy_text_covers_two_step_data_and_the_device_cookie() {
+		$text = Privacy::policy_text();
+
+		$this->assertStringContainsString( 'happyaccess_dev', $text );
+		$this->assertStringContainsString( 'one year', $text );
+		$this->assertStringContainsString( '20', $text );
+		$this->assertStringContainsString( 'last seen', $text );
+		$this->assertStringContainsString( 'encrypted', $text );
+		$this->assertStringContainsString( 'backup codes', $text );
+		$this->assertStringContainsString( 'two-step login', $text );
+	}
+
+	/**
+	 * Gives the test user the app and email methods, a set of backup codes
+	 * and two known devices.
+	 *
+	 * @return array The plain backup codes, which must never be exported.
+	 */
+	private function set_up_two_step() {
+		UserState::enable_app( $this->user, Totp::new_secret() );
+		UserState::enable_email( $this->user );
+		$codes = BackupCodes::generate( $this->user );
+		update_user_meta(
+			$this->user,
+			'_happyaccess_devices',
+			array(
+				array(
+					'hash' => 'device-hash-one',
+					'seen' => 1790000000,
+				),
+				array(
+					'hash' => 'device-hash-two',
+					'seen' => 1790003600,
+				),
+			)
+		);
+		return $codes;
+	}
+
+	/**
+	 * Every exported value of one group.
+	 *
+	 * @param array  $result   Exporter result.
+	 * @param string $group_id Group id.
+	 * @return array name => list of values.
+	 */
+	private function group_values( array $result, $group_id ) {
+		$values = array();
+		foreach ( $result['data'] as $item ) {
+			if ( $group_id !== $item['group_id'] ) {
+				continue;
+			}
+			foreach ( $item['data'] as $field ) {
+				$values[ $field['name'] ][] = $field['value'];
+			}
+		}
+		return $values;
+	}
+
+	public function test_export_has_a_two_step_group_with_methods_codes_left_and_device_times() {
+		$codes = $this->set_up_two_step();
+		BackupCodes::use_code( $this->user, $codes[0] );
+
+		$result = Privacy::export( 'me@example.org', 1 );
+		$groups = array_unique( wp_list_pluck( $result['data'], 'group_id' ) );
+		$this->assertContains( 'happyaccess_twostep', $groups );
+		foreach ( $result['data'] as $item ) {
+			if ( 'happyaccess_twostep' === $item['group_id'] ) {
+				$this->assertSame( 'Two-step login', $item['group_label'] );
+			}
+		}
+
+		$values = $this->group_values( $result, 'happyaccess_twostep' );
+		$this->assertSame( array( 'Authenticator app, Email codes' ), $values['Methods turned on'] );
+		$this->assertSame( array( '9' ), $values['Backup codes left'] );
+		$this->assertSame( array( '2026-09-21 14:13:20', '2026-09-21 15:13:20' ), $values['Last seen (UTC)'] );
+
+		$flat = wp_json_encode( $result );
+		foreach ( $codes as $code ) {
+			$this->assertStringNotContainsString( $code, $flat, 'A backup code is never exported.' );
+		}
+		$this->assertStringNotContainsString( 'device-hash-one', $flat, 'A device hash is never exported.' );
+		$this->assertStringNotContainsString( 'device-hash-two', $flat );
+		$totp = get_user_meta( $this->user, '_happyaccess_totp', true );
+		$this->assertStringNotContainsString( $totp['secret'], $flat, 'The sealed app secret is never exported.' );
+
+		$second = Privacy::export( 'me@example.org', 2 );
+		$this->assertSame( array(), $this->group_values( $second, 'happyaccess_twostep' ), 'The group is on the first page only.' );
+	}
+
+	public function test_export_with_no_two_step_method_says_none() {
+		update_user_meta(
+			$this->user,
+			'_happyaccess_devices',
+			array(
+				array(
+					'hash' => 'device-hash-one',
+					'seen' => 1790000000,
+				),
+			)
+		);
+
+		$values = $this->group_values( Privacy::export( 'me@example.org', 1 ), 'happyaccess_twostep' );
+		$this->assertSame( array( 'None' ), $values['Methods turned on'] );
+		$this->assertSame( array( '0' ), $values['Backup codes left'] );
+		$this->assertSame( array( '2026-09-21 14:13:20' ), $values['Last seen (UTC)'] );
+	}
+
+	public function test_export_has_no_two_step_group_without_two_step_data() {
+		$result = Privacy::export( 'me@example.org', 1 );
+		$this->assertNotContains( 'happyaccess_twostep', wp_list_pluck( $result['data'], 'group_id' ) );
+	}
+
+	public function test_erase_removes_known_devices_and_keeps_two_step_settings() {
+		$this->set_up_two_step();
+		$other = self::factory()->user->create( array( 'user_email' => 'other@example.org' ) );
+		update_user_meta( $other, '_happyaccess_devices', array( array( 'hash' => 'theirs', 'seen' => 1790000000 ) ) );
+
+		$result = Privacy::erase( 'me@example.org', 1 );
+
+		$this->assertFalse( metadata_exists( 'user', $this->user, '_happyaccess_devices' ) );
+		$this->assertTrue( metadata_exists( 'user', $other, '_happyaccess_devices' ), 'Only this user\'s devices go.' );
+		$this->assertTrue( UserState::app_enabled( $this->user ) );
+		$this->assertTrue( UserState::email_enabled( $this->user ) );
+		$this->assertSame( 10, BackupCodes::remaining( $this->user ) );
+		$this->assertTrue( $result['items_removed'] );
+		$this->assertTrue( $result['items_retained'] );
+		$this->assertContains( 'Two-step login settings were kept, because they protect the account.', $result['messages'] );
+		$this->assertTrue( $result['done'] );
+	}
+
+	public function test_erase_with_devices_only_removes_them_without_the_kept_message() {
+		$solo = self::factory()->user->create( array( 'user_email' => 'solo@example.org' ) );
+		update_user_meta( $solo, '_happyaccess_devices', array( array( 'hash' => 'mine', 'seen' => 1790000000 ) ) );
+
+		$result = Privacy::erase( 'solo@example.org', 1 );
+
+		$this->assertFalse( metadata_exists( 'user', $solo, '_happyaccess_devices' ) );
+		$this->assertTrue( $result['items_removed'] );
+		$this->assertFalse( $result['items_retained'] );
+		$this->assertNotContains( 'Two-step login settings were kept, because they protect the account.', $result['messages'] );
 	}
 }

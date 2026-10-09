@@ -22,6 +22,21 @@ final class Privacy {
 	const PER_PAGE = 50;
 
 	/**
+	 * User meta of two-step login, read by key because Core never loads the
+	 * feature: the email method switch, the sealed app secret and the backup
+	 * code hashes. The eraser keeps them, since erasing them would turn the
+	 * account's protection off without the user's action.
+	 */
+	const TWOSTEP_STATE_META  = '_happyaccess_twostep';
+	const TWOSTEP_TOTP_META   = '_happyaccess_totp';
+	const TWOSTEP_BACKUP_META = '_happyaccess_backup_codes';
+
+	/**
+	 * User meta of the known devices: hashed ids and last seen times.
+	 */
+	const DEVICES_META = '_happyaccess_devices';
+
+	/**
 	 * Log events written because the site owner acted, not the support agent.
 	 * Rows with these events stay out of an agent's export and erase, even
 	 * when they carry the grant's token id.
@@ -151,6 +166,9 @@ final class Privacy {
 			),
 			__( 'If reCAPTCHA is turned on for support logins, the visitor\'s IP address and browser details are sent to Google to check that the visit is from a person. Google handles that data under its own privacy policy.', 'happyaccess' ),
 			__( 'Site owners can export or erase this data from the Tools menu. Erasing an email address ends any active support access for it, removes the IP address and user agent from the related log entries, and clears the recipient email, label and allowlist from the support access records.', 'happyaccess' ),
+			__( 'When a user sets up two-step login, the site stores their two-step login settings, the secret of their authenticator app, which is encrypted, and their backup codes, stored only as hashes that can\'t be turned back into codes.', 'happyaccess' ),
+			__( 'When new device alerts are on for a user\'s role, the site sets a cookie named happyaccess_dev at login. It holds a random id that tells the site it has seen this browser before, and it is kept for one year. For each user, the site keeps a list of up to 20 browsers: a hash of each id and the time it was last seen. A login from a browser that isn\'t on the list sends the user an email with the time, the browser name and the IP address.', 'happyaccess' ),
+			__( 'Exporting a user\'s data includes the two-step login methods they have on, how many backup codes are left and when each known browser was last seen, never the secret, the codes or the ids. Erasing it removes the list of known browsers. The two-step login settings are kept, because they protect the account.', 'happyaccess' ),
 		);
 
 		$html = '';
@@ -189,7 +207,8 @@ final class Privacy {
 	}
 
 	/**
-	 * Exports log entries and grants tied to an email address.
+	 * Exports log entries and grants tied to an email address, and on the
+	 * first page the user's two-step login data.
 	 *
 	 * @param string $email Email address.
 	 * @param int    $page  Page, starting at 1.
@@ -315,10 +334,102 @@ final class Privacy {
 			);
 		}
 
+		if ( $user_id > 0 && 1 === max( 1, (int) $page ) ) {
+			$items = array_merge( $items, self::two_step_items( $user_id ) );
+		}
+
 		return array(
 			'data' => $items,
 			'done' => count( $log_rows ) < self::PER_PAGE && count( $grant_rows ) < self::PER_PAGE,
 		);
+	}
+
+	/**
+	 * The "Two-step login" export group: the methods that are on, how many
+	 * backup codes are left, and when each known device was last seen. Never
+	 * the secret, a code hash or a device hash.
+	 *
+	 * @param int $user_id User id.
+	 * @return array Export items, none when the user has no two-step data.
+	 */
+	private static function two_step_items( $user_id ) {
+		$devices = get_user_meta( $user_id, self::DEVICES_META, true );
+		$devices = is_array( $devices ) ? $devices : array();
+		if ( ! self::has_two_step_settings( $user_id ) && array() === $devices ) {
+			return array();
+		}
+
+		$group = array(
+			'group_id'          => 'happyaccess_twostep',
+			'group_label'       => __( 'Two-step login', 'happyaccess' ),
+			'group_description' => __( 'Two-step login methods, backup codes left and the browsers this user logged in from.', 'happyaccess' ),
+		);
+
+		$methods = array();
+		$totp    = get_user_meta( $user_id, self::TWOSTEP_TOTP_META, true );
+		if ( is_array( $totp ) && ! empty( $totp['secret'] ) ) {
+			$methods[] = __( 'Authenticator app', 'happyaccess' );
+		}
+		$state = get_user_meta( $user_id, self::TWOSTEP_STATE_META, true );
+		if ( is_array( $state ) && ! empty( $state['email'] ) ) {
+			$methods[] = __( 'Email codes', 'happyaccess' );
+		}
+		$codes = get_user_meta( $user_id, self::TWOSTEP_BACKUP_META, true );
+
+		$items = array(
+			array_merge(
+				$group,
+				array(
+					'item_id' => 'happyaccess-twostep-' . (int) $user_id,
+					'data'    => array(
+						array(
+							'name'  => __( 'Methods turned on', 'happyaccess' ),
+							'value' => array() === $methods ? __( 'None', 'happyaccess' ) : implode( ', ', $methods ),
+						),
+						array(
+							'name'  => __( 'Backup codes left', 'happyaccess' ),
+							'value' => (string) ( is_array( $codes ) ? count( $codes ) : 0 ),
+						),
+					),
+				)
+			),
+		);
+
+		$number = 0;
+		foreach ( $devices as $device ) {
+			if ( ! is_array( $device ) || ! isset( $device['seen'] ) ) {
+				continue;
+			}
+			++$number;
+			$items[] = array_merge(
+				$group,
+				array(
+					'item_id' => 'happyaccess-device-' . (int) $user_id . '-' . $number,
+					'data'    => array(
+						array(
+							'name'  => __( 'Last seen (UTC)', 'happyaccess' ),
+							'value' => gmdate( 'Y-m-d H:i:s', (int) $device['seen'] ),
+						),
+					),
+				)
+			);
+		}
+		return $items;
+	}
+
+	/**
+	 * Whether the user has any two-step login method or backup codes stored.
+	 *
+	 * @param int $user_id User id.
+	 * @return bool
+	 */
+	private static function has_two_step_settings( $user_id ) {
+		foreach ( array( self::TWOSTEP_STATE_META, self::TWOSTEP_TOTP_META, self::TWOSTEP_BACKUP_META ) as $key ) {
+			if ( metadata_exists( 'user', $user_id, $key ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -334,17 +445,20 @@ final class Privacy {
 	 *    match depends on recipient_email, so grants must stay matched until
 	 *    their logs are done.
 	 *
+	 * On the first page it also removes the user's known devices. The
+	 * two-step login settings stay, because erasing them would turn the
+	 * account's protection off without the user's action.
+	 *
 	 * A processed row stops matching, so the page number is not used as an
 	 * offset.
 	 *
 	 * @param string $email Email address.
-	 * @param int    $page  Page, starting at 1. Unused.
+	 * @param int    $page  Page, starting at 1. Only the first handles two-step data.
 	 * @return array items_removed, items_retained, messages and done.
 	 */
 	public static function erase( $email, $page = 1 ) {
 		global $wpdb;
 
-		unset( $page );
 		$email = trim( (string) $email );
 		if ( '' === $email || Capabilities::is_temp_user( get_current_user_id() ) ) {
 			return array(
@@ -355,9 +469,16 @@ final class Privacy {
 			);
 		}
 
-		$user_id = self::user_id_for( $email );
-		$logs    = Installer::table( 'logs' );
-		$tokens  = Installer::table( 'tokens' );
+		$user_id      = self::user_id_for( $email );
+		$devices_gone = false;
+		$two_step     = false;
+		if ( $user_id > 0 && 1 === max( 1, (int) $page ) ) {
+			$devices_gone = metadata_exists( 'user', $user_id, self::DEVICES_META ) && delete_user_meta( $user_id, self::DEVICES_META );
+			$two_step     = self::has_two_step_settings( $user_id );
+		}
+
+		$logs   = Installer::table( 'logs' );
+		$tokens = Installer::table( 'tokens' );
 
 		$scrubbed = self::end_and_scrub_grants( $email );
 
@@ -391,9 +512,13 @@ final class Privacy {
 			$messages[] = __( 'Some log summaries may still contain the grant label.', 'happyaccess' );
 		}
 
+		if ( $two_step ) {
+			$messages[] = __( 'Two-step login settings were kept, because they protect the account.', 'happyaccess' );
+		}
+
 		return array(
-			'items_removed'  => ( $log_count + $grant_count + $created_count ) > 0,
-			'items_retained' => $log_count > 0,
+			'items_removed'  => $devices_gone || ( $log_count + $grant_count + $created_count ) > 0,
+			'items_retained' => $two_step || $log_count > 0,
 			'messages'       => $messages,
 			'done'           => $log_count < self::PER_PAGE && $grant_count < self::PER_PAGE && $created_count < self::PER_PAGE,
 		);

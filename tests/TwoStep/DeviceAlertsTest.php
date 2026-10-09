@@ -193,7 +193,7 @@ class DeviceAlertsTest extends WP_UnitTestCase {
 		$this->assertSame( array(), $this->alert_rows( $user->ID ) );
 	}
 
-	public function test_a_known_browser_only_updates_its_last_seen_time() {
+	public function test_a_known_browser_updates_its_last_seen_time_and_the_cookie_expiry() {
 		$this->turn_on();
 		$user = $this->admin();
 		$id   = $this->first_login( $user );
@@ -203,7 +203,10 @@ class DeviceAlertsTest extends WP_UnitTestCase {
 		$this->log_in( $user );
 
 		$this->assertSame( array(), $this->mails );
-		$this->assertSame( array(), $this->cookies );
+		$this->assertCount( 1, $this->cookies, 'The same id is sent again, so a browser used every day never ages out.' );
+		$this->assertSame( $id, $this->cookies[0]['value'] );
+		$this->assertSame( Clock::now() + YEAR_IN_SECONDS, $this->cookies[0]['options']['expires'] );
+		$this->assertTrue( $this->cookies[0]['options']['httponly'] );
 		$devices = $this->devices( $user->ID );
 		$this->assertCount( 1, $devices );
 		$this->assertSame( Clock::now(), $devices[0]['seen'] );
@@ -236,17 +239,75 @@ class DeviceAlertsTest extends WP_UnitTestCase {
 		$this->assertSame( 'Chrome on macOS', json_decode( $rows[0]['metadata'], true )['browser'] );
 	}
 
-	public function test_an_unknown_cookie_counts_as_a_new_browser() {
+	public function test_an_unknown_well_formed_id_is_a_new_device_and_keeps_its_id() {
 		$this->turn_on();
 		$user = $this->admin();
 		$this->first_login( $user );
 
-		$_COOKIE[ DeviceAlerts::COOKIE ] = Codes::link_key();
+		$shared                          = Codes::link_key();
+		$_COOKIE[ DeviceAlerts::COOKIE ] = $shared;
+		$this->log_in( $user );
+
+		$this->assertCount( 1, $this->mails );
+		$this->assertCount( 1, $this->alert_rows( $user->ID ) );
+		$this->assertSame( array(), $this->cookies, 'The id another account set stays, so that account still knows the browser.' );
+		$this->assertContains( Codes::hash_key( $shared ), array_column( $this->devices( $user->ID ), 'hash' ) );
+	}
+
+	public function test_a_malformed_cookie_gets_a_fresh_id() {
+		$this->turn_on();
+		$user = $this->admin();
+		$this->first_login( $user );
+
+		$_COOKIE[ DeviceAlerts::COOKIE ] = 'not-a-device-id';
 		$this->log_in( $user );
 
 		$this->assertCount( 1, $this->mails );
 		$this->assertCount( 1, $this->cookies );
-		$this->assertNotSame( $_COOKIE[ DeviceAlerts::COOKIE ], $this->cookies[0]['value'], 'A fresh id replaces the unknown one.' );
+		$this->assertSame( 43, strlen( $this->cookies[0]['value'] ) );
+		$this->assertNotSame( 'not-a-device-id', $this->cookies[0]['value'] );
+	}
+
+	public function test_the_first_login_with_an_unknown_id_remembers_that_id() {
+		$this->turn_on();
+		$user                            = $this->admin();
+		$shared                          = Codes::link_key();
+		$_COOKIE[ DeviceAlerts::COOKIE ] = $shared;
+
+		$this->log_in( $user );
+
+		$this->assertSame( array(), $this->mails );
+		$this->assertSame( array(), $this->cookies );
+		$this->assertSame( array( Codes::hash_key( $shared ) ), array_column( $this->devices( $user->ID ), 'hash' ) );
+	}
+
+	public function test_two_accounts_taking_turns_on_one_browser_get_one_alert_each() {
+		$this->turn_on();
+		$first  = $this->admin();
+		$second = $this->admin();
+		$this->seed_devices( $first->ID );
+		$this->seed_devices( $second->ID );
+
+		$values = array();
+		for ( $round = 0; $round < 4; $round++ ) {
+			foreach ( array( $first, $second ) as $user ) {
+				Clock::freeze( Clock::now() + 60 );
+				$this->cookies = array();
+				$this->log_in( $user );
+				// The browser keeps whatever cookie the site sent, like a cookie jar.
+				foreach ( $this->cookies as $cookie ) {
+					$_COOKIE[ DeviceAlerts::COOKIE ] = $cookie['value'];
+					$values[]                        = $cookie['value'];
+				}
+			}
+		}
+
+		$this->assertCount( 1, $this->alert_rows( $first->ID ) );
+		$this->assertCount( 1, $this->alert_rows( $second->ID ) );
+		$this->assertCount( 2, $this->mails );
+		$this->assertNotEmpty( $values );
+		$this->assertCount( 1, array_unique( $values ), 'The cookie value never changes.' );
+		$this->assertSame( $_COOKIE[ DeviceAlerts::COOKIE ], $values[0] );
 	}
 
 	public function test_a_password_login_through_wp_signon_is_watched() {

@@ -25,10 +25,12 @@ defined( 'ABSPATH' ) || exit;
  * logged in with and when each was last seen, never the ids themselves.
  *
  * At a login of a role in two_step.device_alert_roles, a missing cookie or
- * an id that isn't in the list is a new device: it gets a fresh id, and the
- * user gets an email, at most SEND_LIMIT an hour. The first login after the
- * feature was turned on only remembers the device, since there is nothing to
- * compare it with yet.
+ * an id that isn't in the list is a new device, and the user gets an email,
+ * at most SEND_LIMIT an hour. A missing or malformed cookie gets a fresh id.
+ * A well-formed id the user doesn't know is kept, because another account
+ * on the same browser may know it. A known id is sent again with a fresh
+ * expiry. The first login after the feature was turned on only remembers
+ * the device, since there is nothing to compare it with yet.
  *
  * The list belongs to the person, like the rest of the two-step meta, so on
  * a network the ids are hashed with the main site's key.
@@ -127,17 +129,22 @@ final class DeviceAlerts {
 				if ( hash_equals( $device['hash'], $hash ) ) {
 					$devices[ $index ]['seen'] = $now;
 					update_user_meta( $user->ID, self::META, $devices );
+					// The same id again with a fresh expiry, so a browser in daily use never ages out.
+					Challenge::send_cookie( self::COOKIE, $id, $now + YEAR_IN_SECONDS );
 					return;
 				}
 			}
+		} else {
+			// Only a missing or malformed cookie gets a new id. Replacing an id another account set would make two accounts on one browser alert at every login.
+			$id   = Codes::link_key();
+			$hash = self::hash( $id );
+			Challenge::send_cookie( self::COOKIE, $id, $now + YEAR_IN_SECONDS );
 		}
 
-		$id        = Codes::link_key();
 		$devices[] = array(
-			'hash' => self::hash( $id ),
+			'hash' => $hash,
 			'seen' => $now,
 		);
-		Challenge::send_cookie( self::COOKIE, $id, $now + YEAR_IN_SECONDS );
 		update_user_meta( $user->ID, self::META, self::newest( $devices ) );
 		if ( $first ) {
 			return;

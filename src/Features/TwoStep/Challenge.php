@@ -210,10 +210,9 @@ final class Challenge {
 	}
 
 	/**
-	 * Whether a finished login happened away from a login form in a new
-	 * window: an application password, XML-RPC, or the re-auth popup
-	 * (interim login) of a session that already existed. The code step
-	 * carries the interim flag in its form, so it is in the request too.
+	 * A login that isn't a person at a login form: an application password,
+	 * XML-RPC or an interim re-login. The code step carries the interim flag
+	 * in its form, so it is in the request too.
 	 *
 	 * @param \WP_User $user The user who logged in.
 	 * @return bool
