@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from '@wordpress/element';
+import { useEffect, useId, useRef, useState } from '@wordpress/element';
 import {
 	Button,
 	CheckboxControl,
@@ -14,6 +14,10 @@ import RetryButton from '../RetryButton';
 import { networkNote, otherPluginsQuestion } from '../login/twoStepModel';
 import { InlineConfirm } from '../support/GrantRow';
 import AuthorCard from '../AuthorCard';
+import ConsentTerms, {
+	consentHeading,
+	consentLabel,
+} from '../setup/ConsentTerms';
 import LoginPreview from './LoginPreview';
 import {
 	buildPatch,
@@ -60,26 +64,41 @@ function endedText( count ) {
 
 /**
  * The error of one feature switch, under that switch's text. The Notice
- * speaks its text, so the error is announced when it shows.
+ * speaks its text, so the error is announced when it shows, and the switch
+ * names the id in its aria-describedby, so it is read again on focus.
  *
  * @param {Object}      props       Props.
+ * @param {string}      props.id    Id of the error, for the switch's description.
  * @param {Object|null} props.error The failed save, or nothing.
  * @return {Element|null} The notice.
  */
-function SwitchError( { error } ) {
+function SwitchError( { id, error } ) {
 	if ( ! error ) {
 		return null;
 	}
 	return (
-		<Notice
-			className="ha-feature__note"
-			status="error"
-			isDismissible={ false }
-		>
-			{ error.message }
-		</Notice>
+		<div id={ id }>
+			<Notice
+				className="ha-feature__note"
+				status="error"
+				isDismissible={ false }
+			>
+				{ error.message }
+			</Notice>
+		</div>
 	);
 }
+
+/**
+ * The ids a switch is described by: its text, then its error while it has one.
+ *
+ * @param {string}      descId  Id of the switch's text.
+ * @param {string}      errorId Id of the switch's error.
+ * @param {Object|null} error   The failed save, or nothing.
+ * @return {string} The aria-describedby value.
+ */
+const describedBy = ( descId, errorId, error ) =>
+	error ? `${ descId } ${ errorId }` : descId;
 
 /**
  * The Settings tab: the feature switch, safety and privacy, and a live
@@ -87,7 +106,9 @@ function SwitchError( { error } ) {
  *
  * The feature switches save the moment they are switched. Turning support
  * access off asks first, since it ends every pass, and so does turning
- * two-step login on while another two-step plugin is active. Everything
+ * two-step login on while another two-step plugin is active. Turning
+ * support access on while no consent is recorded, such as after a setup
+ * without it, shows the consent terms from setup first. Everything
  * else waits for "Save changes", which sends only the keys that changed.
  * On a subsite of a network-active install the main site's two-step
  * setting applies, so a note takes the place of the two-step switch.
@@ -112,6 +133,8 @@ export default function SettingsTab( {
 	const [ secretInput, setSecretInput ] = useState( '' );
 	const [ confirmOff, setConfirmOff ] = useState( false );
 	const [ confirmTwoStep, setConfirmTwoStep ] = useState( false );
+	const [ consentOpen, setConsentOpen ] = useState( false );
+	const [ agreed, setAgreed ] = useState( false );
 	// One error per feature switch, so a failed switch keeps its message while another one saves.
 	const [ featureErrors, setFeatureErrors ] = useState( {} );
 	const [ saveError, setSaveError ] = useState( null );
@@ -120,6 +143,14 @@ export default function SettingsTab( {
 	const passwordlessRef = useRef( null );
 	const twoStepRef = useRef( null );
 	const secretRef = useRef( null );
+	const consentRef = useRef( null );
+
+	// The terms take focus on the checkbox, the one thing to do next.
+	useEffect( () => {
+		if ( consentOpen ) {
+			consentRef.current?.querySelector( 'input' )?.focus();
+		}
+	}, [ consentOpen ] );
 
 	if ( loading && ! settings ) {
 		return (
@@ -169,6 +200,7 @@ export default function SettingsTab( {
 	const setValue = ( path, value ) => setValues( { [ path ]: value } );
 
 	const supportOn = !! saved( 'features.support_access' );
+	const consentRecorded = !! settings.support?.consent_given_at;
 	const passwordlessOn = !! saved( 'features.passwordless' );
 	const twoStepOn = !! saved( 'features.two_step' );
 	const twoStepShared = 'main' === twoStepNetwork;
@@ -195,14 +227,23 @@ export default function SettingsTab( {
 		}
 	};
 
-	const switchSupport = async ( next ) => {
+	const openConsent = () => {
+		setConfirmOff( false );
+		setConfirmTwoStep( false );
+		setAgreed( false );
+		setConsentOpen( true );
+	};
+
+	const switchSupport = async ( next, withConsent = false ) => {
 		setFeatureError( 'support_access', null );
 		setConfirmOff( false );
 		setConfirmTwoStep( false );
 		try {
 			const result = await save( {
 				features: { support_access: next },
+				...( withConsent ? { consent: true } : {} ),
 			} );
+			setConsentOpen( false );
 			finish( result );
 			if ( next ) {
 				announce( __( 'Temporary access turned on', 'happyaccess' ) );
@@ -216,7 +257,17 @@ export default function SettingsTab( {
 			}
 		} catch ( e ) {
 			setFeatureError( 'support_access', e );
+			// The server wants consent first, so the terms show with its error.
+			if ( next && 'happyaccess_consent_required' === e?.code ) {
+				openConsent();
+				return;
+			}
 		}
+		switchRef.current?.focus();
+	};
+
+	const closeConsent = () => {
+		setConsentOpen( false );
 		switchRef.current?.focus();
 	};
 
@@ -224,10 +275,14 @@ export default function SettingsTab( {
 		if ( saving ) {
 			return;
 		}
-		if ( next ) {
+		if ( next && ! consentRecorded ) {
+			setFeatureError( 'support_access', null );
+			openConsent();
+		} else if ( next ) {
 			switchSupport( true );
 		} else {
 			setFeatureError( 'support_access', null );
+			setConsentOpen( false );
 			setConfirmTwoStep( false );
 			setConfirmOff( true );
 		}
@@ -241,6 +296,7 @@ export default function SettingsTab( {
 		}
 		setConfirmOff( false );
 		setConfirmTwoStep( false );
+		setConsentOpen( false );
 		setFeatureError( 'passwordless', null );
 		try {
 			const result = await save( {
@@ -266,6 +322,7 @@ export default function SettingsTab( {
 		}
 		setConfirmOff( false );
 		setConfirmTwoStep( false );
+		setConsentOpen( false );
 		setFeatureError( 'two_step', null );
 		try {
 			const result = await save( {
@@ -289,6 +346,7 @@ export default function SettingsTab( {
 		}
 		if ( next && otherNames.length > 0 ) {
 			setConfirmOff( false );
+			setConsentOpen( false );
 			setFeatureError( 'two_step', null );
 			setConfirmTwoStep( true );
 			return;
@@ -389,6 +447,7 @@ export default function SettingsTab( {
 									) }
 								</div>
 								<SwitchError
+									id={ `${ ids }-support-error` }
 									error={ featureErrors.support_access }
 								/>
 							</div>
@@ -397,7 +456,11 @@ export default function SettingsTab( {
 								checked={ supportOn }
 								onChange={ onSwitch }
 								aria-labelledby={ `${ ids }-support-name` }
-								aria-describedby={ `${ ids }-support-desc` }
+								aria-describedby={ describedBy(
+									`${ ids }-support-desc`,
+									`${ ids }-support-error`,
+									featureErrors.support_access
+								) }
 							/>
 						</li>
 						<li className="ha-feature">
@@ -443,6 +506,7 @@ export default function SettingsTab( {
 									) }
 								</div>
 								<SwitchError
+									id={ `${ ids }-passwordless-error` }
 									error={ featureErrors.passwordless }
 								/>
 							</div>
@@ -451,7 +515,11 @@ export default function SettingsTab( {
 								checked={ passwordlessOn }
 								onChange={ switchPasswordless }
 								aria-labelledby={ `${ ids }-passwordless-name` }
-								aria-describedby={ `${ ids }-passwordless-desc` }
+								aria-describedby={ describedBy(
+									`${ ids }-passwordless-desc`,
+									`${ ids }-passwordless-error`,
+									featureErrors.passwordless
+								) }
 							/>
 						</li>
 						<li className="ha-feature">
@@ -493,7 +561,10 @@ export default function SettingsTab( {
 										'happyaccess'
 									) }
 								</div>
-								<SwitchError error={ featureErrors.two_step } />
+								<SwitchError
+									id={ `${ ids }-twostep-error` }
+									error={ featureErrors.two_step }
+								/>
 								{ twoStepShared && (
 									<Notice
 										className="ha-feature__note"
@@ -510,11 +581,60 @@ export default function SettingsTab( {
 									checked={ twoStepOn }
 									onChange={ onTwoStepSwitch }
 									aria-labelledby={ `${ ids }-twostep-name` }
-									aria-describedby={ `${ ids }-twostep-desc` }
+									aria-describedby={ describedBy(
+										`${ ids }-twostep-desc`,
+										`${ ids }-twostep-error`,
+										featureErrors.two_step
+									) }
 								/>
 							) }
 						</li>
 					</ul>
+					{ consentOpen && (
+						<div
+							ref={ consentRef }
+							className="ha-card__confirm ha-consent"
+							role="group"
+							aria-labelledby={ `${ ids }-consent` }
+						>
+							<h3
+								id={ `${ ids }-consent` }
+								className="ha-consent__title"
+							>
+								{ consentHeading() }
+							</h3>
+							<ConsentTerms />
+							<CheckboxControl
+								label={ consentLabel() }
+								checked={ agreed }
+								onChange={ setAgreed }
+								__nextHasNoMarginBottom
+							/>
+							<div className="ha-consent__actions">
+								<Button
+									variant="secondary"
+									size="compact"
+									accessibleWhenDisabled
+									disabled={ saving }
+									onClick={ closeConsent }
+								>
+									{ __( 'Cancel', 'happyaccess' ) }
+								</Button>
+								<Button
+									variant="primary"
+									size="compact"
+									isBusy={ saving }
+									accessibleWhenDisabled
+									disabled={ saving || ! agreed }
+									onClick={ () =>
+										agreed && switchSupport( true, true )
+									}
+								>
+									{ __( 'Turn on', 'happyaccess' ) }
+								</Button>
+							</div>
+						</div>
+					) }
 					{ confirmOff && (
 						<div className="ha-card__confirm">
 							<InlineConfirm

@@ -254,10 +254,11 @@ class AuditLogTest extends WP_UnitTestCase {
 		$off   = $this->switch_row( array( 'features.two_step' ), array( 'two_step' => false ) );
 		$setup = $this->switch_row( array( 'support.consent_given_at', 'support.consent_user_id', 'features.support_access' ), array( 'support_access' => true ) );
 		$plain = $this->settings_row( array( 'privacy.logging' ) );
+		$mark  = $this->settings_row( array( 'support.setup_done_at' ) );
 
 		$this->assertEqualsCanonicalizing( array( $on, $setup ), $this->found( 'turned on' ) );
 		$this->assertSame( array( $off ), $this->found( 'Turned off' ) );
-		$this->assertSame( array( $setup ), $this->found( 'Finished setup' ) );
+		$this->assertEqualsCanonicalizing( array( $setup, $mark ), $this->found( 'Finished setup' ) );
 		$this->assertContains( $plain, $this->found( 'Changed settings' ) );
 	}
 

@@ -122,6 +122,14 @@ class SettingLabelsTest extends WP_UnitTestCase {
 		$this->assertSame( 'Changed settings: Two-step login', $this->line( array( 'features.two_step' ), array( 'two_step' => 'yes' ) ) );
 	}
 
+	public function test_the_setup_marker_reads_as_finished_setup() {
+		$this->assertSame( 'Finished setup', $this->line( array( 'support.setup_done_at' ) ) );
+		$this->assertSame(
+			'Finished setup and turned on Passwordless login',
+			$this->line( array( 'features.passwordless', 'support.setup_done_at' ), array( 'passwordless' => true ) )
+		);
+	}
+
 	public function test_finishing_setup_never_lists_the_consent_keys() {
 		$this->assertSame( 'Finished setup', $this->line( array( 'support.consent_given_at', 'support.consent_user_id' ) ) );
 		$this->assertSame(

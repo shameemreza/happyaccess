@@ -412,7 +412,7 @@ final class AuditLog {
 		$parts    = array(
 			'on'      => array( 'metadata LIKE %s', array( $features . 'true%' ) ),
 			'off'     => array( 'metadata LIKE %s', array( $features . 'false%' ) ),
-			'setup'   => array( 'metadata LIKE %s', array( '%' . $wpdb->esc_like( '"support.consent_given_at"' ) . '%' ) ),
+			'setup'   => array( '( metadata LIKE %s OR metadata LIKE %s )', array( '%' . $wpdb->esc_like( '"support.setup_done_at"' ) . '%', '%' . $wpdb->esc_like( '"support.consent_given_at"' ) . '%' ) ),
 			'changed' => array( '( ' . implode( ' OR ', array_fill( 0, count( $named ), 'metadata LIKE %s' ) ) . ' )', $named ),
 		);
 

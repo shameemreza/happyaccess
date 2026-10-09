@@ -22,9 +22,11 @@ final class SettingLabels {
 	const FEATURE_KEYS = array( 'features.support_access', 'features.passwordless', 'features.two_step' );
 
 	/**
-	 * Keys that record who finished setup and when. They are never listed.
+	 * Keys that record that setup finished, and who agreed to the consent
+	 * and when. They are never listed. Setup rows hold the setup marker,
+	 * or, before the marker existed, the consent keys.
 	 */
-	const CONSENT_KEYS = array( 'support.consent_given_at', 'support.consent_user_id' );
+	const CONSENT_KEYS = array( 'support.setup_done_at', 'support.consent_given_at', 'support.consent_user_id' );
 
 	/**
 	 * What a settings row needs for each line template to show: "changed"
@@ -207,7 +209,8 @@ final class SettingLabels {
 			$keys = array_values( array_diff( $keys, array( $key ) ) );
 		}
 
-		$switches = self::switches( $on, $off, in_array( 'support.consent_given_at', $keys, true ) );
+		$setup    = in_array( 'support.setup_done_at', $keys, true ) || in_array( 'support.consent_given_at', $keys, true );
+		$switches = self::switches( $on, $off, $setup );
 		$names    = self::names( array_values( array_diff( $keys, self::CONSENT_KEYS ) ) );
 		$changed  = $names ? sprintf( self::line_templates()['changed'], implode( ', ', $names ) ) : '';
 

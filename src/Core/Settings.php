@@ -101,6 +101,7 @@ final class Settings {
 			),
 			'support'      => array(
 				'default_duration' => 259200,
+				'setup_done_at'    => '',
 				'consent_given_at' => '',
 				'consent_user_id'  => 0,
 			),

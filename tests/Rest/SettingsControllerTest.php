@@ -298,6 +298,78 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertFalse( $data['features']['support_access'] );
 		$this->assertFalse( $data['needs_setup'] );
+		$this->assertSame( Clock::mysql(), Settings::get( 'support.setup_done_at' ) );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ), 'No consent without Temporary access.' );
+	}
+
+	public function test_setup_records_consent_only_when_temporary_access_is_picked() {
+		$response = $this->request(
+			'POST',
+			'/setup',
+			array(
+				'features' => array(
+					'support_access' => false,
+					'passwordless'   => true,
+				),
+				'consent'  => true,
+			)
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( $response->get_data()['needs_setup'] );
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+		$this->assertSame( 0, Settings::get( 'support.consent_user_id' ) );
+	}
+
+	public function test_a_site_with_consent_from_before_the_setup_marker_is_set_up() {
+		Settings::update( array( 'support' => array( 'consent_given_at' => '2026-01-01 00:00:00' ) ) );
+		$this->assertSame( '', Settings::get( 'support.setup_done_at' ) );
+		$this->assertFalse( $this->request( 'GET', '/settings' )->get_data()['needs_setup'] );
+	}
+
+	public function test_turning_temporary_access_on_after_a_setup_without_it_needs_consent() {
+		$this->request( 'POST', '/setup', array( 'features' => array( 'support_access' => false, 'passwordless' => true ) ) );
+
+		$refused = $this->request( 'POST', '/settings', array( 'features' => array( 'support_access' => true ) ) );
+		$this->assertSame( 400, $refused->get_status() );
+		$this->assertSame( 'happyaccess_consent_required', $refused->get_data()['code'] );
+		$this->assertFalse( Settings::get( 'features.support_access' ) );
+
+		$this->assertSame( 400, $this->request( 'POST', '/settings', array( 'features' => array( 'support_access' => true ), 'consent' => false ) )->get_status() );
+
+		Clock::freeze( 1790000500 );
+		$agreed = $this->request(
+			'POST',
+			'/settings',
+			array(
+				'features' => array( 'support_access' => true ),
+				'consent'  => true,
+			)
+		);
+		$this->assertSame( 200, $agreed->get_status() );
+		$this->assertTrue( Settings::get( 'features.support_access' ) );
+		$this->assertSame( Clock::mysql(), Settings::get( 'support.consent_given_at' ) );
+		$this->assertSame( $this->owner, Settings::get( 'support.consent_user_id' ) );
+		$this->assertSame( 'Turned on Temporary access', $this->newest_settings_line(), 'Consent in Settings is not a second setup.' );
+	}
+
+	public function test_consent_sent_with_a_save_that_does_not_turn_temporary_access_on_is_ignored() {
+		$this->request( 'POST', '/setup', array( 'features' => array( 'support_access' => false ) ) );
+		$this->request(
+			'POST',
+			'/settings',
+			array(
+				'security' => array( 'max_attempts' => 9 ),
+				'consent'  => true,
+			)
+		);
+		$this->assertSame( '', Settings::get( 'support.consent_given_at' ) );
+	}
+
+	public function test_save_cannot_fake_the_setup_marker() {
+		$this->request( 'POST', '/settings', array( 'support' => array( 'setup_done_at' => '2026-01-01 00:00:00' ) ) );
+		$this->assertSame( '', Settings::get( 'support.setup_done_at' ) );
+		$this->assertTrue( $this->request( 'GET', '/settings' )->get_data()['needs_setup'] );
 	}
 
 	public function test_setup_rejects_unknown_feature_names() {
@@ -514,6 +586,7 @@ class SettingsControllerTest extends RestTestCase {
 		$rows = $this->settings_rows();
 		$this->assertCount( 1, $rows );
 		$this->assertContains( 'support.consent_given_at', $rows[0]['meta']['keys'] );
+		$this->assertContains( 'support.setup_done_at', $rows[0]['meta']['keys'] );
 		$this->assertSame( array( 'passwordless' => true ), $rows[0]['meta']['features'] );
 
 		$read = new WP_REST_Request( 'GET', '/' . \HappyAccess\Rest\Routes::NS . '/activity' );

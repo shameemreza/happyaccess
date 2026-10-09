@@ -54,9 +54,12 @@ final class SettingsController {
 	);
 
 	/**
-	 * Consent is recorded by POST /setup only, so a settings save can't fake it.
+	 * The setup marker and the consent. Setup records the marker, and the
+	 * consent when Temporary access is picked. A settings save records the
+	 * consent only when it turns Temporary access on with consent sent, so a
+	 * save can't fake either.
 	 */
-	const CONSENT_KEYS = array( 'consent_given_at', 'consent_user_id' );
+	const CONSENT_KEYS = array( 'setup_done_at', 'consent_given_at', 'consent_user_id' );
 
 	/**
 	 * Registers the routes.
@@ -95,6 +98,12 @@ final class SettingsController {
 								'type'              => 'string',
 								'sanitize_callback' => array( __CLASS__, 'sanitize_secret' ),
 								'validate_callback' => 'rest_validate_request_arg',
+							),
+							'consent'              => array(
+								'type'              => 'boolean',
+								'default'           => false,
+								'validate_callback' => 'rest_validate_request_arg',
+								'sanitize_callback' => 'rest_sanitize_boolean',
 							),
 						)
 					),
@@ -255,8 +264,9 @@ final class SettingsController {
 	}
 
 	/**
-	 * POST /settings. Before setup records consent, a save can't turn
-	 * Support Access on, so the first-run screen stays the only way in.
+	 * POST /settings. A save that turns Temporary access on while no consent
+	 * is recorded needs consent sent with it, and records it. Without it
+	 * the save is refused and nothing changes.
 	 *
 	 * @param \WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
@@ -269,7 +279,9 @@ final class SettingsController {
 				$changes[ $group ] = $value;
 			}
 		}
-		unset( $changes['support']['consent_given_at'], $changes['support']['consent_user_id'] );
+		foreach ( self::CONSENT_KEYS as $key ) {
+			unset( $changes['support'][ $key ] );
+		}
 
 		if ( self::follows_main_site() && self::has_main_site_keys( $changes ) ) {
 			return self::network_error();
@@ -279,8 +291,14 @@ final class SettingsController {
 			&& isset( $changes['features'] )
 			&& array_key_exists( 'support_access', $changes['features'] )
 			&& rest_sanitize_boolean( $changes['features']['support_access'] );
-		if ( $turns_on && '' === (string) Settings::get( 'support.consent_given_at' ) ) {
+
+		$records_consent = $turns_on && '' === (string) Settings::get( 'support.consent_given_at' );
+		if ( $records_consent && true !== $request->get_param( 'consent' ) ) {
 			return self::consent_error();
+		}
+		if ( $records_consent ) {
+			$changes['support']['consent_given_at'] = Clock::mysql();
+			$changes['support']['consent_user_id']  = get_current_user_id();
 		}
 
 		// The secret may come at the top level or inside the security group.
@@ -299,7 +317,8 @@ final class SettingsController {
 				array( 'status' => 400 )
 			);
 		}
-		$extra = self::apply( $changes, $secret_changed ? $secret : null );
+		// The log line says the switch went on; only setup reads as "Finished setup".
+		$extra = self::apply( $changes, $secret_changed ? $secret : null, array( 'support.consent_given_at', 'support.consent_user_id' ) );
 		if ( is_wp_error( $extra ) ) {
 			return $extra;
 		}
@@ -382,14 +401,16 @@ final class SettingsController {
 			return self::consent_error();
 		}
 
-		// Finishing setup always records who did it and when, or the first-run screen would show again.
+		// Finishing setup always records when, or the first-run screen would show again. Consent goes with it only for Temporary access.
+		$support = array( 'setup_done_at' => Clock::mysql() );
+		if ( $support_on ) {
+			$support['consent_given_at'] = Clock::mysql();
+			$support['consent_user_id']  = get_current_user_id();
+		}
 		$extra = self::apply(
 			array(
 				'features' => $features,
-				'support'  => array(
-					'consent_given_at' => Clock::mysql(),
-					'consent_user_id'  => get_current_user_id(),
-				),
+				'support'  => $support,
 			)
 		);
 		if ( is_wp_error( $extra ) ) {
@@ -459,16 +480,17 @@ final class SettingsController {
 	 * written after a save that was stored, so a failed save leaves no row
 	 * saying it happened.
 	 *
-	 * @param array       $changes Nested changes, known groups only.
-	 * @param string|null $secret  New reCAPTCHA secret, an empty string to clear it, or null to leave it.
+	 * @param array       $changes  Nested changes, known groups only.
+	 * @param string|null $secret   New reCAPTCHA secret, an empty string to clear it, or null to leave it.
+	 * @param string[]    $unlisted Dotted keys saved but left out of the log row.
 	 * @return array|\WP_Error Extra response fields ("revoked" when passes were ended), or an error when a write failed.
 	 */
-	private static function apply( array $changes, $secret = null ) {
+	private static function apply( array $changes, $secret = null, array $unlisted = array() ) {
 		$was_on   = Features::is_enabled( 'support_access' );
 		$pending  = $was_on ? count( Grants::list_current() ) : 0;
 		$before   = Settings::all();
 		$expected = Settings::merge( $changes );
-		$keys     = self::changed_keys( $before, $expected );
+		$keys     = array_values( array_diff( self::changed_keys( $before, $expected ), $unlisted ) );
 		if ( null !== $secret ) {
 			$keys[] = 'security.recaptcha_secret_key';
 		}
@@ -614,12 +636,13 @@ final class SettingsController {
 	}
 
 	/**
-	 * Whether first-run setup is still to do: no one has recorded consent yet.
+	 * Whether first-run setup is still to do: no setup marker and no consent.
+	 * A site with consent from before the marker existed counts as set up.
 	 * The admin page reads this too, so both agree.
 	 *
 	 * @return bool
 	 */
 	public static function needs_setup() {
-		return '' === (string) Settings::get( 'support.consent_given_at' );
+		return '' === (string) Settings::get( 'support.setup_done_at' ) && '' === (string) Settings::get( 'support.consent_given_at' );
 	}
 }

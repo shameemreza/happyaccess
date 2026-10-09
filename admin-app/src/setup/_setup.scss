@@ -128,7 +128,8 @@
 		}
 	}
 
-	.ha-setup__terms {
+	// The consent terms, in setup and in Settings.
+	.ha-terms {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;

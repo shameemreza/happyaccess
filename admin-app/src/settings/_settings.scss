@@ -63,6 +63,26 @@
 		color: var(--ha-text);
 	}
 
+	// The consent terms before Temporary access goes on, as in setup.
+	.ha-consent {
+		margin-block-end: 8px;
+		padding-block-start: 16px;
+		border-block-start: 1px solid var(--ha-line-soft);
+	}
+
+	.ha-consent__title {
+		margin: 0 0 8px;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.ha-consent__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-block-start: 12px;
+	}
+
 	.ha-features {
 		margin: 0;
 		padding: 0 0 8px;

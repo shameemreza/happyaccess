@@ -27,11 +27,32 @@ function mockServer( initial = settingsFixture(), { revoked } = {} ) {
 			return server;
 		}
 		posts.push( data );
+		// Turning Temporary access on needs consent recorded, or sent with the save.
+		const turnsOn =
+			true === data.features?.support_access &&
+			! server.features.support_access;
+		if ( turnsOn && ! server.support.consent_given_at ) {
+			if ( true !== data.consent ) {
+				throw {
+					code: 'happyaccess_consent_required',
+					message: 'Please confirm before giving anyone access.',
+					data: { status: 400 },
+				};
+			}
+			server = {
+				...server,
+				support: {
+					...server.support,
+					consent_given_at: '2026-10-10 10:00:00',
+					consent_user_id: 1,
+				},
+			};
+		}
 		const next = { ...server };
 		Object.entries( data ).forEach( ( [ key, value ] ) => {
 			if ( 'recaptcha_secret_key' === key ) {
 				next.recaptcha_secret_set = '' !== value;
-			} else {
+			} else if ( 'consent' !== key ) {
 				next[ key ] = { ...next[ key ], ...value };
 			}
 		} );
@@ -478,6 +499,155 @@ describe( 'Settings tab', () => {
 			expect( liveText() ).toBe( 'Temporary access turned on' );
 		} );
 
+		describe( 'consent', () => {
+			const TERMS = [
+				"Temporary access lets someone outside your team into your site's admin, for as long as you choose.",
+				'Protected admin blocks the riskiest actions and logs what they do, but it is not a sandbox. Only give access to people you trust.',
+				'Their login, IP address and actions are recorded here so you can review them. You are responsible for telling your visitors if your privacy policy needs it.',
+			];
+			const AGREE =
+				"I understand, and I'll only give access to people I trust.";
+			const noConsent = () =>
+				settingsFixture( {
+					features: { support_access: false },
+					support: { consent_given_at: '', consent_user_id: 0 },
+				} );
+			const panel = () =>
+				screen.getByRole( 'group', {
+					name: 'Before you give anyone access',
+				} );
+
+			it( 'shows the consent terms first when none is recorded, and saves only once it is ticked', async () => {
+				mockServer( noConsent() );
+				const onFeaturesChange = vi.fn();
+				const user = userEvent.setup();
+				await renderTab( { onFeaturesChange } );
+
+				await user.click(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				);
+
+				expect( posts ).toHaveLength( 0 );
+				TERMS.forEach( ( term ) =>
+					expect(
+						within( panel() ).getByText( term )
+					).toBeInTheDocument()
+				);
+				expect(
+					within( panel() ).getByRole( 'checkbox', { name: AGREE } )
+				).toHaveFocus();
+				const turnOn = within( panel() ).getByRole( 'button', {
+					name: 'Turn on',
+				} );
+				expect( turnOn ).toHaveAttribute( 'aria-disabled', 'true' );
+				await user.click( turnOn );
+				expect( posts ).toHaveLength( 0 );
+
+				await user.click(
+					within( panel() ).getByRole( 'checkbox', { name: AGREE } )
+				);
+				await user.click( turnOn );
+
+				await waitFor( () =>
+					expect( liveText() ).toBe( 'Temporary access turned on' )
+				);
+				expect( posts ).toEqual( [
+					{ features: { support_access: true }, consent: true },
+				] );
+				expect( onFeaturesChange ).toHaveBeenCalledWith(
+					expect.objectContaining( { support_access: true } )
+				);
+				expect(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				).toBeChecked();
+				expect(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				).toHaveFocus();
+				expect(
+					screen.queryByRole( 'group', {
+						name: 'Before you give anyone access',
+					} )
+				).not.toBeInTheDocument();
+			} );
+
+			it( 'changes nothing on Cancel and puts focus back on the switch', async () => {
+				mockServer( noConsent() );
+				const user = userEvent.setup();
+				await renderTab();
+
+				await user.click(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				);
+				await user.click(
+					within( panel() ).getByRole( 'button', { name: 'Cancel' } )
+				);
+
+				expect( posts ).toHaveLength( 0 );
+				expect(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				).not.toBeChecked();
+				expect(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				).toHaveFocus();
+			} );
+
+			it( 'shows the terms when the server asks for consent the screen did not know was missing', async () => {
+				// The screen loaded with consent recorded, then the server said it isn't.
+				mockServer(
+					settingsFixture( { features: { support_access: false } } )
+				);
+				const user = userEvent.setup();
+				await renderTab();
+				server = noConsent();
+
+				await user.click(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				);
+
+				expect(
+					await screen.findByRole( 'group', {
+						name: 'Before you give anyone access',
+					} )
+				).toBeInTheDocument();
+				expect(
+					within( page() ).getAllByText(
+						'Please confirm before giving anyone access.'
+					).length
+				).toBeGreaterThan( 0 );
+				expect(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				).not.toBeChecked();
+
+				await user.click(
+					within( panel() ).getByRole( 'checkbox', { name: AGREE } )
+				);
+				await user.click(
+					within( panel() ).getByRole( 'button', { name: 'Turn on' } )
+				);
+				await waitFor( () =>
+					expect(
+						screen.getByRole( 'switch', {
+							name: 'Temporary access',
+						} )
+					).toBeChecked()
+				);
+				expect( posts[ posts.length - 1 ] ).toEqual( {
+					features: { support_access: true },
+					consent: true,
+				} );
+			} );
+
+			it( 'has no accessibility violations with the terms open', async () => {
+				mockServer( noConsent() );
+				const user = userEvent.setup();
+				const { container } = await renderTab();
+				await user.click(
+					screen.getByRole( 'switch', { name: 'Temporary access' } )
+				);
+				expect( await axe( container ) ).toHaveNoViolations();
+			} );
+		} );
+
 		it( 'shows an inline error and leaves the switch on when the save fails', async () => {
 			const user = userEvent.setup();
 			await renderTab();
@@ -674,6 +844,36 @@ describe( 'Settings tab', () => {
 				).not.toBeInTheDocument()
 			);
 		} );
+	} );
+
+	it( 'ties a switch error to its switch, so focus on the switch reads it again', async () => {
+		const user = userEvent.setup();
+		await renderTab();
+		apiFetch.mockRejectedValueOnce( {
+			code: 'happyaccess_failed',
+			message: 'Could not turn it on.',
+			data: { status: 500 },
+		} );
+		const toggle = screen.getByRole( 'switch', {
+			name: 'Passwordless login',
+		} );
+		expect( toggle ).not.toHaveAccessibleDescription(
+			expect.stringContaining( 'Could not turn it on.' )
+		);
+
+		await user.click( toggle );
+
+		await waitFor( () =>
+			expect( toggle ).toHaveAccessibleDescription(
+				expect.stringContaining( 'Could not turn it on.' )
+			)
+		);
+		expect( toggle ).toHaveFocus();
+		expect( toggle ).toHaveAccessibleDescription(
+			expect.stringContaining(
+				'Let people log in with a code or link sent to their email.'
+			)
+		);
 	} );
 
 	describe( 'Two-step login', () => {

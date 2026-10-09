@@ -224,7 +224,10 @@ describe( 'First-run setup', () => {
 		[
 			{ two_step: true },
 			[ 'Features', 'Done' ],
-			[ [ 'Set up two-step login for your account', 'primary' ] ],
+			[
+				[ 'Set up two-step login for your account', 'primary' ],
+				[ 'Choose who needs two-step login', 'secondary' ],
+			],
 		],
 		[
 			{ support_access: true, passwordless: true },
@@ -240,6 +243,7 @@ describe( 'First-run setup', () => {
 			[
 				[ 'Give temporary access', 'primary' ],
 				[ 'Set up two-step login for your account', 'secondary' ],
+				[ 'Choose who needs two-step login', 'secondary' ],
 			],
 		],
 		[
@@ -289,7 +293,7 @@ describe( 'First-run setup', () => {
 			screen.getByText(
 				picks.support_access
 					? 'Next time someone needs to get into your admin, send them a link or code instead of a password.'
-					: "Your login options are on. Here's where to set them up."
+					: 'Your login options are on. Set each one up below.'
 			)
 		).toBeInTheDocument();
 	} );
@@ -329,6 +333,35 @@ describe( 'First-run setup', () => {
 			screen.getByRole( 'button', { name: 'Give temporary access' } )
 		);
 		expect( onFinish ).toHaveBeenLastCalledWith( saved, 'support' );
+	} );
+
+	it( 'opens the Login and security tab from a setup with only two-step login', async () => {
+		const onFinish = vi.fn();
+		const user = userEvent.setup();
+		render(
+			<Setup onFinish={ onFinish } twoStepSetupUrl={ TWO_STEP_URL } />
+		);
+		await finishWith( user, { two_step: true } );
+
+		await user.click(
+			screen.getByRole( 'button', {
+				name: 'Choose who needs two-step login',
+			} )
+		);
+		expect( onFinish ).toHaveBeenCalledWith(
+			{ support_access: false, passwordless: false, two_step: true },
+			'login'
+		);
+	} );
+
+	it( 'still offers the tab when there is no profile link', async () => {
+		const user = userEvent.setup();
+		render( <Setup /> );
+		await finishWith( user, { two_step: true } );
+
+		expect( doneButtons() ).toEqual( [
+			[ 'Choose who needs two-step login', 'primary' ],
+		] );
 	} );
 
 	it( 'hides two-step login when the main site decides it, and never sends it', async () => {

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from '@wordpress/element';
 import { Button, CheckboxControl, Notice } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { runSetup } from '../api';
+import ConsentTerms, { consentHeading, consentLabel } from './ConsentTerms';
 
 const noop = () => {};
 
@@ -145,6 +146,14 @@ export default function Setup( {
 			href: twoStepSetupUrl,
 		} );
 	}
+	// Without Passwordless login nothing else opens the tab where two-step roles are set.
+	if ( twoStepOn && ! passwordlessOn ) {
+		actions.push( {
+			key: 'two-step-roles',
+			label: __( 'Choose who needs two-step login', 'happyaccess' ),
+			onClick: () => onFinish( features, 'login' ),
+		} );
+	}
 
 	const errorNotice = error && (
 		<Notice status="error" isDismissible={ false }>
@@ -231,10 +240,7 @@ export default function Setup( {
 				{ 'consent' === step && (
 					<>
 						<h3 ref={ headingRef } tabIndex={ -1 }>
-							{ __(
-								'Before you give anyone access',
-								'happyaccess'
-							) }
+							{ consentHeading() }
 						</h3>
 						<p className="ha-setup__lead">
 							{ __(
@@ -242,32 +248,10 @@ export default function Setup( {
 								'happyaccess'
 							) }
 						</p>
-						<ul className="ha-setup__terms">
-							<li>
-								{ __(
-									"Temporary access lets someone outside your team into your site's admin, for as long as you choose.",
-									'happyaccess'
-								) }
-							</li>
-							<li>
-								{ __(
-									'Protected admin blocks the riskiest actions and logs what they do, but it is not a sandbox. Only give access to people you trust.',
-									'happyaccess'
-								) }
-							</li>
-							<li>
-								{ __(
-									'Their login, IP address and actions are recorded here so you can review them. You are responsible for telling your visitors if your privacy policy needs it.',
-									'happyaccess'
-								) }
-							</li>
-						</ul>
+						<ConsentTerms />
 						<div className="ha-setup__choice">
 							<CheckboxControl
-								label={ __(
-									"I understand, and I'll only give access to people I trust.",
-									'happyaccess'
-								) }
+								label={ consentLabel() }
 								checked={ agreed }
 								onChange={ setAgreed }
 								__nextHasNoMarginBottom
@@ -304,7 +288,7 @@ export default function Setup( {
 										'happyaccess'
 									)
 								: __(
-										"Your login options are on. Here's where to set them up.",
+										'Your login options are on. Set each one up below.',
 										'happyaccess'
 									) }
 						</p>
