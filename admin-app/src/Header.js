@@ -34,7 +34,7 @@ export default function Header( { onLocked } ) {
 				</h1>
 				<p className="ha-subtitle">
 					{ __(
-						'Safe support logins, passwordless login and two-step login, in one place.',
+						'Temporary access, passwordless login and two-step login, in one place.',
 						'happyaccess'
 					) }
 				</p>

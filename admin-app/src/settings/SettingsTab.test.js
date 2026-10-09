@@ -155,8 +155,18 @@ describe( 'Settings tab', () => {
 			screen.getByLabelText( 'Default pass length' )
 		).toHaveDisplayValue( '3 days' );
 		expect(
-			screen.getByRole( 'switch', { name: 'Support access' } )
+			screen.getByRole( 'switch', { name: 'Temporary access' } )
 		).toBeChecked();
+		expect(
+			screen.getByRole( 'switch', { name: 'Temporary access' } )
+		).toHaveAccessibleDescription(
+			'Give a support person, developer or agency a login link or code that ends by itself. No shared passwords, no accounts left behind.'
+		);
+		expect(
+			screen.getByText(
+				'Adds a Google reCAPTCHA check to the access code screen.'
+			)
+		).toBeInTheDocument();
 		expect(
 			screen.getByText(
 				'Pick Cloudflare only if your site is behind Cloudflare. Your server must accept traffic only from Cloudflare.'
@@ -353,7 +363,7 @@ describe( 'Settings tab', () => {
 		expect( saveButton() ).not.toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
-	describe( 'Support access', () => {
+	describe( 'Temporary access', () => {
 		it( 'asks first, then saves only that key and announces how many passes ended', async () => {
 			mockServer( settingsFixture(), { revoked: 2 } );
 			const onFeaturesChange = vi.fn();
@@ -366,11 +376,11 @@ describe( 'Settings tab', () => {
 			);
 
 			await user.click(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			);
 
 			const group = screen.getByRole( 'group', {
-				name: 'Turn off support access? Every current pass ends now.',
+				name: 'Turn off temporary access? Every current pass ends now.',
 			} );
 			expect( posts ).toHaveLength( 0 );
 			expect(
@@ -383,7 +393,7 @@ describe( 'Settings tab', () => {
 
 			await waitFor( () =>
 				expect( liveText() ).toBe(
-					'Support access turned off. 2 passes ended.'
+					'Temporary access turned off. 2 passes ended.'
 				)
 			);
 			expect( posts ).toEqual( [
@@ -393,14 +403,14 @@ describe( 'Settings tab', () => {
 				expect.objectContaining( { support_access: false } )
 			);
 			expect(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			).not.toBeChecked();
 			expect(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			).toHaveFocus();
 			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
 			expect(
-				screen.queryByText( 'Have a support access code?' )
+				screen.queryByText( 'Log in with an access code' )
 			).not.toBeInTheDocument();
 			expect( screen.getByText( 'Unsaved changes' ) ).toBeInTheDocument();
 		} );
@@ -411,7 +421,7 @@ describe( 'Settings tab', () => {
 			await renderTab();
 
 			await user.click(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			);
 			await user.click(
 				screen.getByRole( 'button', { name: 'Turn off' } )
@@ -419,7 +429,7 @@ describe( 'Settings tab', () => {
 
 			await waitFor( () =>
 				expect( liveText() ).toBe(
-					'Support access turned off. 1 pass ended.'
+					'Temporary access turned off. 1 pass ended.'
 				)
 			);
 		} );
@@ -429,7 +439,7 @@ describe( 'Settings tab', () => {
 			await renderTab();
 
 			await user.click(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			);
 			await user.click(
 				screen.getByRole( 'button', { name: 'Keep access' } )
@@ -437,7 +447,7 @@ describe( 'Settings tab', () => {
 
 			expect( posts ).toHaveLength( 0 );
 			expect(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			).toBeChecked();
 			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
 		} );
@@ -451,11 +461,11 @@ describe( 'Settings tab', () => {
 			const user = userEvent.setup();
 			await renderTab();
 			expect(
-				screen.queryByText( 'Have a support access code?' )
+				screen.queryByText( 'Log in with an access code' )
 			).not.toBeInTheDocument();
 
 			await user.click(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			);
 
 			await waitFor( () => expect( posts ).toHaveLength( 1 ) );
@@ -463,9 +473,9 @@ describe( 'Settings tab', () => {
 				features: { support_access: true },
 			} );
 			expect(
-				screen.getByText( 'Have a support access code?' )
+				screen.getByText( 'Log in with an access code' )
 			).toBeInTheDocument();
-			expect( liveText() ).toBe( 'Support access turned on' );
+			expect( liveText() ).toBe( 'Temporary access turned on' );
 		} );
 
 		it( 'shows an inline error and leaves the switch on when the save fails', async () => {
@@ -478,7 +488,7 @@ describe( 'Settings tab', () => {
 			} );
 
 			await user.click(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			);
 			await user.click(
 				screen.getByRole( 'button', { name: 'Turn off' } )
@@ -488,7 +498,7 @@ describe( 'Settings tab', () => {
 				await within( page() ).findByText( 'Could not turn it off.' )
 			).toBeInTheDocument();
 			expect(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			).toBeChecked();
 		} );
 	} );
@@ -567,11 +577,11 @@ describe( 'Settings tab', () => {
 			await renderTab();
 
 			await user.click(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			);
 			expect(
 				screen.getByRole( 'group', {
-					name: 'Turn off support access? Every current pass ends now.',
+					name: 'Turn off temporary access? Every current pass ends now.',
 				} )
 			).toBeInTheDocument();
 
@@ -585,7 +595,7 @@ describe( 'Settings tab', () => {
 			} );
 			expect( screen.queryByRole( 'group' ) ).not.toBeInTheDocument();
 			expect(
-				screen.getByRole( 'switch', { name: 'Support access' } )
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
 			).toBeChecked();
 		} );
 
@@ -629,7 +639,7 @@ describe( 'Settings tab', () => {
 				.map( ( toggle ) => toggle.getAttribute( 'aria-labelledby' ) )
 				.map( ( id ) => document.getElementById( id ).textContent );
 			expect( names.slice( 0, 3 ) ).toEqual( [
-				'Support access',
+				'Temporary access',
 				'Passwordless login',
 				'Two-step login',
 			] );
@@ -905,7 +915,7 @@ describe( 'Settings tab', () => {
 		} );
 
 		expect(
-			within( preview ).getByText( 'Have a support access code?' )
+			within( preview ).getByText( 'Log in with an access code' )
 		).toBeInTheDocument();
 	} );
 

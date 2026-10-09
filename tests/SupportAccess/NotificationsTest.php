@@ -88,6 +88,23 @@ class NotificationsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Activated plugin: Query Monitor', $last['body'] );
 	}
 
+	public function test_the_emails_say_temporary_access() {
+		$made  = Grants::create( array( 'label' => 'Acme' ) );
+		$grant = Grants::get( $made['id'] );
+		Notifications::login( $grant, true );
+		Notifications::register();
+		Grants::revoke( $made['id'] );
+
+		$sent = $this->sent();
+		$this->assertStringContainsString( 'Temporary access used: Acme', $sent[0]['subject'] );
+		$this->assertStringContainsString( 'Temporary access was used', $sent[0]['body'] );
+		$this->assertStringContainsString( 'with the temporary access', $sent[0]['body'] );
+		$last = end( $sent );
+		$this->assertStringContainsString( 'Temporary access ended: Acme', $last['subject'] );
+		$this->assertStringContainsString( 'Temporary access ended', $last['body'] );
+		$this->assertStringContainsString( 'The temporary access', $last['body'] );
+	}
+
 	public function test_site_lock_alert_is_sent_once() {
 		Notifications::site_lock( 3600 );
 		Notifications::site_lock( 3600 );

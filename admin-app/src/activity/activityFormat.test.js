@@ -95,7 +95,7 @@ describe( 'featureTag', () => {
 		).toBe( 'Admin' );
 		expect(
 			featureTag( item( { feature: 'support', kind: 'agent' } ) ).label
-		).toBe( 'Support access' );
+		).toBe( 'Temporary access' );
 		expect(
 			featureTag( item( { feature: 'core', kind: 'core' } ) ).label
 		).toBe( 'HappyAccess' );

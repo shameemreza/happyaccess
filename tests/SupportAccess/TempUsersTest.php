@@ -48,7 +48,7 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertStringStartsWith( 'happyaccess_', $user->user_login );
 		$this->assertStringEndsWith( '@happyaccess.invalid', $user->user_email );
 		$this->assertSame( array( 'editor' ), $user->roles );
-		$this->assertSame( 'Support access: Acme support', $user->display_name );
+		$this->assertSame( 'Temporary access: Acme support', $user->display_name );
 		$this->assertSame( '1', get_user_meta( $user_id, 'happyaccess_temp_user', true ) );
 		$this->assertSame( '7', get_user_meta( $user_id, 'happyaccess_token_id', true ) );
 		$this->assertSame( (string) get_current_blog_id(), get_user_meta( $user_id, 'happyaccess_blog_id', true ) );

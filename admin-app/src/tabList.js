@@ -12,7 +12,7 @@ export function getTabs() {
 	return [
 		{
 			slug: 'support',
-			label: __( 'Support access', 'happyaccess' ),
+			label: __( 'Temporary access', 'happyaccess' ),
 			visible: ( { features } ) => !! features.support_access,
 		},
 		{
@@ -22,7 +22,7 @@ export function getTabs() {
 		},
 		{
 			slug: 'login',
-			label: __( 'Login', 'happyaccess' ),
+			label: __( 'Login and security', 'happyaccess' ),
 			// Hidden until passwordless or two-step login exists.
 			visible: ( { features, loginReady } ) =>
 				loginReady &&

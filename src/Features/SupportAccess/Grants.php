@@ -231,7 +231,7 @@ final class Grants {
 				'feature'  => 'support',
 				'token_id' => $id,
 				/* translators: %s: label of the support grant. */
-				'summary'  => sprintf( __( 'Support access granted to %s', 'happyaccess' ), $label ),
+				'summary'  => sprintf( __( 'Temporary access granted to %s', 'happyaccess' ), $label ),
 				'meta'     => $log_meta,
 			)
 		);
@@ -487,7 +487,7 @@ final class Grants {
 				'feature'  => 'support',
 				'token_id' => $grant['id'],
 				/* translators: %s: label of the support grant. */
-				'summary'  => sprintf( __( 'Support access extended for %s', 'happyaccess' ), $grant['label'] ),
+				'summary'  => sprintf( __( 'Temporary access extended for %s', 'happyaccess' ), $grant['label'] ),
 				'meta'     => array( 'expires_at' => $expires ),
 			)
 		);
@@ -514,7 +514,7 @@ final class Grants {
 		if ( null !== $grant ) {
 			TempUsers::destroy_sessions( $grant['user_id'] );
 			/* translators: %s: label of the support grant. */
-			self::log( 'grant_suspended', $grant, sprintf( __( 'Support access suspended for %s', 'happyaccess' ), $grant['label'] ) );
+			self::log( 'grant_suspended', $grant, sprintf( __( 'Temporary access suspended for %s', 'happyaccess' ), $grant['label'] ) );
 		}
 		return true;
 	}
@@ -538,7 +538,7 @@ final class Grants {
 		$grant = self::get( $id );
 		if ( null !== $grant ) {
 			/* translators: %s: label of the support grant. */
-			self::log( 'grant_resumed', $grant, sprintf( __( 'Support access resumed for %s', 'happyaccess' ), $grant['label'] ) );
+			self::log( 'grant_resumed', $grant, sprintf( __( 'Temporary access resumed for %s', 'happyaccess' ), $grant['label'] ) );
 		}
 		return true;
 	}
@@ -571,7 +571,7 @@ final class Grants {
 		TempUsers::destroy_sessions( $grant['user_id'] );
 
 		/* translators: %s: label of the support grant. */
-		self::log( 'grant_regenerated', $grant, sprintf( __( 'Support access code and link replaced for %s', 'happyaccess' ), $grant['label'] ) );
+		self::log( 'grant_regenerated', $grant, sprintf( __( 'Temporary access code and link replaced for %s', 'happyaccess' ), $grant['label'] ) );
 		return array(
 			'code'     => $code,
 			'link_key' => $link_key,
@@ -657,7 +657,7 @@ final class Grants {
 				'feature'  => 'support',
 				'token_id' => $ended['id'],
 				/* translators: %s: label of the support grant. */
-				'summary'  => sprintf( __( 'Support access ended for %s', 'happyaccess' ), $ended['label'] ),
+				'summary'  => sprintf( __( 'Temporary access ended for %s', 'happyaccess' ), $ended['label'] ),
 				'meta'     => array( 'reason' => $reason ),
 			)
 		);

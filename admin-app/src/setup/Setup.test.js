@@ -44,7 +44,7 @@ describe( 'First-run setup', () => {
 			} )
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole( 'checkbox', { name: 'Support access' } )
+			screen.getByRole( 'checkbox', { name: 'Temporary access' } )
 		).toBeChecked();
 		expect( screen.getAllByRole( 'checkbox' ) ).toHaveLength( 1 );
 		expect(
@@ -68,7 +68,7 @@ describe( 'First-run setup', () => {
 		render( <Setup /> );
 
 		await user.click(
-			screen.getByRole( 'checkbox', { name: 'Support access' } )
+			screen.getByRole( 'checkbox', { name: 'Temporary access' } )
 		);
 
 		expect(
@@ -123,7 +123,7 @@ describe( 'First-run setup', () => {
 			screen.getByRole( 'heading', { name: 'What do you want to use?' } )
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole( 'checkbox', { name: 'Support access' } )
+			screen.getByRole( 'checkbox', { name: 'Temporary access' } )
 		).toBeChecked();
 	} );
 

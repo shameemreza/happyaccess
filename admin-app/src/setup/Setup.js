@@ -115,7 +115,10 @@ export default function Setup( { onFinish = noop } ) {
 							}
 						>
 							<CheckboxControl
-								label={ __( 'Support access', 'happyaccess' ) }
+								label={ __(
+									'Temporary access',
+									'happyaccess'
+								) }
 								help={ __(
 									'Login links and codes for support people, that end by themselves.',
 									'happyaccess'

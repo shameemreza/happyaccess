@@ -37,16 +37,16 @@ if ( 'role' === $variant ) {
 <?php
 if ( 'role' === $variant && 'default_role' === $change ) {
 	/* translators: 1: grant label, 2: site name. */
-	printf( esc_html__( 'The support access "%1$s" made new accounts on %2$s get a role with admin-level permissions.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
+	printf( esc_html__( 'The temporary access "%1$s" made new accounts on %2$s get a role with admin-level permissions.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
 } elseif ( 'role' === $variant ) {
 	/* translators: 1: grant label, 2: site name. */
-	printf( esc_html__( 'The support access "%1$s" gave a role on %2$s admin-level permissions. Everyone with that role now has them.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
+	printf( esc_html__( 'The temporary access "%1$s" gave a role on %2$s admin-level permissions. Everyone with that role now has them.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
 } elseif ( 'changed' === $variant ) {
 	/* translators: 1: grant label, 2: site name. */
-	printf( esc_html__( 'The support access "%1$s" changed the login details of an administrator account on %2$s.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
+	printf( esc_html__( 'The temporary access "%1$s" changed the login details of an administrator account on %2$s.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
 } else {
 	/* translators: 1: grant label, 2: site name. */
-	printf( esc_html__( 'The support access "%1$s" made an administrator account on %2$s.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
+	printf( esc_html__( 'The temporary access "%1$s" made an administrator account on %2$s.', 'happyaccess' ), esc_html( $label ), esc_html( $site_name ) );
 }
 ?>
 </p>
@@ -85,4 +85,4 @@ if ( 'role' === $variant && 'default_role' === $change ) {
 <?php if ( ! empty( $more ) ) : ?>
 <p style="margin:0 0 16px;"><?php esc_html_e( 'More changes like this may follow. See the activity log for the full list.', 'happyaccess' ); ?> <a href="<?php echo esc_url( $log_url ); ?>"><?php esc_html_e( 'Open the activity log', 'happyaccess' ); ?></a></p>
 <?php endif; ?>
-<p style="margin:0;color:#646970;"><?php esc_html_e( 'Full and custom support access can do this by design. If you did not expect it, revoke the access from the HappyAccess screen.', 'happyaccess' ); ?></p>
+<p style="margin:0;color:#646970;"><?php esc_html_e( 'Full and custom temporary access can do this by design. If you did not expect it, revoke the access from the HappyAccess screen.', 'happyaccess' ); ?></p>

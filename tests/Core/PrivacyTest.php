@@ -205,7 +205,7 @@ class PrivacyTest extends WP_UnitTestCase {
 		$this->assertNotContains( 'Some log summaries may still contain the grant label.', $full['messages'] );
 		$this->assertContains( 'Some log summaries may still contain the grant label.', $result['messages'] );
 
-		$this->assertSame( 'Support access granted to [removed]', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ) ) );
+		$this->assertSame( 'Temporary access granted to [removed]', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $created['id'], 'grant_created' ) ) );
 		$this->assertSame( 'Saved settings: 3 options', $wpdb->get_var( $wpdb->prepare( "SELECT summary FROM {$logs} WHERE token_id = %d AND event_type = %s", $short['id'], 'note' ) ) );
 	}
 

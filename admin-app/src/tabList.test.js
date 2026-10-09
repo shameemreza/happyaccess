@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { getVisibleTabs, resolveCurrentTab } from './tabList';
+import { getTabs, getVisibleTabs, resolveCurrentTab } from './tabList';
 
 const ON = { features: { support_access: true, passwordless: true } };
 const OFF = { features: { support_access: true, passwordless: false } };
+
+describe( 'getTabs', () => {
+	it( 'names the tabs Temporary access and Login and security, with the slugs unchanged', () => {
+		expect(
+			getTabs().map( ( { slug, label } ) => [ slug, label ] )
+		).toEqual( [
+			[ 'support', 'Temporary access' ],
+			[ 'activity', 'Activity' ],
+			[ 'login', 'Login and security' ],
+			[ 'settings', 'Settings' ],
+		] );
+	} );
+} );
 
 describe( 'resolveCurrentTab', () => {
 	it( 'keeps the current tab while it is shown', () => {

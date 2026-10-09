@@ -28,7 +28,7 @@ describe( 'ActivityRow', () => {
 			'Saved WooCommerce shipping settings'
 		);
 		expect( button ).toHaveTextContent( 'Acme Plugin Support' );
-		expect( button ).toHaveTextContent( 'Support access' );
+		expect( button ).toHaveTextContent( 'Temporary access' );
 	} );
 
 	it( 'falls back to the event label when the summary is empty', () => {

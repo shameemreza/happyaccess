@@ -78,10 +78,10 @@ final class AdminBar {
 
 		wp_enqueue_script( 'happyaccess-admin-bar', plugins_url( 'assets/admin-bar.js', HAPPYACCESS_PLUGIN_FILE ), array(), HAPPYACCESS_VERSION, true );
 		$strings = array(
-			'confirm' => __( 'Lock all support access now? This ends every support session and signs support out.', 'happyaccess' ),
+			'confirm' => __( 'Lock all temporary access now? This ends every support session and signs support out.', 'happyaccess' ),
 			/* translators: %s: time left, for example "2 hours". */
-			'ends'    => __( 'Support access ends in %s', 'happyaccess' ),
-			'ended'   => __( 'Support access has ended', 'happyaccess' ),
+			'ends'    => __( 'Temporary access ends in %s', 'happyaccess' ),
+			'ended'   => __( 'Temporary access has ended', 'happyaccess' ),
 			'less'    => __( 'less than a minute', 'happyaccess' ),
 			'min'     => array(
 				/* translators: %d: number of minutes, singular. */
@@ -241,8 +241,8 @@ final class AdminBar {
 
 		$text = $expires > $now
 			/* translators: %s: time left, for example "2 hours". */
-			? sprintf( __( 'Support access ends in %s', 'happyaccess' ), self::time_left( $expires - $now ) )
-			: __( 'Support access has ended', 'happyaccess' );
+			? sprintf( __( 'Temporary access ends in %s', 'happyaccess' ), self::time_left( $expires - $now ) )
+			: __( 'Temporary access has ended', 'happyaccess' );
 
 		$bar->add_node(
 			array(

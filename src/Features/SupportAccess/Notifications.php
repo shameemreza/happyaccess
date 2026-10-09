@@ -82,7 +82,7 @@ final class Notifications {
 		Mailer::send(
 			$to,
 			/* translators: %s: label of the support grant. */
-			sprintf( __( 'Support access used: %s', 'happyaccess' ), $grant['label'] ),
+			sprintf( __( 'Temporary access used: %s', 'happyaccess' ), $grant['label'] ),
 			'login-alert',
 			array(
 				'label'  => $grant['label'],
@@ -128,7 +128,7 @@ final class Notifications {
 		Mailer::send(
 			$to,
 			/* translators: %s: label of the support grant. */
-			sprintf( __( 'Support access ended: %s', 'happyaccess' ), $grant['label'] ),
+			sprintf( __( 'Temporary access ended: %s', 'happyaccess' ), $grant['label'] ),
 			'access-ended',
 			array(
 				'label'       => $grant['label'],

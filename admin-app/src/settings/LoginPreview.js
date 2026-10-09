@@ -74,7 +74,7 @@ export default function LoginPreview( { supportAccess } ) {
 					d="M15 10 L 6 16 L 15 21"
 				/>
 			</svg>
-			<strong>{ __( 'Support access', 'happyaccess' ) }</strong>
+			<strong>{ __( 'Temporary access', 'happyaccess' ) }</strong>
 		</div>
 	);
 
@@ -138,7 +138,7 @@ export default function LoginPreview( { supportAccess } ) {
 								onKeyDown={ onKeyDown }
 							>
 								{ __(
-									'Have a support access code?',
+									'Log in with an access code',
 									'happyaccess'
 								) }
 							</button>

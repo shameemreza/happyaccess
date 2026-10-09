@@ -321,7 +321,7 @@ export default function ResultCard( {
 									),
 									host,
 									__(
-										'Have a support access code?',
+										'Log in with an access code',
 										'happyaccess'
 									)
 								) }

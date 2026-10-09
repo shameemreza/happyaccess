@@ -13,7 +13,7 @@ use HappyAccess\Login\Router;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Manages temporary support access from the command line.
+ * Manages temporary access from the command line.
  */
 final class Cli {
 
@@ -311,7 +311,7 @@ final class Cli {
 		}
 
 		if ( $all ) {
-			\WP_CLI::confirm( __( 'End all active support access?', 'happyaccess' ), $assoc_args );
+			\WP_CLI::confirm( __( 'End all active temporary access?', 'happyaccess' ), $assoc_args );
 			$count = Grants::revoke_all( 'revoked_cli' );
 			/* translators: %d: number of grants ended. */
 			\WP_CLI::success( sprintf( _n( 'Ended %d grant.', 'Ended %d grants.', $count, 'happyaccess' ), $count ) );

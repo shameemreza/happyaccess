@@ -78,6 +78,11 @@ describe( 'App shell', () => {
 			screen.getByRole( 'link', { name: 'Help and docs' } )
 		).toBeInTheDocument();
 		expect(
+			screen.getByText(
+				'Temporary access, passwordless login and two-step login, in one place.'
+			)
+		).toBeInTheDocument();
+		expect(
 			screen.getByRole( 'button', { name: 'Emergency lock' } )
 		).toBeInTheDocument();
 	} );
@@ -93,9 +98,9 @@ describe( 'App shell', () => {
 		);
 
 		expect( tabNames() ).toEqual( [
-			'Support access',
+			'Temporary access',
 			'Activity',
-			'Login',
+			'Login and security',
 			'Settings',
 		] );
 	} );
@@ -109,7 +114,7 @@ describe( 'App shell', () => {
 			/>
 		);
 		expect( tabNames() ).toEqual( [
-			'Support access',
+			'Temporary access',
 			'Activity',
 			'Settings',
 		] );
@@ -117,7 +122,7 @@ describe( 'App shell', () => {
 
 		render( <App boot={ boot() } loginReady /> );
 		expect( tabNames() ).toEqual( [
-			'Support access',
+			'Temporary access',
 			'Activity',
 			'Settings',
 		] );
@@ -133,7 +138,7 @@ describe( 'App shell', () => {
 			/>
 		);
 
-		expect( tabNames() ).toContain( 'Login' );
+		expect( tabNames() ).toContain( 'Login and security' );
 	} );
 
 	it( 'hides Login when both login features are off, and shows the Login tab when Passwordless is on', async () => {
@@ -149,7 +154,7 @@ describe( 'App shell', () => {
 				} ) }
 			/>
 		);
-		expect( tabNames() ).not.toContain( 'Login' );
+		expect( tabNames() ).not.toContain( 'Login and security' );
 		unmount();
 
 		const user = userEvent.setup();
@@ -169,7 +174,9 @@ describe( 'App shell', () => {
 				} ) }
 			/>
 		);
-		await user.click( screen.getByRole( 'link', { name: 'Login' } ) );
+		await user.click(
+			screen.getByRole( 'link', { name: 'Login and security' } )
+		);
 
 		expect(
 			await screen.findByRole( 'heading', { name: 'Passwordless login' } )
@@ -182,17 +189,19 @@ describe( 'App shell', () => {
 		const user = userEvent.setup();
 		render( <App boot={ boot( { loginReady: true } ) } /> );
 		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
-		expect( tabNames() ).not.toContain( 'Login' );
+		expect( tabNames() ).not.toContain( 'Login and security' );
 
 		await user.click(
 			screen.getByRole( 'switch', { name: 'Passwordless login' } )
 		);
 
-		await waitFor( () => expect( tabNames() ).toContain( 'Login' ) );
+		await waitFor( () =>
+			expect( tabNames() ).toContain( 'Login and security' )
+		);
 		expect( tabNames() ).toEqual( [
-			'Support access',
+			'Temporary access',
 			'Activity',
-			'Login',
+			'Login and security',
 			'Settings',
 		] );
 		expect(
@@ -203,7 +212,9 @@ describe( 'App shell', () => {
 			screen.getByRole( 'switch', { name: 'Passwordless login' } )
 		);
 
-		await waitFor( () => expect( tabNames() ).not.toContain( 'Login' ) );
+		await waitFor( () =>
+			expect( tabNames() ).not.toContain( 'Login and security' )
+		);
 		expect(
 			screen.getByRole( 'heading', { name: 'Safety and privacy' } )
 		).toBeInTheDocument();
@@ -224,7 +235,7 @@ describe( 'App shell', () => {
 		const user = userEvent.setup();
 		render( <App boot={ boot() } /> );
 		expect(
-			screen.getByRole( 'link', { name: 'Support access' } )
+			screen.getByRole( 'link', { name: 'Temporary access' } )
 		).toHaveAttribute( 'aria-current', 'page' );
 
 		await user.click( screen.getByRole( 'link', { name: 'Activity' } ) );
@@ -233,7 +244,7 @@ describe( 'App shell', () => {
 			screen.getByRole( 'link', { name: 'Activity' } )
 		).toHaveAttribute( 'aria-current', 'page' );
 		expect(
-			screen.getByRole( 'link', { name: 'Support access' } )
+			screen.getByRole( 'link', { name: 'Temporary access' } )
 		).not.toHaveAttribute( 'aria-current' );
 		expect(
 			new URLSearchParams( window.location.search ).get( 'tab' )
@@ -277,7 +288,7 @@ describe( 'App shell', () => {
 		render( <App boot={ boot() } /> );
 
 		expect(
-			screen.getByRole( 'link', { name: 'Support access' } )
+			screen.getByRole( 'link', { name: 'Temporary access' } )
 		).toHaveAttribute( 'aria-current', 'page' );
 	} );
 
@@ -438,16 +449,16 @@ describe( 'App shell', () => {
 		);
 
 		expect( tabNames() ).toEqual( [
-			'Support access',
+			'Temporary access',
 			'Activity',
 			'Settings',
 		] );
 		expect(
-			screen.getByRole( 'link', { name: 'Support access' } )
+			screen.getByRole( 'link', { name: 'Temporary access' } )
 		).toHaveAttribute( 'aria-current', 'page' );
 		expect(
 			await screen.findByRole( 'heading', {
-				name: 'Give support access',
+				name: 'Give temporary access',
 			} )
 		).toBeInTheDocument();
 		expect(
@@ -463,7 +474,7 @@ describe( 'App shell', () => {
 		// Leaving the tab and coming back does not pull focus into the form again.
 		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
 		await user.click(
-			screen.getByRole( 'link', { name: 'Support access' } )
+			screen.getByRole( 'link', { name: 'Temporary access' } )
 		);
 		expect(
 			screen.getByRole( 'textbox', { name: 'Who is it for' } )
@@ -480,7 +491,7 @@ describe( 'App shell', () => {
 			/>
 		);
 		await user.click(
-			await screen.findByRole( 'switch', { name: 'Support access' } )
+			await screen.findByRole( 'switch', { name: 'Temporary access' } )
 		);
 		await user.click( screen.getByRole( 'button', { name: 'Turn off' } ) );
 
@@ -492,7 +503,7 @@ describe( 'App shell', () => {
 			screen.getByRole( 'link', { name: 'Settings' } )
 		).toHaveAttribute( 'aria-current', 'page' );
 		expect(
-			screen.queryByText( 'Have a support access code?' )
+			screen.queryByText( 'Log in with an access code' )
 		).not.toBeInTheDocument();
 		delete window.happyaccessBoot;
 	} );
@@ -503,7 +514,7 @@ describe( 'App shell', () => {
 		const user = userEvent.setup();
 		render( <App boot={ boot() } /> );
 		await user.click(
-			await screen.findByRole( 'switch', { name: 'Support access' } )
+			await screen.findByRole( 'switch', { name: 'Temporary access' } )
 		);
 		await user.click( screen.getByRole( 'button', { name: 'Turn off' } ) );
 
@@ -585,14 +596,14 @@ describe( 'data kept between tabs', () => {
 
 		await goTo( user, 'Settings' );
 		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
-		await goTo( user, 'Support access' );
+		await goTo( user, 'Temporary access' );
 		await screen.findByText( 'Acme Plugin Support' );
 		await goTo( user, 'Activity' );
 		await screen.findByText( /^Showing 0 of 0 events/ );
-		await goTo( user, 'Support access' );
+		await goTo( user, 'Temporary access' );
 		await goTo( user, 'Settings' );
 		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
-		await goTo( user, 'Support access' );
+		await goTo( user, 'Temporary access' );
 		await screen.findByText( 'Acme Plugin Support' );
 
 		expect( gets( '/grants' ) ).toBe( 1 );
@@ -615,15 +626,15 @@ describe( 'data kept between tabs', () => {
 		await goTo( user, 'Settings' );
 		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
 
-		await goTo( user, 'Login' );
+		await goTo( user, 'Login and security' );
 
 		// Shown at once, with no loading line in between.
 		expect(
 			screen.getByRole( 'heading', { name: 'Passwordless login' } )
 		).toBeInTheDocument();
 		expect( screen.queryByText( 'Loading settings' ) ).toBeNull();
-		await goTo( user, 'Support access' );
-		await goTo( user, 'Login' );
+		await goTo( user, 'Temporary access' );
+		await goTo( user, 'Login and security' );
 		expect( gets( '/settings' ) ).toBe( 1 );
 	} );
 
@@ -634,9 +645,9 @@ describe( 'data kept between tabs', () => {
 
 		await goTo( user, 'Activity' );
 		await screen.findByText( /^Showing 0 of 0 events/ );
-		await goTo( user, 'Support access' );
+		await goTo( user, 'Temporary access' );
 		await goTo( user, 'Activity' );
-		await goTo( user, 'Support access' );
+		await goTo( user, 'Temporary access' );
 
 		const activityGets = apiFetch.mock.calls
 			.map( ( [ options ] ) => options.path )
@@ -682,7 +693,7 @@ describe( 'data kept between tabs', () => {
 		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
 
 		await goTo( user, 'Settings' );
-		await goTo( user, 'Support access' );
+		await goTo( user, 'Temporary access' );
 
 		expect( await screen.findAllByText( 'Vendor' ) ).not.toHaveLength( 0 );
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();

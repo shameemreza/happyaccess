@@ -184,7 +184,7 @@ final class MenuGuard {
 			)
 		);
 		wp_die(
-			esc_html__( "This page isn't part of your support access.", 'happyaccess' ),
+			esc_html__( "This page isn't part of your temporary access.", 'happyaccess' ),
 			'',
 			array(
 				'response'  => 403,

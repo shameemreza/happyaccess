@@ -287,7 +287,7 @@ describe( 'create and result card', () => {
 			SECRETS.link_url
 		);
 		expect(
-			screen.queryByRole( 'heading', { name: 'Give support access' } )
+			screen.queryByRole( 'heading', { name: 'Give temporary access' } )
 		).not.toBeInTheDocument();
 		// The new pass is in the list, without its secrets.
 		expect(
@@ -506,7 +506,7 @@ describe( 'pass actions', () => {
 
 		expect(
 			await screen.findByRole( 'heading', {
-				name: 'Give support access',
+				name: 'Give temporary access',
 			} )
 		).toBeInTheDocument();
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
@@ -600,7 +600,7 @@ describe( 'result card and the list', () => {
 
 		expect(
 			await screen.findByRole( 'heading', {
-				name: 'Give support access',
+				name: 'Give temporary access',
 			} )
 		).toBeInTheDocument();
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();
@@ -708,7 +708,7 @@ describe( 'refresh key', () => {
 
 		expect(
 			await screen.findByRole( 'heading', {
-				name: 'Give support access',
+				name: 'Give temporary access',
 			} )
 		).toBeInTheDocument();
 		expect( screen.queryByText( '4829 1375' ) ).not.toBeInTheDocument();

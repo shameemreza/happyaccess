@@ -95,7 +95,7 @@ class AdminBarTest extends WP_UnitTestCase {
 
 		wp_set_current_user( TempUsers::get_or_create( $grant ) );
 		$node = $this->bar()->get_node( 'happyaccess-timer' );
-		$this->assertStringContainsString( 'Support access ends in 2 days 23 hours', $node->title );
+		$this->assertStringContainsString( 'Temporary access ends in 2 days 23 hours', $node->title );
 	}
 
 	public function test_emergency_lock_counts_only_current_passes() {

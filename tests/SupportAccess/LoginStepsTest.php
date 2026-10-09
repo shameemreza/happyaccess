@@ -45,6 +45,15 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$this->assertSame( 'render', $res['type'] );
 		$this->assertStringContainsString( 'name="pwd"', $res['body'] );
 		$this->assertStringContainsString( 'one-time-code', $res['body'] );
+		$this->assertSame( 'Temporary access', $res['title'] );
+		$this->assertStringContainsString( '<label for="happyaccess-pwd">Access code</label>', $res['body'] );
+	}
+
+	public function test_the_link_under_the_login_form_says_log_in_with_an_access_code() {
+		ob_start();
+		LoginSteps::print_code_link();
+		$html = ob_get_clean();
+		$this->assertStringContainsString( '>Log in with an access code</a>', $html );
 	}
 
 	public function test_valid_code_logs_in_and_redirects() {
@@ -171,7 +180,7 @@ class LoginStepsTest extends WP_UnitTestCase {
 		update_option( 'happyaccess_db_version', '1.0.4' );
 		$res = $this->post_code( $made['code'] );
 		$this->assertSame( array( 'updating' ), $res['errors']->get_error_codes() );
-		$this->assertSame( 'Support access is getting ready. Try again in a minute.', $res['errors']->get_error_message() );
+		$this->assertSame( 'Temporary access is getting ready. Try again in a minute.', $res['errors']->get_error_message() );
 		$this->assertSame( 0, (int) Grants::get( $made['id'] )['login_count'] );
 	}
 
@@ -191,7 +200,7 @@ class LoginStepsTest extends WP_UnitTestCase {
 
 		foreach ( array( $get, $post ) as $res ) {
 			$this->assertSame( array( 'updating' ), $res['errors']->get_error_codes() );
-			$this->assertSame( 'Support access is getting ready. Try again in a minute.', $res['errors']->get_error_message() );
+			$this->assertSame( 'Temporary access is getting ready. Try again in a minute.', $res['errors']->get_error_message() );
 		}
 		$this->assertSame( 0, (int) Grants::get( $made['id'] )['login_count'] );
 	}
@@ -383,7 +392,7 @@ class LoginStepsTest extends WP_UnitTestCase {
 		$expired = LoginSteps::handle_ended( array( 'reason' => 'expired' ) );
 		$this->assertSame( 'render', $expired['type'] );
 		$default = LoginSteps::handle_ended( array() );
-		$this->assertStringContainsString( 'Your support access has ended.', $default['body'] );
+		$this->assertStringContainsString( 'Your temporary access has ended.', $default['body'] );
 		$this->assertNotSame( $expired['body'], $default['body'] );
 		$odd = LoginSteps::handle_ended( array( 'reason' => '<script>' ) );
 		$this->assertSame( $default['body'], $odd['body'] );

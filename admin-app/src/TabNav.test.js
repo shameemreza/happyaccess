@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import TabNav from './TabNav';
 
 const tabs = [
-	{ slug: 'support', label: 'Support access' },
+	{ slug: 'support', label: 'Temporary access' },
 	{ slug: 'settings', label: 'Settings' },
 ];
 

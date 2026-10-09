@@ -57,9 +57,9 @@ final class TempUsers {
 
 		$label = isset( $grant['label'] ) ? trim( (string) $grant['label'] ) : '';
 		$name  = '' === $label
-			? __( 'Support access', 'happyaccess' )
+			? __( 'Temporary access', 'happyaccess' )
 			/* translators: %s: label of the support grant. */
-			: sprintf( __( 'Support access: %s', 'happyaccess' ), $label );
+			: sprintf( __( 'Temporary access: %s', 'happyaccess' ), $label );
 
 		$custom = isset( $grant['level'] ) && 'custom' === $grant['level'];
 		$role   = $custom ? '' : sanitize_key( $grant['role'] );

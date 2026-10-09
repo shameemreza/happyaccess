@@ -152,20 +152,20 @@ final class Privacy {
 		$days = (int) Settings::get( 'privacy.retention_days', 30 );
 
 		$paragraphs = array(
-			__( 'HappyAccess gives support staff temporary access to this site. When someone uses a support access link or code, the site stores the IP address and browser user agent of that visit, the login times, and a list of the actions taken while the access was active. The list holds names and titles of what changed, never the values of settings or passwords.', 'happyaccess' ),
-			__( 'When an administrator creates support access for a person, the site also stores the label they entered, the IP allowlist, and, if they entered one, the email address of the recipient. The administrator\'s user account is recorded as the creator.', 'happyaccess' ),
+			__( 'HappyAccess gives support staff temporary access to this site. When someone uses a temporary access link or code, the site stores the IP address and browser user agent of that visit, the login times, and a list of the actions taken while the access was active. The list holds names and titles of what changed, never the values of settings or passwords.', 'happyaccess' ),
+			__( 'When an administrator creates temporary access for a person, the site also stores the label they entered, the IP allowlist, and, if they entered one, the email address of the recipient. The administrator\'s user account is recorded as the creator.', 'happyaccess' ),
 			sprintf(
 				/* translators: %d: number of days. */
 				_n(
-					'Log entries are deleted after %d day. Support access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day.',
-					'Log entries are deleted after %d days. Support access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day.',
+					'Log entries are deleted after %d day. Temporary access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day.',
+					'Log entries are deleted after %d days. Temporary access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day.',
 					$days,
 					'happyaccess'
 				),
 				$days
 			),
 			__( 'If reCAPTCHA is turned on for support logins, the visitor\'s IP address and browser details are sent to Google to check that the visit is from a person. Google handles that data under its own privacy policy.', 'happyaccess' ),
-			__( 'Site owners can export or erase this data from the Tools menu. Erasing an email address ends any active support access for it, removes the IP address and user agent from the related log entries, and clears the recipient email, label and allowlist from the support access records.', 'happyaccess' ),
+			__( 'Site owners can export or erase this data from the Tools menu. Erasing an email address ends any active temporary access for it, removes the IP address and user agent from the related log entries, and clears the recipient email, label and allowlist from the temporary access records.', 'happyaccess' ),
 			__( 'When a user sets up two-step login, the site stores their two-step login settings, the secret of their authenticator app, which is encrypted, and their backup codes, stored only as hashes that can\'t be turned back into codes.', 'happyaccess' ),
 			__( 'When new device alerts are on for a user\'s role, the site sets a cookie named happyaccess_dev at login. It holds a random id that tells the site it has seen this browser before, and it is kept for one year. For each user, the site keeps a list of up to 20 browsers: a hash of each id and the time it was last seen. A login from a browser that isn\'t on the list sends the user an email with the time, the browser name and the IP address.', 'happyaccess' ),
 			__( 'Exporting a user\'s data includes the two-step login methods they have on, how many backup codes are left and when each known browser was last seen, never the secret, the codes or the ids. Erasing it removes the list of known browsers. The two-step login settings are kept, because they protect the account.', 'happyaccess' ),
@@ -327,8 +327,8 @@ final class Privacy {
 
 			$items[] = array(
 				'group_id'          => 'happyaccess_grants',
-				'group_label'       => __( 'HappyAccess support access', 'happyaccess' ),
-				'group_description' => __( 'Support access records that name this user or email address.', 'happyaccess' ),
+				'group_label'       => __( 'HappyAccess temporary access', 'happyaccess' ),
+				'group_description' => __( 'Temporary access records that name this user or email address.', 'happyaccess' ),
 				'item_id'           => 'happyaccess-grant-' . (int) $row['id'],
 				'data'              => $data,
 			);

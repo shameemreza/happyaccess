@@ -36,8 +36,8 @@ final class LoginSteps {
 
 	/**
 	 * Registers the ended step always, so a logged-out former agent sees it while
-	 * the guards run. The code and link steps and the "Have a support access
-	 * code?" link are added only while Support access is on.
+	 * the guards run. The code and link steps and the "Log in with an access
+	 * code" link are added only while Support access is on.
 	 *
 	 * @return void
 	 */
@@ -66,7 +66,7 @@ final class LoginSteps {
 		printf(
 			'<p class="happyaccess-code-link"><a href="%s">%s</a></p>',
 			esc_url( Router::url( 'code' ) ),
-			esc_html__( 'Have a support access code?', 'happyaccess' )
+			esc_html__( 'Log in with an access code', 'happyaccess' )
 		);
 	}
 
@@ -217,22 +217,22 @@ final class LoginSteps {
 
 		switch ( $reason ) {
 			case 'expired':
-				$text = __( 'Your support access has expired.', 'happyaccess' );
+				$text = __( 'Your temporary access has expired.', 'happyaccess' );
 				break;
 			case 'revoked':
-				$text = __( 'Your support access was revoked by the site owner.', 'happyaccess' );
+				$text = __( 'Your temporary access was revoked by the site owner.', 'happyaccess' );
 				break;
 			case 'suspended':
-				$text = __( 'Your support access is paused by the site owner.', 'happyaccess' );
+				$text = __( 'Your temporary access is paused by the site owner.', 'happyaccess' );
 				break;
 			default:
-				$text = __( 'Your support access has ended.', 'happyaccess' );
+				$text = __( 'Your temporary access has ended.', 'happyaccess' );
 				break;
 		}
 
 		return array(
 			'type'    => 'render',
-			'title'   => __( 'Support access ended', 'happyaccess' ),
+			'title'   => __( 'Temporary access ended', 'happyaccess' ),
 			'body'    => '<p>' . esc_html( $text ) . '</p>',
 			'errors'  => null,
 			'message' => '',
@@ -275,7 +275,7 @@ final class LoginSteps {
 				'user_id'  => $user_id,
 				'summary'  => sprintf(
 					/* translators: %s: grant label. */
-					__( 'Support access used: %s', 'happyaccess' ),
+					__( 'Temporary access used: %s', 'happyaccess' ),
 					$grant['label']
 				),
 				'meta'     => array( 'method' => $method ),
@@ -314,7 +314,7 @@ final class LoginSteps {
 
 		return array(
 			'type'    => 'render',
-			'title'   => __( 'Support access', 'happyaccess' ),
+			'title'   => __( 'Temporary access', 'happyaccess' ),
 			'body'    => '',
 			'errors'  => new \WP_Error( 'setup_failed', esc_html__( "Couldn't set up your support account. Ask the site owner to send a new link or code.", 'happyaccess' ) ),
 			'message' => '',
@@ -446,7 +446,7 @@ final class LoginSteps {
 	 * @return string
 	 */
 	private static function updating_text() {
-		return esc_html__( 'Support access is getting ready. Try again in a minute.', 'happyaccess' );
+		return esc_html__( 'Temporary access is getting ready. Try again in a minute.', 'happyaccess' );
 	}
 
 	/**
@@ -457,7 +457,7 @@ final class LoginSteps {
 	 */
 	private static function code_screen( $errors = null ) {
 		$body  = '<form name="happyaccess-code" method="post" action="' . esc_url( Router::url( 'code' ) ) . '">';
-		$body .= '<p><label for="happyaccess-pwd">' . esc_html__( 'Support access code', 'happyaccess' ) . '</label>';
+		$body .= '<p><label for="happyaccess-pwd">' . esc_html__( 'Access code', 'happyaccess' ) . '</label>';
 		$body .= '<input type="text" name="pwd" id="happyaccess-pwd" class="input" value="" size="20" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" /></p>';
 		$body .= wp_nonce_field( 'happyaccess_code', '_wpnonce', false, false );
 		$body .= '<p class="submit"><input type="submit" class="button button-primary button-large" value="' . esc_attr__( 'Log in', 'happyaccess' ) . '" /></p>';
@@ -465,7 +465,7 @@ final class LoginSteps {
 
 		return array(
 			'type'    => 'render',
-			'title'   => __( 'Support access', 'happyaccess' ),
+			'title'   => __( 'Temporary access', 'happyaccess' ),
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => '',
@@ -497,7 +497,7 @@ final class LoginSteps {
 
 		return array(
 			'type'    => 'render',
-			'title'   => __( 'Support access', 'happyaccess' ),
+			'title'   => __( 'Temporary access', 'happyaccess' ),
 			'body'    => $body,
 			'errors'  => $errors,
 			'message' => '',
@@ -516,7 +516,7 @@ final class LoginSteps {
 		}
 		return array(
 			'type'    => 'render',
-			'title'   => __( 'Support access', 'happyaccess' ),
+			'title'   => __( 'Temporary access', 'happyaccess' ),
 			'body'    => '',
 			'errors'  => $errors,
 			'message' => '',

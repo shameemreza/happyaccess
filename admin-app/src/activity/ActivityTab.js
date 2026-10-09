@@ -177,7 +177,7 @@ export default function ActivityTab( {
 
 	const chips = [
 		[ '', __( 'All', 'happyaccess' ) ],
-		[ 'support', __( 'Support access', 'happyaccess' ) ],
+		[ 'support', __( 'Temporary access', 'happyaccess' ) ],
 	];
 	if ( loginReady && boot.features?.passwordless ) {
 		chips.push( [ 'passwordless', __( 'Passwordless', 'happyaccess' ) ] );

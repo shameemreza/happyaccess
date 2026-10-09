@@ -158,7 +158,7 @@ export function featureTag( item ) {
 		case 'support':
 			return {
 				key: 'support',
-				label: __( 'Support access', 'happyaccess' ),
+				label: __( 'Temporary access', 'happyaccess' ),
 			};
 		case 'passwordless':
 			return {

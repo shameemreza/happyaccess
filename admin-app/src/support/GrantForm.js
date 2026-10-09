@@ -400,7 +400,7 @@ export default function GrantForm( {
 		<section className="ha-grant" aria-labelledby="ha-grant-title">
 			<div className="ha-grant__head">
 				<h2 id="ha-grant-title">
-					{ __( 'Give support access', 'happyaccess' ) }
+					{ __( 'Give temporary access', 'happyaccess' ) }
 				</h2>
 				<p>
 					{ __(

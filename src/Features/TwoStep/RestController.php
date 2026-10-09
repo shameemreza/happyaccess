@@ -124,7 +124,7 @@ final class RestController {
 			return new \WP_Error( 'happyaccess_app_password', __( "An application password can't change two-step login.", 'happyaccess' ), array( 'status' => 403 ) );
 		}
 		if ( Capabilities::is_temp_user( get_current_user_id() ) ) {
-			return new \WP_Error( 'happyaccess_forbidden', __( "Support access can't change two-step login.", 'happyaccess' ), array( 'status' => 403 ) );
+			return new \WP_Error( 'happyaccess_forbidden', __( "Temporary access can't change two-step login.", 'happyaccess' ), array( 'status' => 403 ) );
 		}
 		return true;
 	}

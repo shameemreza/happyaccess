@@ -47,8 +47,8 @@ function endedText( count ) {
 	return sprintf(
 		/* translators: %d: number of passes that were ended. */
 		_n(
-			'Support access turned off. %d pass ended.',
-			'Support access turned off. %d passes ended.',
+			'Temporary access turned off. %d pass ended.',
+			'Temporary access turned off. %d passes ended.',
 			count,
 			'happyaccess'
 		),
@@ -166,13 +166,13 @@ export default function SettingsTab( {
 			} );
 			finish( result );
 			if ( next ) {
-				announce( __( 'Support access turned on', 'happyaccess' ) );
+				announce( __( 'Temporary access turned on', 'happyaccess' ) );
 			} else {
 				const count = Number( result?.revoked ) || 0;
 				announce(
 					count > 0
 						? endedText( count )
-						: __( 'Support access turned off', 'happyaccess' )
+						: __( 'Temporary access turned off', 'happyaccess' )
 				);
 			}
 		} catch ( e ) {
@@ -293,7 +293,7 @@ export default function SettingsTab( {
 		}
 	};
 
-	const featureName = __( 'Support access', 'happyaccess' );
+	const featureName = __( 'Temporary access', 'happyaccess' );
 
 	return (
 		<div className="ha-settings">
@@ -345,7 +345,7 @@ export default function SettingsTab( {
 								</div>
 								<div id={ `${ ids }-support-desc` }>
 									{ __(
-										'Give a support person a login link or code that ends by itself. No shared passwords, no accounts left behind.',
+										'Give a support person, developer or agency a login link or code that ends by itself. No shared passwords, no accounts left behind.',
 										'happyaccess'
 									) }
 								</div>
@@ -471,7 +471,7 @@ export default function SettingsTab( {
 								onConfirm={ () => switchSupport( false ) }
 							>
 								{ __(
-									'Turn off support access? Every current pass ends now.',
+									'Turn off temporary access? Every current pass ends now.',
 									'happyaccess'
 								) }
 							</InlineConfirm>
@@ -668,7 +668,7 @@ export default function SettingsTab( {
 							</div>
 							<p className="ha-help">
 								{ __(
-									'Adds a Google reCAPTCHA check to the support code screen.',
+									'Adds a Google reCAPTCHA check to the access code screen.',
 									'happyaccess'
 								) }
 							</p>

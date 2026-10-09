@@ -84,7 +84,7 @@ describe( 'ResultCard', () => {
 		expect( screen.getByText( '4829 1375' ) ).toBeInTheDocument();
 		expect(
 			screen.getByText(
-				'Entered at yourstore.test, "Have a support access code?"'
+				'Entered at yourstore.test, "Log in with an access code"'
 			)
 		).toBeInTheDocument();
 		expect(
