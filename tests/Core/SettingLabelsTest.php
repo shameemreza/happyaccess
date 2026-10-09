@@ -61,7 +61,7 @@ class SettingLabelsTest extends WP_UnitTestCase {
 	public function test_nested_keys_match_by_prefix() {
 		$this->assertSame( 'Passwordless login by role', SettingLabels::label( 'passwordless.role_policy.editor' ) );
 		$this->assertSame( 'Two-step login by role', SettingLabels::label( 'two_step.role_policy.shop_manager' ) );
-		$this->assertSame( 'Where the login code form shows', SettingLabels::label( 'passwordless.show_on.woo_checkout' ) );
+		$this->assertSame( 'Show the email code option on', SettingLabels::label( 'passwordless.show_on.woo_checkout' ) );
 		$this->assertSame( 'New device alerts', SettingLabels::label( 'two_step.device_alert_roles.1' ) );
 		$this->assertSame( 'passwordless.role_policyx', SettingLabels::label( 'passwordless.role_policyx' ) );
 	}

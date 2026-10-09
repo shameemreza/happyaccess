@@ -53,7 +53,7 @@ final class SettingLabels {
 			'security.recaptcha_threshold'  => __( 'reCAPTCHA score needed', 'happyaccess' ),
 			'passwordless.code_lifetime'    => __( 'Code lifetime', 'happyaccess' ),
 			'passwordless.toggle_style'     => __( 'Button style', 'happyaccess' ),
-			'passwordless.show_on.*'        => __( 'Where the login code form shows', 'happyaccess' ),
+			'passwordless.show_on.*'        => __( 'Show the email code option on', 'happyaccess' ),
 			'passwordless.role_policy.*'    => __( 'Passwordless login by role', 'happyaccess' ),
 			'two_step.role_policy.*'        => __( 'Two-step login by role', 'happyaccess' ),
 			'two_step.grace_type'           => __( 'Grace period for required roles', 'happyaccess' ),
