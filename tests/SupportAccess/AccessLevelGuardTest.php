@@ -276,11 +276,19 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 	 * @return WP_REST_Response
 	 */
 	private function rest( WP_REST_Request $request ) {
+		// rest_api_init registers core settings; put those globals back so later tests see them unchanged.
+		$saved = array();
+		foreach ( array( 'new_allowed_options', 'wp_registered_settings' ) as $name ) {
+			$saved[ $name ] = isset( $GLOBALS[ $name ] ) ? $GLOBALS[ $name ] : null;
+		}
 		$GLOBALS['wp_rest_server'] = null;
 		try {
 			return rest_get_server()->dispatch( $request );
 		} finally {
 			$GLOBALS['wp_rest_server'] = null;
+			foreach ( $saved as $name => $value ) {
+				$GLOBALS[ $name ] = $value;
+			}
 		}
 	}
 
