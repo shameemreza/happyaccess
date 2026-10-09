@@ -20,8 +20,14 @@ final class ClientIp {
 	 * @return string
 	 */
 	public static function get() {
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Values are validated with FILTER_VALIDATE_IP in from_server().
-		$ip       = self::from_server( $_SERVER );
+		// Only REMOTE_ADDR and the proxy header the owner picked, each cleaned as it is read.
+		$server = array();
+		foreach ( array( 'REMOTE_ADDR', (string) Settings::get( 'security.proxy_header', '' ) ) as $key ) {
+			if ( '' !== $key && isset( $_SERVER[ $key ] ) && is_string( $_SERVER[ $key ] ) ) {
+				$server[ $key ] = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
+			}
+		}
+		$ip       = self::from_server( $server );
 		$filtered = apply_filters( 'happyaccess_client_ip', $ip );
 		return self::valid( $filtered ) ? self::normalize( $filtered ) : $ip;
 	}

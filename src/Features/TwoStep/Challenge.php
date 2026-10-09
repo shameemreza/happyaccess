@@ -472,8 +472,55 @@ final class Challenge {
 	 * @return void
 	 */
 	public static function run_step() {
-		// phpcs:ignore WordPress.Security.NonceVerification -- handle() verifies the nonce on every POST, the code and the email send.
-		self::respond( self::handle( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ), wp_unslash( $_COOKIE ) ) );
+		list( $get, $post, $cookies ) = self::step_input();
+		self::respond( self::handle( self::request_method(), $get, $post, $cookies ) );
+	}
+
+	/**
+	 * The query, form and cookie values the two-step screens use, each
+	 * cleaned as it is read. The setup step reads the same ones.
+	 *
+	 * @return array The query values, the form values and the cookies.
+	 */
+	public static function step_input() {
+		// phpcs:disable WordPress.Security.NonceVerification -- Each step's handle() verifies the nonce on every POST, the code and the email send.
+		$get = array();
+		foreach ( array( 'from', 'method', 'sent' ) as $key ) {
+			if ( isset( $_GET[ $key ] ) ) {
+				$get[ $key ] = sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
+			}
+		}
+		if ( isset( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ) {
+			$get['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_GET['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		foreach ( array( 'rememberme', 'interim-login' ) as $key ) {
+			if ( ! empty( $_GET[ $key ] ) ) {
+				$get[ $key ] = '1';
+			}
+		}
+
+		$post = array();
+		foreach ( array( '_wpnonce', 'from', 'method', 'send', 'pwd', SetupSteps::FIELD ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+			}
+		}
+		if ( isset( $_POST['redirect_to'] ) && is_string( $_POST['redirect_to'] ) ) {
+			$post['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_POST['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		foreach ( array( 'rememberme', 'interim-login' ) as $key ) {
+			if ( ! empty( $_POST[ $key ] ) ) {
+				$post[ $key ] = '1';
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
+
+		$cookies = array();
+		if ( isset( $_COOKIE[ self::COOKIE ] ) ) {
+			$cookies[ self::COOKIE ] = sanitize_text_field( wp_unslash( $_COOKIE[ self::COOKIE ] ) );
+		}
+
+		return array( $get, $post, $cookies );
 	}
 
 	/**
@@ -610,7 +657,8 @@ final class Challenge {
 	 */
 	public static function filter_login_errors( $errors ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only; the value only picks a message.
-		return self::login_errors( $errors, wp_unslash( $_GET ) );
+		$reason = isset( $_GET[ self::LOGIN_ARG ] ) ? sanitize_key( wp_unslash( $_GET[ self::LOGIN_ARG ] ) ) : '';
+		return self::login_errors( $errors, array( self::LOGIN_ARG => $reason ) );
 	}
 
 	/**
@@ -916,8 +964,26 @@ final class Challenge {
 	 */
 	private static function carry_from_login() {
 		// phpcs:disable WordPress.Security.NonceVerification -- Core's login form has no nonce; WooCommerce checked its own before calling wp_signon().
-		$post    = wp_unslash( $_POST );
-		$request = wp_unslash( $_REQUEST );
+		$post = array();
+		// Only whether WooCommerce's fields are there matters, so the password itself is never copied.
+		foreach ( array( 'login', 'username', 'password' ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = '1';
+			}
+		}
+		if ( isset( $_POST['redirect'] ) && is_string( $_POST['redirect'] ) ) {
+			$post['redirect'] = wp_sanitize_redirect( trim( wp_unslash( $_POST['redirect'] ), Screens::REDIRECT_TRIM ) );
+		}
+		if ( ! empty( $_POST['rememberme'] ) ) {
+			$post['rememberme'] = '1';
+		}
+		$request = array();
+		if ( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) {
+			$request['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_REQUEST['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		if ( ! empty( $_REQUEST['interim-login'] ) ) {
+			$request['interim-login'] = '1';
+		}
 		// phpcs:enable WordPress.Security.NonceVerification
 
 		$carry = array();

@@ -119,8 +119,32 @@ final class LoginSteps {
 	 * @return void
 	 */
 	public static function run_request() {
-		// phpcs:ignore WordPress.Security.NonceVerification -- handle_request() verifies the nonce on POST.
-		Screens::respond( self::handle_request( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ) ) );
+		list( $get, $post ) = self::request_input();
+		Screens::respond( self::handle_request( self::request_method(), $get, $post ) );
+	}
+
+	/**
+	 * The query and form fields the request screen uses, each cleaned as it is read.
+	 *
+	 * @return array The query values, then the form values.
+	 */
+	public static function request_input() {
+		// phpcs:disable WordPress.Security.NonceVerification -- handle_request() verifies the nonce on POST.
+		$get = array();
+		if ( isset( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ) {
+			$get['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_GET['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		$post = array();
+		foreach ( array( '_wpnonce', 'log', Recaptcha::FIELD ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+			}
+		}
+		if ( isset( $_POST['redirect_to'] ) && is_string( $_POST['redirect_to'] ) ) {
+			$post['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_POST['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
+		return array( $get, $post );
 	}
 
 	/**
@@ -129,8 +153,45 @@ final class LoginSteps {
 	 * @return void
 	 */
 	public static function run_verify() {
-		// phpcs:ignore WordPress.Security.NonceVerification -- handle_verify() verifies the nonce on POST and never logs in on GET.
-		Screens::respond( self::handle_verify( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ), wp_unslash( $_COOKIE ) ) );
+		list( $get, $post, $cookies ) = self::verify_input();
+		Screens::respond( self::handle_verify( self::request_method(), $get, $post, $cookies ) );
+	}
+
+	/**
+	 * The query and form fields and the cookies the verify screen uses, each
+	 * cleaned as it is read.
+	 *
+	 * @return array The query values, the form values and the cookies.
+	 */
+	public static function verify_input() {
+		// phpcs:disable WordPress.Security.NonceVerification -- handle_verify() verifies the nonce on POST and never logs in on GET.
+		$get = array();
+		if ( isset( $_GET['k'] ) ) {
+			$get['k'] = sanitize_text_field( wp_unslash( $_GET['k'] ) );
+		}
+		if ( isset( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ) {
+			$get['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_GET['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		$post = array();
+		foreach ( array( '_wpnonce', 'k', 'c', 'pwd', Recaptcha::FIELD ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+			}
+		}
+		if ( isset( $_POST['redirect_to'] ) && is_string( $_POST['redirect_to'] ) ) {
+			$post['redirect_to'] = wp_sanitize_redirect( trim( wp_unslash( $_POST['redirect_to'] ), Screens::REDIRECT_TRIM ) );
+		}
+		if ( ! empty( $_POST['rememberme'] ) ) {
+			$post['rememberme'] = '1';
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
+		$cookies = array();
+		foreach ( array( self::COOKIE, self::CONFIRM_COOKIE ) as $name ) {
+			if ( isset( $_COOKIE[ $name ] ) ) {
+				$cookies[ $name ] = sanitize_text_field( wp_unslash( $_COOKIE[ $name ] ) );
+			}
+		}
+		return array( $get, $post, $cookies );
 	}
 
 	/**

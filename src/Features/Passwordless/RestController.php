@@ -198,8 +198,13 @@ final class RestController {
 			return self::error( $captcha );
 		}
 
+		$cookies = array();
+		if ( isset( $_COOKIE[ LoginSteps::COOKIE ] ) ) {
+			$cookies[ LoginSteps::COOKIE ] = sanitize_text_field( wp_unslash( $_COOKIE[ LoginSteps::COOKIE ] ) );
+		}
+
 		$result = LoginSteps::verify_flow(
-			LoginSteps::request_key( wp_unslash( $_COOKIE ) ),
+			LoginSteps::request_key( $cookies ),
 			(string) $request->get_param( 'code' ),
 			(bool) $request->get_param( 'remember' ),
 			(string) $request->get_param( 'redirect_to' )

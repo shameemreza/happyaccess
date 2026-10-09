@@ -77,8 +77,24 @@ final class LoginSteps {
 	 * @return void
 	 */
 	public static function run_code() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- handle_code() verifies the nonce on POST.
-		Screens::respond( self::handle_code( self::request_method(), wp_unslash( $_POST ) ) );
+		Screens::respond( self::handle_code( self::request_method(), self::code_input() ) );
+	}
+
+	/**
+	 * The form fields the code screen uses, each cleaned as it is read.
+	 *
+	 * @return array
+	 */
+	public static function code_input() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- handle_code() verifies the nonce on POST.
+		$post = array();
+		foreach ( array( '_wpnonce', 'pwd', Recaptcha::FIELD ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		return $post;
 	}
 
 	/**
@@ -87,8 +103,29 @@ final class LoginSteps {
 	 * @return void
 	 */
 	public static function run_link() {
-		// phpcs:ignore WordPress.Security.NonceVerification -- handle_link() verifies the nonce on POST and never logs in on GET.
-		Screens::respond( self::handle_link( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ) ) );
+		list( $get, $post ) = self::link_input();
+		Screens::respond( self::handle_link( self::request_method(), $get, $post ) );
+	}
+
+	/**
+	 * The query and form fields the link screen uses, each cleaned as it is read.
+	 *
+	 * @return array The query values, then the form values.
+	 */
+	public static function link_input() {
+		// phpcs:disable WordPress.Security.NonceVerification -- handle_link() verifies the nonce on POST and never logs in on GET.
+		$get = array();
+		if ( isset( $_GET['k'] ) ) {
+			$get['k'] = sanitize_text_field( wp_unslash( $_GET['k'] ) );
+		}
+		$post = array();
+		foreach ( array( '_wpnonce', 'k', Recaptcha::FIELD ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
+		return array( $get, $post );
 	}
 
 	/**
@@ -98,7 +135,8 @@ final class LoginSteps {
 	 */
 	public static function run_ended() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only message choice.
-		Screens::respond( self::handle_ended( wp_unslash( $_GET ) ) );
+		$reason = isset( $_GET['reason'] ) ? sanitize_key( wp_unslash( $_GET['reason'] ) ) : '';
+		Screens::respond( self::handle_ended( array( 'reason' => $reason ) ) );
 	}
 
 	/**

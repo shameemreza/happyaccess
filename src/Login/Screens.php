@@ -19,6 +19,13 @@ defined( 'ABSPATH' ) || exit;
 final class Screens {
 
 	/**
+	 * Characters wp_validate_redirect() trims from a redirect. Step callbacks
+	 * trim the same set before wp_sanitize_redirect(), so the cleaned value
+	 * validates to the same URL.
+	 */
+	const REDIRECT_TRIM = " \t\n\r\0\x08\x0B";
+
+	/**
 	 * Prints a full login-styled page.
 	 *
 	 * @param string         $title     Page title.

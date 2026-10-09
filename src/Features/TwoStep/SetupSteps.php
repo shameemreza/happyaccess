@@ -73,8 +73,9 @@ final class SetupSteps {
 	 * @return void
 	 */
 	public static function run_step() {
-		// phpcs:ignore WordPress.Security.NonceVerification -- handle() verifies the nonce on every POST.
-		$response = self::handle( self::request_method(), wp_unslash( $_GET ), wp_unslash( $_POST ), wp_unslash( $_COOKIE ) );
+		// The same cleaned values the two-step screen reads; handle() verifies the nonce on every POST.
+		list( $get, $post, $cookies ) = Challenge::step_input();
+		$response                     = self::handle( self::request_method(), $get, $post, $cookies );
 		if ( isset( $response['assets'] ) && is_array( $response['assets'] ) ) {
 			self::enqueue( $response['assets'] );
 		}
