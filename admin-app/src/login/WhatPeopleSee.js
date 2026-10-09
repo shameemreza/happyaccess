@@ -8,18 +8,12 @@ const DIGITS = [ 1, 2, 3, 4, 5, 6 ];
  * One sentence that says what the drawing shows, for screen readers.
  *
  * @param {Object}  props         What the drawing shows.
- * @param {string}  props.link    `link`, `button`, or empty for no email code option.
+ * @param {boolean} props.link    Whether the email code link shows.
  * @param {boolean} props.twoStep Whether the code step shows.
  * @return {string} The sentence.
  */
 export function previewSentence( { link, twoStep } ) {
 	if ( twoStep ) {
-		if ( 'button' === link ) {
-			return __(
-				'The WordPress login form, with an "Email me a login code" button under it, then a second step that asks for an authenticator app code, with a link to use a backup code.',
-				'happyaccess'
-			);
-		}
 		if ( link ) {
 			return __(
 				'The WordPress login form, with an "Email me a login code" link under it, then a second step that asks for an authenticator app code, with a link to use a backup code.',
@@ -28,12 +22,6 @@ export function previewSentence( { link, twoStep } ) {
 		}
 		return __(
 			'The WordPress login form, then a second step that asks for an authenticator app code, with a link to use a backup code.',
-			'happyaccess'
-		);
-	}
-	if ( 'button' === link ) {
-		return __(
-			'The WordPress login form, with an "Email me a login code" button under it.',
 			'happyaccess'
 		);
 	}
@@ -48,11 +36,12 @@ export function previewSentence( { link, twoStep } ) {
 
 /**
  * A live drawing of the login screen with the Login and security settings
- * as they are in the form, saved or not: the email code option under the
- * form in its toggle style, and the code step while two-step login is on.
+ * as they are in the form, saved or not: the email code link under the
+ * form, and the code step while two-step login is on. The WordPress login
+ * page always prints a plain link, so the button style never shows here.
  *
  * @param {Object}  props         Props.
- * @param {string}  props.link    `link`, `button`, or empty for no email code option.
+ * @param {boolean} props.link    Whether the email code link shows.
  * @param {boolean} props.twoStep Whether two-step login is on.
  * @return {Element} The card.
  */
@@ -76,13 +65,7 @@ export default function WhatPeopleSee( { link, twoStep } ) {
 			<div className="ha-loginprev__screen" aria-hidden="true">
 				<LoginMock />
 				{ link && (
-					<div
-						className={
-							'button' === link
-								? 'ha-seeprev__alt is-button'
-								: 'ha-seeprev__alt'
-						}
-					>
+					<div className="ha-seeprev__alt">
 						{ __( 'Email me a login code', 'happyaccess' ) }
 					</div>
 				) }

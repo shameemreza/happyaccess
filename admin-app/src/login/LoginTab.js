@@ -202,10 +202,7 @@ export default function LoginTab( { boot } ) {
 	const twoStepOn = !! boot?.features?.two_step;
 	const lifetime = Number( val( 'code_lifetime' ) );
 	// The drawing follows the form, saved or not.
-	const previewLink =
-		passwordlessOn && val( 'show_on.wp_login' )
-			? String( val( 'toggle_style' ) )
-			: '';
+	const previewLink = passwordlessOn && !! val( 'show_on.wp_login' );
 
 	const forms = (
 		<div className="ha-columns__main ha-login">
@@ -240,7 +237,7 @@ export default function LoginTab( { boot } ) {
 								className="ha-field"
 								label={ __( 'Button style', 'happyaccess' ) }
 								help={ __(
-									"How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block.",
+									"How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block. The WordPress login page always shows a link.",
 									'happyaccess'
 								) }
 								value={ val( 'toggle_style' ) }

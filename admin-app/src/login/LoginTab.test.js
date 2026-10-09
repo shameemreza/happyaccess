@@ -144,7 +144,7 @@ describe( 'Login tab', () => {
 		);
 		expect(
 			screen.getByText(
-				"How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block."
+				"How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block. The WordPress login page always shows a link."
 			)
 		).toBeInTheDocument();
 		expect(
@@ -524,13 +524,14 @@ describe( 'Login and security side panel', () => {
 			within( drawing() ).getByText( 'Email me a login code' )
 		).not.toHaveClass( 'is-button' );
 
+		// The WordPress login page always prints a link, whatever the style.
 		await user.selectOptions(
 			screen.getByLabelText( 'Button style' ),
 			'button'
 		);
 		expect(
 			within( drawing() ).getByText( 'Email me a login code' )
-		).toHaveClass( 'is-button' );
+		).not.toHaveClass( 'is-button' );
 
 		await user.click(
 			screen.getByRole( 'switch', { name: 'WordPress login page' } )
@@ -561,7 +562,7 @@ describe( 'Login and security side panel', () => {
 			'button'
 		);
 		expect( sentence() ).toBe(
-			'The WordPress login form, with an "Email me a login code" button under it.'
+			'The WordPress login form, with an "Email me a login code" link under it.'
 		);
 	} );
 
