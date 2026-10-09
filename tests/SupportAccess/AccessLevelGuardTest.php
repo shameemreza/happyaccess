@@ -269,6 +269,55 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertFalse( AccountGuard::block_reset( true, $fallback ) );
 	}
 
+	/**
+	 * Sends a request through the REST server as the current user.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	private function rest( WP_REST_Request $request ) {
+		$GLOBALS['wp_rest_server'] = null;
+		try {
+			return rest_get_server()->dispatch( $request );
+		} finally {
+			$GLOBALS['wp_rest_server'] = null;
+		}
+	}
+
+	public function test_the_fallback_owner_is_hidden_over_rest_when_the_creator_is_gone() {
+		$creator = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $creator );
+		$temp = $this->full();
+		self::delete_user( $creator );
+		Grants::flush_cache();
+		$fallback = $this->fallback_owner();
+		wp_set_current_user( $temp );
+
+		$list = $this->rest( new WP_REST_Request( 'GET', '/wp/v2/users' ) );
+		$this->assertSame( 200, $list->get_status() );
+		$ids = array_map( 'intval', wp_list_pluck( $list->get_data(), 'id' ) );
+		$this->assertNotContains( $fallback, $ids );
+		$this->assertContains( $this->other_admin, $ids );
+
+		$one = $this->rest( new WP_REST_Request( 'GET', '/wp/v2/users/' . $fallback ) );
+		$this->assertSame( 404, $one->get_status() );
+		$this->assertSame( 200, $this->rest( new WP_REST_Request( 'GET', '/wp/v2/users/' . $this->other_admin ) )->get_status() );
+	}
+
+	public function test_a_full_pass_cannot_deactivate_happyaccess_through_the_plugins_route() {
+		$this->site_admins_manage_plugins();
+		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
+		$this->full();
+		$request = new WP_REST_Request( 'PUT', '/wp/v2/plugins/' . substr( HAPPYACCESS_PLUGIN_BASENAME, 0, -4 ) );
+		$request->set_body_params( array( 'status' => 'inactive' ) );
+
+		$response = $this->rest( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame( 'rest_cannot_deactivate_plugin', $response->as_error()->get_error_code() );
+		$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
+	}
+
 	public function test_custom_cannot_edit_the_fallback_owners_email() {
 		$fallback = $this->fallback_owner();
 		$email    = get_userdata( $fallback )->user_email;

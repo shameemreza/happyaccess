@@ -143,6 +143,31 @@ class CliTest extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * WP-CLI is stubbed here, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_extend_says_when_the_pass_now_ends() {
+		require dirname( __DIR__ ) . '/Support/Stubs/wp-cli.php';
+		$made = Grants::create(
+			array(
+				'label'    => 'Acme',
+				'duration' => DAY_IN_SECONDS,
+			)
+		);
+
+		( new Cli() )->extend( array( (string) $made['id'] ), array( 'by' => '2d' ) );
+
+		$grant = Grants::get( $made['id'] );
+		$this->assertSame( $made['expires_at'] + 2 * DAY_IN_SECONDS, $grant['expires_at'] );
+		$this->assertSame(
+			array( array( 'success', 'Grant ' . $made['id'] . ' now ends ' . wp_date( 'Y-m-d H:i', $grant['expires_at'] ) . '.' ) ),
+			WP_CLI::$calls
+		);
+	}
+
 	public function test_list_rows() {
 		Grants::create( array( 'label' => 'Acme' ) );
 		$rows = Cli::list_rows();

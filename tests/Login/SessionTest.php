@@ -94,8 +94,23 @@ class SessionTest extends WP_UnitTestCase {
 		$this->assertSame( 1, Session::cap_cookie( 1209600, $this->temp, true ) );
 	}
 
-	public function test_enforce_logs_out_an_ended_temp_user_in_ajax() {
-		$this->resolve_to( 'revoked', 1790000000 + 3600 );
+	public function ended_grants() {
+		return array(
+			'revoked'   => array( 'revoked', 1790000000 + 3600, 'revoked' ),
+			'expired'   => array( 'active', 1790000000 - 1, 'expired' ),
+			'suspended' => array( 'suspended', 1790000000 + 3600, 'suspended' ),
+		);
+	}
+
+	/**
+	 * @dataProvider ended_grants
+	 *
+	 * @param string $state      Grant state the resolver returns.
+	 * @param int    $expires_at When the grant ends.
+	 * @param string $reason     The reason the session ends with.
+	 */
+	public function test_enforce_logs_out_an_ended_temp_user_in_ajax( $state, $expires_at, $reason ) {
+		$this->resolve_to( $state, $expires_at );
 		wp_set_current_user( $this->temp );
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		add_filter( 'send_auth_cookies', '__return_false' );
@@ -112,7 +127,7 @@ class SessionTest extends WP_UnitTestCase {
 
 		Session::enforce();
 
-		$this->assertSame( array( $this->temp, 'revoked' ), $ended );
+		$this->assertSame( array( $this->temp, $reason ), $ended );
 		$this->assertSame( 0, get_current_user_id() );
 	}
 

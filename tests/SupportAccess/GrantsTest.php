@@ -31,6 +31,61 @@ class GrantsTest extends WP_UnitTestCase {
 		parent::tear_down();
 	}
 
+	/**
+	 * Makes the check for a code already in use say "taken" a number of times.
+	 *
+	 * @param int $times How many draws collide.
+	 * @return callable The query filter, already added.
+	 */
+	private function collide( $times ) {
+		$this->collisions = 0;
+		$filter           = function ( $sql ) use ( $times ) {
+			if ( false !== strpos( $sql, 'WHERE code_hash IN' ) && $this->collisions < $times ) {
+				++$this->collisions;
+				return 'SELECT 1';
+			}
+			return $sql;
+		};
+		add_filter( 'query', $filter );
+		return $filter;
+	}
+
+	/**
+	 * Draws the collide() filter turned into "taken".
+	 *
+	 * @var int
+	 */
+	private $collisions = 0;
+
+	public function test_a_code_that_is_already_in_use_is_drawn_again() {
+		$filter = $this->collide( 2 );
+		try {
+			$made = Grants::create( array( 'label' => 'Acme' ) );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertSame( 2, $this->collisions );
+		$this->assertSame( $made['id'], Grants::find_by_code( $made['code'] )['id'] );
+	}
+
+	public function test_five_codes_in_use_in_a_row_stop_the_create() {
+		global $wpdb;
+		$before = (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . Installer::table( 'tokens' ) );
+		$filter = $this->collide( 100 );
+		try {
+			Grants::create( array( 'label' => 'Acme' ) );
+			$this->fail( 'The create went on with a code in use.' );
+		} catch ( RuntimeException $e ) {
+			$this->assertSame( 'Could not generate an unused code.', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertSame( Grants::CODE_ATTEMPTS, $this->collisions );
+		$this->assertSame( $before, (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . Installer::table( 'tokens' ) ) );
+	}
+
 	public function test_create_returns_plain_secrets_once_and_stores_hashes() {
 		global $wpdb;
 		$made = Grants::create( array( 'label' => 'Acme support', 'duration' => DAY_IN_SECONDS ) );
