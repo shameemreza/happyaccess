@@ -12,7 +12,8 @@ use HappyAccess\Admin\AuthorCard;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Saves the current user's choice on the author card: dismissed or rated.
+ * Saves the current user's choice on the author card: rated, later or
+ * hidden. The old name dismissed is taken as later.
  * It always writes to the current user, never to a user named in the request.
  */
 final class AuthorCardController {
@@ -34,7 +35,7 @@ final class AuthorCardController {
 					'choice' => array(
 						'type'              => 'string',
 						'required'          => true,
-						'enum'              => AuthorCard::CHOICES,
+						'enum'              => AuthorCard::accepted_choices(),
 						'sanitize_callback' => 'sanitize_key',
 						'validate_callback' => 'rest_validate_request_arg',
 					),
@@ -50,15 +51,15 @@ final class AuthorCardController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function save( \WP_REST_Request $request ) {
-		$choice = (string) $request->get_param( 'choice' );
-		if ( ! AuthorCard::save( get_current_user_id(), $choice ) ) {
+		$user_id = get_current_user_id();
+		if ( ! AuthorCard::save( $user_id, (string) $request->get_param( 'choice' ) ) ) {
 			return new \WP_Error( 'happyaccess_author_card_not_saved', __( 'Could not save that. Try again.', 'happyaccess' ), array( 'status' => 500 ) );
 		}
 
 		$response = rest_ensure_response(
 			array(
-				'choice' => $choice,
-				'state'  => 'credit',
+				'choice' => AuthorCard::choice( $user_id ),
+				'state'  => AuthorCard::state( $user_id ),
 			)
 		);
 		$response->header( 'Cache-Control', 'no-store, max-age=0' );

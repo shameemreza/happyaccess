@@ -16,26 +16,49 @@ class AuthorCardControllerTest extends RestTestCase {
 		parent::tear_down();
 	}
 
-	public function test_a_manager_can_dismiss_the_card() {
-		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'dismissed' ) );
+	public function test_a_manager_can_say_not_now() {
+		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'later' ) );
 
 		$this->assertSame( 200, $res->get_status() );
 		$this->assertSame(
 			array(
-				'choice' => 'dismissed',
-				'state'  => 'credit',
+				'choice' => 'later',
+				'state'  => 'tips',
 			),
 			$res->get_data()
 		);
 		$this->assertSame( 'no-store, max-age=0', $res->get_headers()['Cache-Control'] );
-		$this->assertSame( 'dismissed', get_user_meta( $this->owner, AuthorCard::META, true ) );
+		$this->assertSame( 'later', get_user_meta( $this->owner, AuthorCard::META, true ) );
 	}
 
 	public function test_a_manager_can_mark_it_rated() {
 		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'rated' ) );
 
 		$this->assertSame( 200, $res->get_status() );
+		$this->assertSame( 'tips', $res->get_data()['state'] );
 		$this->assertSame( 'rated', get_user_meta( $this->owner, AuthorCard::META, true ) );
+	}
+
+	public function test_a_manager_can_hide_the_tips() {
+		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'hidden' ) );
+
+		$this->assertSame( 200, $res->get_status() );
+		$this->assertSame(
+			array(
+				'choice' => 'hidden',
+				'state'  => 'none',
+			),
+			$res->get_data()
+		);
+		$this->assertSame( 'hidden', get_user_meta( $this->owner, AuthorCard::META, true ) );
+	}
+
+	public function test_dismissed_from_an_open_beta_page_is_saved_as_later() {
+		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'dismissed' ) );
+
+		$this->assertSame( 200, $res->get_status() );
+		$this->assertSame( 'later', $res->get_data()['choice'] );
+		$this->assertSame( 'later', get_user_meta( $this->owner, AuthorCard::META, true ) );
 	}
 
 	public function test_the_choice_is_saved_for_the_current_user_only() {
@@ -45,17 +68,17 @@ class AuthorCardControllerTest extends RestTestCase {
 			'POST',
 			'/author-card',
 			array(
-				'choice'  => 'dismissed',
+				'choice'  => 'later',
 				'user_id' => $other,
 			)
 		);
 
 		$this->assertSame( '', get_user_meta( $other, AuthorCard::META, true ) );
-		$this->assertSame( 'dismissed', get_user_meta( $this->owner, AuthorCard::META, true ) );
+		$this->assertSame( 'later', get_user_meta( $this->owner, AuthorCard::META, true ) );
 	}
 
 	public function test_an_unknown_choice_is_a_400() {
-		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'later' ) );
+		$res = $this->request( 'POST', '/author-card', array( 'choice' => 'credit' ) );
 
 		$this->assertSame( 400, $res->get_status() );
 		$this->assertSame( '', get_user_meta( $this->owner, AuthorCard::META, true ) );

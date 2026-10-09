@@ -177,6 +177,39 @@ final class Coverage {
 	}
 
 	/**
+	 * One role's counts: from the kept answer when it holds the role, else
+	 * worked out for that role alone when $count allows it.
+	 *
+	 * @param string $slug  Role slug.
+	 * @param bool   $count Whether to count when nothing is kept.
+	 * @return array{enabled:int,total:int}|null Null when not counted or the role has no users.
+	 */
+	public static function role_counts( $slug, $count = true ) {
+		$kept = get_transient( self::TRANSIENT );
+		if ( is_array( $kept ) && isset( $kept['roles'] ) && is_array( $kept['roles'] ) ) {
+			foreach ( $kept['roles'] as $row ) {
+				if ( isset( $row['slug'], $row['enabled'], $row['total'] ) && $slug === $row['slug'] ) {
+					return array(
+						'enabled' => (int) $row['enabled'],
+						'total'   => (int) $row['total'],
+					);
+				}
+			}
+		}
+		if ( ! $count ) {
+			return null;
+		}
+		$total = self::count( $slug );
+		if ( $total < 1 ) {
+			return null;
+		}
+		return array(
+			'enabled' => self::count( $slug, self::enabled_clause() ),
+			'total'   => $total,
+		);
+	}
+
+	/**
 	 * Whether a site has so many users that the counts may be 5 minutes old.
 	 *
 	 * @param int $users Users on the site.
