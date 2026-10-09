@@ -286,10 +286,13 @@ final class Challenge {
 	}
 
 	/**
-	 * The authenticate filter at the end of the chain. A browser login that
-	 * is still a WP_User here starts a pending login and goes to the second
-	 * step. The request ends in the redirect, so wp_signon() never sets the
-	 * auth cookie and never fires wp_login.
+	 * The authenticate filter at the end of the chain. A browser login from
+	 * a login form that is still a WP_User here starts a pending login and
+	 * goes to the second step. The request ends in the redirect, so
+	 * wp_signon() never sets the auth cookie and never fires wp_login.
+	 *
+	 * A wp_authenticate() call in a browser request that isn't a login form,
+	 * such as another plugin checking a password, is returned as it is.
 	 *
 	 * @param \WP_User|\WP_Error|null $user     Authentication result.
 	 * @param string                  $username Username or email typed.
@@ -299,6 +302,9 @@ final class Challenge {
 	public static function finish_authenticate( $user, $username = '', $password = '' ) {
 		unset( $username );
 		if ( ! self::is_first_factor( $user, $password ) ) {
+			return $user;
+		}
+		if ( 'browser' === self::context() && ! self::is_login_request( $user ) ) {
 			return $user;
 		}
 		self::forget_stale_grace( $user );
@@ -779,6 +785,36 @@ final class Challenge {
 			&& is_string( $password )
 			&& '' !== $password
 			&& ! isset( self::$app_password_users[ $user->ID ] );
+	}
+
+	/**
+	 * Whether the request is a person at a login form: wp-login.php's log
+	 * and pwd fields, or WooCommerce's login form. A plugin with its own
+	 * login form can return true from the happyaccess_twostep_login_request
+	 * filter, so its logins go to the second step too.
+	 *
+	 * @param \WP_User $user The user whose password passed.
+	 * @return bool
+	 */
+	private static function is_login_request( \WP_User $user ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Only whether the fields are there is read; core's login form has no nonce and WooCommerce checks its own.
+		$post = array();
+		foreach ( array( 'log', 'pwd', 'login', 'username', 'password' ) as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$post[ $key ] = '1';
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$is_login = isset( $post['log'], $post['pwd'] ) || self::is_woo_form( $post );
+
+		/**
+		 * Filters whether a browser login with a correct password comes from
+		 * a login form and goes to the second step.
+		 *
+		 * @param bool     $is_login True for wp-login.php and WooCommerce's login form.
+		 * @param \WP_User $user     The user whose password passed.
+		 */
+		return (bool) apply_filters( 'happyaccess_twostep_login_request', $is_login, $user );
 	}
 
 	/**

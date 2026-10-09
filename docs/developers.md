@@ -119,6 +119,21 @@ Tells HappyAccess that a person already has two-step login from another plugin. 
 
 Return true for a two-step plugin HappyAccess doesn't check.
 
+### happyaccess_twostep_login_request
+
+Decides whether a browser login with the right password goes to the two-step screen. HappyAccess only sends logins from the WordPress login form and the WooCommerce login form there. When other code calls `wp_authenticate()`, for example to check a password, HappyAccess leaves the result alone.
+
+- **`$is_login` (bool):** true when the WordPress login form (`log` and `pwd`) or the WooCommerce login form was posted.
+- **`$user` (WP_User):** the person whose password was right.
+
+Return true for your own login form, so its logins go to the two-step screen too. Without that, people who use two-step login skip the second step on your form.
+
+```
+add_filter( 'happyaccess_twostep_login_request', function ( $is_login ) {
+	return $is_login || isset( $_POST['my_login_form'] );
+} );
+```
+
 ### happyaccess_passwordless_allowed
 
 Decides whether a person may log in with an email code or link. It runs last, after the other checks.

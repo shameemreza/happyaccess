@@ -1243,6 +1243,115 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( 0, $this->wp_login_count );
 	}
 
+	/**
+	 * Calls wp_authenticate() the way another plugin checks a password, with
+	 * its own form fields posted.
+	 *
+	 * @param WP_User $user User.
+	 * @param array   $post Posted fields.
+	 * @return array url when the browser was sent somewhere, result otherwise.
+	 */
+	private function third_party_check( WP_User $user, array $post ) {
+		$_POST    = $post;
+		$_REQUEST = $post;
+		try {
+			$result = wp_authenticate( $user->user_login, self::PASSWORD );
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			return array(
+				'url'    => $stop->url,
+				'result' => null,
+			);
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+		return array(
+			'url'    => null,
+			'result' => $result,
+		);
+	}
+
+	public function test_a_third_party_password_check_in_a_browser_request_is_left_alone() {
+		$made = $this->app_user();
+
+		$res = $this->third_party_check( $made['user'], array( 'confirm_password' => 'x' ) );
+		$this->assertNull( $res['url'], 'No redirect to the second step.' );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( $made['user']->ID, $res['result']->ID );
+		$this->assertSame( array(), $this->pending_rows() );
+		$this->assertSame( '', $this->pending_cookie() );
+
+		$res = $this->third_party_check( $made['user'], array() );
+		$this->assertNull( $res['url'], 'No form posted at all is left alone too.' );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	public function test_a_third_party_password_check_keeps_the_grace_state() {
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
+		$user = self::factory()->user->create_and_get(
+			array(
+				'role'      => 'editor',
+				'user_pass' => self::PASSWORD,
+			)
+		);
+		$this->password_login( $user );
+		$this->assertSame( 1, UserState::grace_logins_used( $user->ID ) );
+
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'optional' ) ) ) );
+		$res = $this->third_party_check( $user, array( 'confirm_password' => 'x' ) );
+		$this->assertInstanceOf( WP_User::class, $res['result'] );
+		$this->assertSame( 1, UserState::grace_logins_used( $user->ID ), 'Only a real login drops the grace period.' );
+		$this->assertNotSame( 0, UserState::grace_started_at( $user->ID ) );
+	}
+
+	public function test_a_post_with_only_a_log_field_is_not_a_login_form() {
+		$made = $this->app_user();
+		$res  = $this->third_party_check( $made['user'], array( 'log' => $made['user']->user_login ) );
+		$this->assertNull( $res['url'] );
+		$this->assertSame( array(), $this->pending_rows() );
+	}
+
+	public function test_the_login_request_filter_sends_another_login_form_to_the_step() {
+		$made = $this->app_user();
+		$seen = array();
+		$cb   = static function ( $is_login, $user ) use ( &$seen ) {
+			$seen[] = array( $is_login, $user instanceof WP_User ? $user->ID : 0 );
+			return true;
+		};
+		add_filter( 'happyaccess_twostep_login_request', $cb, 10, 2 );
+		$res = $this->third_party_check( $made['user'], array( 'my_login' => '1' ) );
+		remove_filter( 'happyaccess_twostep_login_request', $cb, 10 );
+
+		$this->assertNotNull( $res['url'] );
+		$this->assertSame( 'twostep', $this->query( $res['url'] )['step'] );
+		$this->assertCount( 1, $this->pending_rows() );
+		$this->assertSame( array( array( false, $made['user']->ID ) ), $seen );
+	}
+
+	public function test_the_login_request_filter_sees_true_for_the_core_login_form() {
+		$made = $this->app_user();
+		$seen = array();
+		$cb   = static function ( $is_login ) use ( &$seen ) {
+			$seen[] = $is_login;
+			return $is_login;
+		};
+		add_filter( 'happyaccess_twostep_login_request', $cb );
+		$res = $this->password_login( $made['user'] );
+		remove_filter( 'happyaccess_twostep_login_request', $cb );
+
+		$this->assertNotNull( $res['url'] );
+		$this->assertSame( array( true ), $seen );
+	}
+
+	public function test_a_third_party_check_outside_the_browser_is_still_refused() {
+		$made = $this->app_user();
+		Challenge::set_context( 'api' );
+		$res = $this->third_party_check( $made['user'], array( 'confirm_password' => 'x' ) );
+		$this->assertWPError( $res['result'] );
+		$this->assertSame( 'happyaccess_twostep_required', $res['result']->get_error_code() );
+	}
+
 	public function test_redirect_to_is_carried_and_an_off_site_one_is_dropped() {
 		$made   = $this->app_user();
 		$target = admin_url( 'tools.php' );
