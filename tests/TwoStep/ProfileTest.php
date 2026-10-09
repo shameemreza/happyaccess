@@ -107,7 +107,9 @@ class TwoStepProfileTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'id="happyaccess-twostep"', $html );
 		$this->assertStringContainsString( 'Two-step login', $html );
 		$this->assertStringContainsString( 'data-happyaccess-action="app-begin"', $html );
-		$this->assertStringContainsString( 'data-happyaccess-action="email-enable"', $html );
+		$this->assertStringContainsString( 'data-happyaccess-action="email-begin"', $html );
+		$this->assertStringContainsString( 'data-happyaccess-action="email-confirm"', $html, 'Email codes turn on with one emailed code.' );
+		$this->assertStringContainsString( 'id="happyaccess-ts-profile-email-code"', $html );
 		$this->assertStringNotContainsString( 'data-happyaccess-action="backup-regenerate"', $html, 'No backup codes before a method is on.' );
 		$this->assertStringContainsString( 'Turn on the app or email codes first.', $html );
 		$this->assertStringContainsString( 'class="happyaccess-ts-qr"', $html, 'The app setup reuses the QR box.' );

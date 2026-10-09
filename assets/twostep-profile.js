@@ -3,6 +3,8 @@
  * WooCommerce My Account, which prints the same section with its own classes.
  *
  * Each button posts to a happyaccess/v1/twostep route for the current user.
+ * Email codes turn on in two steps: email/begin sends a code, and
+ * email/confirm turns them on once that code comes back.
  * A change that needs a fresh re-check opens the inline re-check, then runs
  * again. The QR code and the backup code tools come from twostep-setup.js
  * (window.happyaccessTwoStep). After a change the page reloads, unless new
@@ -231,8 +233,27 @@
 		'app-disable': function () {
 			run( 'app-disable', 'app/disable' ).then( finish );
 		},
-		'email-enable': function () {
-			run( 'email-enable', 'email/enable' ).then( finish );
+		'email-begin': function () {
+			run( 'email-begin', 'email/begin' ).then( function ( data ) {
+				if ( ! data ) {
+					return;
+				}
+				var box = panel( 'email' );
+				var input = box.querySelector( 'input' );
+				input.value = '';
+				box.hidden = false;
+				find( '.happyaccess-ts-row [data-happyaccess-action="email-begin"]' ).hidden = true;
+				input.focus();
+				announce( strings.emailSent );
+			} );
+		},
+		'email-confirm': function () {
+			var field = panel( 'email' ).querySelector( 'input' );
+			if ( '' === field.value.trim() ) {
+				showError( strings.enterEmail, field );
+				return;
+			}
+			run( 'email-confirm', 'email/confirm', { code: field.value.trim() }, field ).then( finish );
 		},
 		'email-disable': function () {
 			run( 'email-disable', 'email/disable' ).then( finish );
@@ -273,9 +294,9 @@
 					input.value = '';
 				}
 			}
-			var begin = find( '[data-happyaccess-action="app-begin"]' );
-			if ( begin ) {
-				begin.hidden = false;
+			var begins = root.querySelectorAll( '.happyaccess-ts-row [data-happyaccess-action$="-begin"]' );
+			for ( var i = 0; i < begins.length; i++ ) {
+				begins[ i ].hidden = false;
 			}
 			pending = null;
 			clearError();

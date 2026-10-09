@@ -365,6 +365,8 @@ final class Profile {
 				'enterCode'    => __( 'Enter the code from the app.', 'happyaccess' ),
 				'enterRecheck' => __( 'Enter your password or a code.', 'happyaccess' ),
 				'scan'         => __( 'Scan the QR code, then enter the code from the app.', 'happyaccess' ),
+				'emailSent'    => __( 'We sent a code to your email address.', 'happyaccess' ),
+				'enterEmail'   => __( 'Enter the code from the email.', 'happyaccess' ),
 				'codesShown'   => __( 'Your new backup codes are below.', 'happyaccess' ),
 				'saving'       => __( 'Saving.', 'happyaccess' ),
 			),
@@ -425,9 +427,12 @@ final class Profile {
 		if ( $email && ! RestController::is_last_required( $user, 'email' ) ) {
 			$action = self::button( 'email-disable', __( 'Turn off', 'happyaccess' ), $ui['button'] );
 		} elseif ( ! $email && $offered ) {
-			$action = self::button( 'email-enable', __( 'Turn on', 'happyaccess' ), $ui['button'] );
+			$action = self::button( 'email-begin', __( 'Turn on', 'happyaccess' ), $ui['button'] );
 		}
-		$body  = self::row( self::status( $email ), $action );
+		$body = self::row( self::status( $email ), $action );
+		if ( ! $email && $offered ) {
+			$body .= self::email_panel( $ui );
+		}
 		$body .= self::help( $ui, __( 'Codes go to the email address on your account.', 'happyaccess' ) );
 		$html .= self::method( $ui, __( 'Email codes', 'happyaccess' ), $body );
 
@@ -569,6 +574,25 @@ final class Profile {
 		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-profile-code">' . esc_html__( 'Code from the app', 'happyaccess' ) . '</label>' . self::field_break( $ui );
 		$html .= SetupSteps::code_input( 'happyaccess-ts-profile-code', '', false, $ui['input'] . ' happyaccess-ts-code' ) . '</p>';
 		$html .= '<p>' . self::button( 'app-confirm', __( 'Turn on two-step login', 'happyaccess' ), $ui['primary'], true );
+		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
+		return $html . '</div>';
+	}
+
+	/**
+	 * The email codes panel, shown once a code is on its way. Email codes
+	 * turn on only when that code comes back, so an address that gets no
+	 * mail is never turned on.
+	 *
+	 * @param array $ui Classes of the layout.
+	 * @return string
+	 */
+	private static function email_panel( array $ui ) {
+		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="email" hidden>';
+		$html .= '<p>' . esc_html__( 'We sent a code to the email address on your account. Enter it to turn on email codes.', 'happyaccess' ) . '</p>';
+		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-profile-email-code">' . esc_html__( 'Code from the email', 'happyaccess' ) . '</label>' . self::field_break( $ui );
+		$html .= SetupSteps::code_input( 'happyaccess-ts-profile-email-code', '', false, $ui['input'] . ' happyaccess-ts-code' ) . '</p>';
+		$html .= '<p>' . self::button( 'email-confirm', __( 'Turn on email codes', 'happyaccess' ), $ui['primary'], true );
+		$html .= ' ' . self::button( 'email-begin', __( 'Send a new code', 'happyaccess' ), $ui['link'] );
 		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
 		return $html . '</div>';
 	}

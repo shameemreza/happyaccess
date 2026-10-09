@@ -13,6 +13,7 @@ use HappyAccess\Core\RateLimiter;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\TwoStep\BackupCodes;
 use HappyAccess\Features\TwoStep\Challenge;
+use HappyAccess\Features\TwoStep\EmailMethod;
 use HappyAccess\Features\TwoStep\Feature;
 use HappyAccess\Features\TwoStep\RestController;
 use HappyAccess\Features\TwoStep\Totp;
@@ -175,7 +176,7 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 	 * @return array
 	 */
 	private function change_routes() {
-		return array( 'app/begin', 'app/confirm', 'app/disable', 'email/enable', 'email/disable', 'backup/regenerate' );
+		return array( 'app/begin', 'app/confirm', 'app/disable', 'email/begin', 'email/confirm', 'email/disable', 'backup/regenerate' );
 	}
 
 	public function test_every_route_refuses_a_logged_out_request() {
@@ -307,11 +308,69 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 		$this->assertNotSame( '', BackupCodes::match_code( $user->ID, $old[0] ), 'The old codes still work.' );
 	}
 
+	/**
+	 * Asks for an email code and returns it, read from the email.
+	 *
+	 * @return string
+	 */
+	private function emailed_code() {
+		$mails = array();
+		$catch = static function ( $null, $atts ) use ( &$mails ) {
+			unset( $null );
+			$mails[] = $atts;
+			return true;
+		};
+		add_filter( 'pre_wp_mail', $catch, 5, 2 );
+		try {
+			$this->assertSame( 200, $this->call( 'email/begin' )->get_status() );
+			EmailMethod::flush_queue();
+		} finally {
+			remove_filter( 'pre_wp_mail', $catch, 5 );
+		}
+		$this->assertCount( 1, $mails );
+		$this->assertSame( 1, preg_match( '/(\d{3}) (\d{3})/', $mails[0]['message'], $m ) );
+		return $m[1] . $m[2];
+	}
+
+	public function test_email_codes_turn_on_only_after_one_emailed_code_comes_back() {
+		$user = $this->editor();
+		$this->recheck();
+
+		$this->assertSame( 404, $this->call( 'email/enable' )->get_status(), 'No route turns email codes on without a code.' );
+
+		$code = $this->emailed_code();
+		$this->assertFalse( UserState::email_enabled( $user->ID ), 'Sending a code turns nothing on.' );
+
+		$wrong = $this->call( 'email/confirm', array( 'code' => '000000' === $code ? '111111' : '000000' ) );
+		$this->assertSame( 400, $wrong->get_status() );
+		$this->assertFalse( UserState::email_enabled( $user->ID ) );
+
+		$on = $this->call( 'email/confirm', array( 'code' => $code ) );
+		$this->assertSame( 200, $on->get_status() );
+		$this->assertTrue( UserState::email_enabled( $user->ID ) );
+		$this->assertCount( 10, $on->get_data()['codes'] );
+		$this->assertSame( array( 'email', 'backup' ), $on->get_data()['methods'] );
+
+		$this->assertSame( 400, $this->call( 'email/confirm', array( 'code' => $code ) )->get_status(), 'A code works once.' );
+	}
+
+	public function test_email_begin_shares_the_send_limit_of_the_login_step() {
+		$this->editor();
+		$this->recheck();
+		for ( $i = 0; $i < Challenge::SEND_LIMIT; $i++ ) {
+			$this->assertSame( 200, $this->call( 'email/begin' )->get_status() );
+		}
+		$limited = $this->call( 'email/begin' );
+		$this->assertSame( 429, $limited->get_status() );
+		$this->assertSame( 'happyaccess_locked', $this->code_of( $limited ) );
+		EmailMethod::flush_queue();
+	}
+
 	public function test_email_enable_and_disable() {
 		$user = $this->editor();
 		$this->recheck();
 
-		$on = $this->call( 'email/enable' );
+		$on = $this->call( 'email/confirm', array( 'code' => $this->emailed_code() ) );
 		$this->assertSame( 200, $on->get_status() );
 		$this->assertTrue( UserState::email_enabled( $user->ID ) );
 		$this->assertCount( 10, $on->get_data()['codes'] );
@@ -366,7 +425,8 @@ class TwoStepRestControllerTest extends WP_UnitTestCase {
 		$this->recheck();
 
 		$this->assertSame( 403, $this->call( 'app/begin' )->get_status() );
-		$this->assertSame( 403, $this->call( 'email/enable' )->get_status() );
+		$this->assertSame( 403, $this->call( 'email/begin' )->get_status() );
+		$this->assertSame( 403, $this->call( 'email/confirm', array( 'code' => '123456' ) )->get_status() );
 		$this->assertFalse( UserState::is_enabled( $user->ID ) );
 
 		UserState::enable_email( $user->ID );

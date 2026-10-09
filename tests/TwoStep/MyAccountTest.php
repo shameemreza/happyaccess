@@ -247,7 +247,8 @@ class TwoStepMyAccountTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'data-happyaccess-twostep', $html );
 		$this->assertStringContainsString( 'id="happyaccess-twostep"', $html, 'Cancel moves focus back to the section.' );
 		$this->assertStringContainsString( 'data-happyaccess-action="app-begin"', $html );
-		$this->assertStringContainsString( 'data-happyaccess-action="email-enable"', $html );
+		$this->assertStringContainsString( 'data-happyaccess-action="email-begin"', $html );
+		$this->assertStringContainsString( 'data-happyaccess-action="email-confirm"', $html );
 		$this->assertStringContainsString( 'Turn on the app or email codes first.', $html );
 		$this->assertStringContainsString( 'class="happyaccess-ts-qr"', $html );
 		$this->assertStringContainsString( 'id="happyaccess-ts-codes"', $html );

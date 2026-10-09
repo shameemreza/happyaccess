@@ -27,8 +27,10 @@ defined( 'ABSPATH' ) || exit;
  * another.
  *
  * The app secret waits for its first code in a transient named after the
- * user, encrypted with the network key, for 10 minutes. Every response is
- * no-store, because two of them carry a secret or the backup codes.
+ * user, encrypted with the network key, for 10 minutes. Email codes turn on
+ * only once a code sent to the address comes back, as at setup during
+ * login. Every response is no-store, because some of them carry a secret
+ * or the backup codes.
  */
 final class RestController {
 
@@ -92,7 +94,8 @@ final class RestController {
 			'app/begin'         => 'app_begin',
 			'app/confirm'       => 'app_confirm',
 			'app/disable'       => 'app_disable',
-			'email/enable'      => 'email_enable',
+			'email/begin'       => 'email_begin',
+			'email/confirm'     => 'email_confirm',
 			'email/disable'     => 'email_disable',
 			'backup/regenerate' => 'backup_regenerate',
 		);
@@ -104,7 +107,7 @@ final class RestController {
 					'methods'             => \WP_REST_Server::CREATABLE,
 					'callback'            => array( __CLASS__, $callback ),
 					'permission_callback' => array( __CLASS__, 'can_change' ),
-					'args'                => 'app/confirm' === $path ? array( 'code' => self::code_arg() ) : array(),
+					'args'                => in_array( $path, array( 'app/confirm', 'email/confirm' ), true ) ? array( 'code' => self::code_arg() ) : array(),
 				)
 			);
 		}
@@ -322,15 +325,46 @@ final class RestController {
 	}
 
 	/**
-	 * POST twostep/email/enable. The backup codes are made when the user has none.
+	 * POST twostep/email/begin: emails a code to the address on the account.
+	 * Nothing is on until email/confirm gets that code back, so an address
+	 * that never receives mail can't be turned on. The send counts on the
+	 * same limit as the login step's.
 	 *
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public static function email_enable() {
+	public static function email_begin() {
 		$user    = wp_get_current_user();
 		$refused = self::refuse_unless_offered( $user );
 		if ( null !== $refused ) {
 			return $refused;
+		}
+		$sent = Challenge::send_email( $user, 0 );
+		if ( is_wp_error( $sent ) ) {
+			if ( 'locked' === $sent->get_error_code() ) {
+				return new \WP_Error( 'happyaccess_locked', __( 'We already sent several codes. Check your email, or wait a few minutes and try again.', 'happyaccess' ), array( 'status' => 429 ) );
+			}
+			return new \WP_Error( $sent->get_error_code(), $sent->get_error_message(), array( 'status' => 503 ) );
+		}
+		return self::respond( array( 'sent' => true ) );
+	}
+
+	/**
+	 * POST twostep/email/confirm: the emailed code turns email codes on. The
+	 * backup codes are made when the user has none.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function email_confirm( \WP_REST_Request $request ) {
+		$user    = wp_get_current_user();
+		$refused = self::refuse_unless_offered( $user );
+		if ( null !== $refused ) {
+			return $refused;
+		}
+		$code     = (string) $request->get_param( 'code' );
+		$verified = '' === $code ? new \WP_Error( 'happyaccess_invalid_code', __( 'That code is not right or has expired.', 'happyaccess' ) ) : EmailMethod::verify( $user->ID, $code );
+		if ( true !== $verified ) {
+			return new \WP_Error( $verified->get_error_code(), $verified->get_error_message(), array( 'status' => 400 ) );
 		}
 		UserState::enable_email( $user->ID );
 		return self::respond( array( 'codes' => self::first_codes( $user->ID ) ) );
