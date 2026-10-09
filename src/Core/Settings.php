@@ -163,6 +163,9 @@ final class Settings {
 	/**
 	 * Merges changes into the stored settings and saves them. A temp user's
 	 * request can't change them, unless HappyAccess itself makes the write.
+	 * Turning two-step login on asks for a rewrite flush, for its My Account
+	 * endpoint. Every settings write comes through here, the switch and the
+	 * settings screen alike.
 	 *
 	 * @param array $changes Nested array of changes.
 	 * @return array The saved settings.
@@ -172,6 +175,7 @@ final class Settings {
 			return self::all();
 		}
 
+		$was_on = true === self::get( 'features.two_step' );
 		$merged = self::merge( $changes );
 		Internal::run(
 			static function () use ( $merged ) {
@@ -179,6 +183,9 @@ final class Settings {
 			}
 		);
 		self::flush_cache();
+		if ( ! $was_on && true === self::get( 'features.two_step' ) ) {
+			Features::request_rewrite_flush();
+		}
 		return $merged;
 	}
 

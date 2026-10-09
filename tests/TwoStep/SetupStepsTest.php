@@ -694,4 +694,37 @@ class SetupStepsTest extends WP_UnitTestCase {
 		$done = $this->screen( $cookie )['body'];
 		$this->assertStringContainsString( 'href="' . esc_url( admin_url( 'profile.php#happyaccess-twostep' ) ) . '"', $done );
 	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_the_done_screen_links_a_customer_to_my_account() {
+		$woo = WP_PLUGIN_DIR . '/woocommerce/woocommerce.php';
+		if ( ! file_exists( $woo ) ) {
+			$this->markTestSkipped( 'WooCommerce is not installed next to HappyAccess.' );
+		}
+		require_once $woo;
+		update_option( 'woocommerce_myaccount_page_id', self::factory()->post->create( array( 'post_type' => 'page' ) ) );
+		Feature::register();
+		if ( null === get_role( 'customer' ) ) {
+			add_role( 'customer', 'Customer', array( 'read' => true ) );
+		}
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'customer' => 'required' ) ) ) );
+		$user = self::factory()->user->create_and_get(
+			array(
+				'role'      => 'customer',
+				'user_pass' => self::PASSWORD,
+			)
+		);
+		$cookie = $this->start_setup( $user );
+		$secret = $this->shown_secret( $this->screen( $cookie )['body'] );
+		$this->post( $cookie, 'app', array( 'pwd' => Totp::code( $secret, Totp::step_for( Clock::now() ) ) ) );
+
+		$done = $this->screen( $cookie )['body'];
+		$this->assertStringContainsString( 'href="' . esc_url( wc_get_account_endpoint_url( 'two-step-login' ) ) . '"', $done );
+		$this->assertStringNotContainsString( 'profile.php', $done );
+	}
 }

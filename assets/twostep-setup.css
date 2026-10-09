@@ -1,6 +1,7 @@
 /*
- * HappyAccess two-step setup: at login on core's login styles, and in the
- * two-step section of the profile on core's admin styles.
+ * HappyAccess two-step setup: at login on core's login styles, in the
+ * two-step section of the profile on core's admin styles, and in
+ * WooCommerce My Account on the theme's styles (.happyaccess-ts-account).
  */
 .login .happyaccess-ts-heading {
 	margin-block: 0 0.75em;
@@ -156,6 +157,77 @@
 .happyaccess-ts-profile .happyaccess-ts-heading {
 	margin-block: 1em 0.5em;
 	font-size: 1.1em;
+}
+
+/*
+ * My Account: the theme sets the fonts, colors and buttons. The panels get
+ * a border that shows on light and dark themes, and the boxes with a light
+ * background keep dark text.
+ */
+.happyaccess-ts-account .happyaccess-ts-method {
+	margin-block: 0 1.5em;
+}
+
+.happyaccess-ts-account .happyaccess-ts-label {
+	margin-block: 0 0.5em;
+	font-size: 1em;
+}
+
+.happyaccess-ts-account .happyaccess-ts-help {
+	margin-block: 0.5em 0;
+	font-size: 0.875em;
+	opacity: 0.85;
+}
+
+.happyaccess-ts-account .happyaccess-ts-panel {
+	background: transparent;
+	border-color: rgba(127, 127, 127, 0.4);
+	border-radius: 4px;
+}
+
+.happyaccess-ts-account .happyaccess-ts-key code,
+.happyaccess-ts-account .happyaccess-ts-codes code {
+	color: #1e1e1e;
+}
+
+.happyaccess-ts-account .happyaccess-ts-panel .input-text {
+	box-sizing: border-box;
+	inline-size: 100%;
+	max-inline-size: 20em;
+}
+
+.happyaccess-ts-account .woocommerce-error p {
+	margin: 0;
+}
+
+.happyaccess-ts-account .happyaccess-ts-link {
+	display: inline;
+	min-block-size: 0;
+	margin: 0;
+	padding: 0;
+	background: none;
+	border: 0;
+	box-shadow: none;
+	color: inherit;
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.happyaccess-ts-account .happyaccess-ts-link:hover,
+.happyaccess-ts-account .happyaccess-ts-link:focus {
+	background: none;
+	color: inherit;
+	text-decoration: none;
+}
+
+.happyaccess-ts-account .happyaccess-ts-link:focus-visible {
+	outline: 2px solid currentcolor;
+	outline-offset: 2px;
+}
+
+.happyaccess-ts-account:focus {
+	outline: none;
 }
 
 @media (max-width: 360px) {

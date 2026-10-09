@@ -327,6 +327,8 @@ final class Installer {
 			return 'legacy_codes_remain';
 		}
 		update_option( 'happyaccess_db_version', self::DB_VERSION );
+		// A new version may change the rewrite rules HappyAccess adds.
+		Features::request_rewrite_flush();
 
 		if ( $is_upgrade ) {
 			AuditLog::add(

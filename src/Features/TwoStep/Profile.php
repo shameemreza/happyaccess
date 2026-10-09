@@ -1,6 +1,6 @@
 <?php
 /**
- * The two-step section on Profile and Edit User.
+ * The two-step section on Profile and Edit User, and in My Account.
  *
  * @package HappyAccess
  */
@@ -23,6 +23,10 @@ defined( 'ABSPATH' ) || exit;
  * own and no field with a name: its controls are buttons the script
  * handles. The admin reset button submits a form printed in the footer,
  * outside the profile form, through its form attribute.
+ *
+ * MyAccount prints the same section for the user's own account, with
+ * WooCommerce classes in place of the wp-admin table. The elements the
+ * script looks for stay the same in both layouts.
  */
 final class Profile {
 
@@ -44,6 +48,12 @@ final class Profile {
 	const DONE_ARG = 'happyaccess_ts_reset';
 
 	const HANDLE = 'happyaccess-twostep-profile';
+
+	/**
+	 * Layouts of the section: the wp-admin profile table, or WooCommerce My Account.
+	 */
+	const LAYOUT_ADMIN   = 'admin';
+	const LAYOUT_ACCOUNT = 'account';
 
 	/**
 	 * User whose reset form the footer prints, 0 for none.
@@ -79,6 +89,33 @@ final class Profile {
 	}
 
 	/**
+	 * Where this user changes their two-step login: the My Account endpoint
+	 * when WooCommerce keeps them out of wp-admin, else the profile section.
+	 * WooCommerce is checked first, so MyAccount only loads with it.
+	 *
+	 * @param \WP_User $user The user.
+	 * @return string
+	 */
+	public static function url_for( \WP_User $user ) {
+		if ( class_exists( 'WooCommerce', false ) && MyAccount::uses_my_account( $user ) ) {
+			return MyAccount::url();
+		}
+		return self::url();
+	}
+
+	/**
+	 * A link to url_for(), named for where it goes.
+	 *
+	 * @param \WP_User $user The user.
+	 * @return string
+	 */
+	public static function link_for( \WP_User $user ) {
+		$url   = self::url_for( $user );
+		$label = self::url() === $url ? __( 'your profile', 'happyaccess' ) : __( 'your account page', 'happyaccess' );
+		return '<a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a>';
+	}
+
+	/**
 	 * Prints the section for the profile being shown.
 	 *
 	 * @param \WP_User $profileuser The user whose profile is shown.
@@ -93,23 +130,36 @@ final class Profile {
 
 	/**
 	 * The section markup for the user whose profile is shown, as the
-	 * current user sees it. Empty when there is nothing for them.
+	 * current user sees it. Empty when there is nothing for them. My Account
+	 * only ever shows the user's own section.
 	 *
-	 * @param \WP_User $user The user whose profile is shown.
+	 * @param \WP_User $user   The user whose profile is shown.
+	 * @param string   $layout LAYOUT_ADMIN or LAYOUT_ACCOUNT.
 	 * @return string
 	 */
-	public static function section( \WP_User $user ) {
+	public static function section( \WP_User $user, $layout = self::LAYOUT_ADMIN ) {
 		$viewer = get_current_user_id();
 		if ( $viewer < 1 || Capabilities::is_temp_user( $viewer ) || Capabilities::is_temp_user( $user->ID ) ) {
 			return '';
 		}
 		if ( $viewer === (int) $user->ID ) {
-			return self::own_section( $user );
+			return self::own_section( $user, self::ui( $layout ) );
 		}
-		if ( self::can_reset_for( $user->ID ) ) {
+		if ( self::LAYOUT_ADMIN === $layout && self::can_reset_for( $user->ID ) ) {
 			return self::admin_section( $user );
 		}
 		return '';
+	}
+
+	/**
+	 * Whether the user's own section has anything to show: their role offers
+	 * two-step login, or something is still set up that they can turn off.
+	 *
+	 * @param \WP_User $user The user.
+	 * @return bool
+	 */
+	public static function has_own_section( \WP_User $user ) {
+		return RestController::is_offered( $user ) || UserState::is_enabled( $user->ID ) || BackupCodes::remaining( $user->ID ) > 0;
 	}
 
 	/**
@@ -278,95 +328,196 @@ final class Profile {
 		if ( ! $user->exists() || '' === self::section( $user ) ) {
 			return;
 		}
+		self::enqueue_own_assets();
+	}
 
+	/**
+	 * The stylesheet, the QR library, the shared setup script and the
+	 * section script with its settings, for the user's own section. The
+	 * profile and My Account both load them through here.
+	 *
+	 * @return void
+	 */
+	public static function enqueue_own_assets() {
 		wp_enqueue_style( self::HANDLE, plugins_url( 'assets/twostep-setup.css', HAPPYACCESS_PLUGIN_FILE ), array(), SetupSteps::asset_version( 'assets/twostep-setup.css' ) );
 		SetupSteps::register_qr();
 		wp_register_script( SetupSteps::HANDLE, plugins_url( 'assets/twostep-setup.js', HAPPYACCESS_PLUGIN_FILE ), array( SetupSteps::QR_HANDLE ), SetupSteps::asset_version( 'assets/twostep-setup.js' ), true );
 		wp_enqueue_script( self::HANDLE, plugins_url( 'assets/twostep-profile.js', HAPPYACCESS_PLUGIN_FILE ), array( SetupSteps::HANDLE ), SetupSteps::asset_version( 'assets/twostep-profile.js' ), true );
-		wp_localize_script(
-			self::HANDLE,
-			'happyaccessTwoStepProfile',
-			array(
-				'restUrl' => esc_url_raw( rest_url( Routes::NS . RestController::BASE ) ),
-				'nonce'   => wp_create_nonce( 'wp_rest' ),
-				'strings' => array(
-					'failed'       => __( "That didn't work. Try again.", 'happyaccess' ),
-					'enterCode'    => __( 'Enter the code from the app.', 'happyaccess' ),
-					'enterRecheck' => __( 'Enter your password or a code.', 'happyaccess' ),
-					'scan'         => __( 'Scan the QR code, then enter the code from the app.', 'happyaccess' ),
-					'codesShown'   => __( 'Your new backup codes are below.', 'happyaccess' ),
-					'saving'       => __( 'Saving.', 'happyaccess' ),
-				),
-			)
+		wp_add_inline_script( self::HANDLE, 'window.happyaccessTwoStepProfile = ' . wp_json_encode( self::script_config() ) . ';', 'before' );
+	}
+
+	/**
+	 * Settings of the section script: the routes, a wp_rest nonce for the
+	 * logged-in user and the messages.
+	 *
+	 * @return array
+	 */
+	public static function script_config() {
+		return array(
+			'restUrl' => esc_url_raw( rest_url( Routes::NS . RestController::BASE ) ),
+			'nonce'   => wp_create_nonce( 'wp_rest' ),
+			'strings' => array(
+				'failed'       => __( "That didn't work. Try again.", 'happyaccess' ),
+				'enterCode'    => __( 'Enter the code from the app.', 'happyaccess' ),
+				'enterRecheck' => __( 'Enter your password or a code.', 'happyaccess' ),
+				'scan'         => __( 'Scan the QR code, then enter the code from the app.', 'happyaccess' ),
+				'codesShown'   => __( 'Your new backup codes are below.', 'happyaccess' ),
+				'saving'       => __( 'Saving.', 'happyaccess' ),
+			),
 		);
 	}
 
 	/**
-	 * The section on the user's own profile. Nothing when their role has
-	 * two-step login off and nothing is set up.
+	 * The section on the user's own profile or account. Nothing when their
+	 * role has two-step login off and nothing is set up.
 	 *
 	 * @param \WP_User $user The current user.
+	 * @param array    $ui   Classes of the layout, from ui().
 	 * @return string
 	 */
-	private static function own_section( \WP_User $user ) {
+	private static function own_section( \WP_User $user, array $ui ) {
+		if ( ! self::has_own_section( $user ) ) {
+			return '';
+		}
+		$account  = self::LAYOUT_ACCOUNT === $ui['layout'];
 		$offered  = RestController::is_offered( $user );
 		$app      = UserState::app_enabled( $user->ID );
 		$email    = UserState::email_enabled( $user->ID );
 		$left     = BackupCodes::remaining( $user->ID );
 		$required = Enforcement::REQUIRED === Enforcement::policy( $user );
-		if ( ! $offered && ! $app && ! $email && $left < 1 ) {
-			return '';
-		}
 
-		$html  = '<div class="happyaccess-ts-profile" data-happyaccess-twostep>';
-		$html .= '<h2 id="' . esc_attr( self::ANCHOR ) . '" tabindex="-1">' . esc_html__( 'Two-step login', 'happyaccess' ) . '</h2>';
+		if ( $account ) {
+			// The endpoint title already names the section, so the box itself takes focus.
+			$html = '<div id="' . esc_attr( self::ANCHOR ) . '" class="happyaccess-ts-profile happyaccess-ts-account" tabindex="-1" data-happyaccess-twostep>';
+		} else {
+			$html  = '<div class="happyaccess-ts-profile" data-happyaccess-twostep>';
+			$html .= '<h2 id="' . esc_attr( self::ANCHOR ) . '" tabindex="-1">' . esc_html__( 'Two-step login', 'happyaccess' ) . '</h2>';
+		}
 		$html .= '<p>' . esc_html__( 'After your password, you also enter a code from your authenticator app or your email.', 'happyaccess' ) . '</p>';
 		if ( $required ) {
 			$html .= '<p><strong>' . esc_html__( 'Your role needs two-step login.', 'happyaccess' ) . '</strong></p>';
 		}
-		$html .= '<div id="happyaccess-ts-profile-error" class="notice notice-error inline" role="alert" hidden><p></p></div>';
+		$html .= '<div id="happyaccess-ts-profile-error" class="' . esc_attr( $ui['error'] ) . '" role="alert" hidden><p></p></div>';
 
-		$html .= '<table class="form-table" role="presentation"><tbody>';
+		$html .= $account ? '<div class="happyaccess-ts-methods" data-happyaccess-methods>' : '<table class="form-table" role="presentation" data-happyaccess-methods><tbody>';
 
-		$html  .= '<tr><th scope="row">' . esc_html__( 'Authenticator app', 'happyaccess' ) . '</th><td>';
 		$action = '';
 		if ( $app && ! RestController::is_last_required( $user, 'app' ) ) {
-			$action = self::button( 'app-disable', __( 'Turn off', 'happyaccess' ) );
+			$action = self::button( 'app-disable', __( 'Turn off', 'happyaccess' ), $ui['button'] );
 		} elseif ( ! $app && $offered ) {
-			$action = self::button( 'app-begin', __( 'Set up', 'happyaccess' ) );
+			$action = self::button( 'app-begin', __( 'Set up', 'happyaccess' ), $ui['button'] );
 		}
-		$html .= self::row( self::status( $app ), $action );
+		$body = self::row( self::status( $app ), $action );
 		if ( ! $app && $offered ) {
-			$html .= self::app_panel();
+			$body .= self::app_panel( $ui );
 		}
-		$html .= '<p class="description">' . esc_html__( 'Codes come from an app on your phone.', 'happyaccess' ) . '</p>';
-		$html .= '</td></tr>';
+		$body .= self::help( $ui, __( 'Codes come from an app on your phone.', 'happyaccess' ) );
+		$html .= self::method( $ui, __( 'Authenticator app', 'happyaccess' ), $body );
 
-		$html  .= '<tr><th scope="row">' . esc_html__( 'Email codes', 'happyaccess' ) . '</th><td>';
 		$action = '';
 		if ( $email && ! RestController::is_last_required( $user, 'email' ) ) {
-			$action = self::button( 'email-disable', __( 'Turn off', 'happyaccess' ) );
+			$action = self::button( 'email-disable', __( 'Turn off', 'happyaccess' ), $ui['button'] );
 		} elseif ( ! $email && $offered ) {
-			$action = self::button( 'email-enable', __( 'Turn on', 'happyaccess' ) );
+			$action = self::button( 'email-enable', __( 'Turn on', 'happyaccess' ), $ui['button'] );
 		}
-		$html .= self::row( self::status( $email ), $action );
-		$html .= '<p class="description">' . esc_html__( 'Codes go to the email address on your account.', 'happyaccess' ) . '</p>';
-		$html .= '</td></tr>';
+		$body  = self::row( self::status( $email ), $action );
+		$body .= self::help( $ui, __( 'Codes go to the email address on your account.', 'happyaccess' ) );
+		$html .= self::method( $ui, __( 'Email codes', 'happyaccess' ), $body );
 
-		$html .= '<tr><th scope="row">' . esc_html__( 'Backup codes', 'happyaccess' ) . '</th><td>';
 		if ( $app || $email ) {
-			$html .= self::row( self::state( self::codes_left( $left ) ), self::button( 'backup-regenerate', __( 'Make new codes', 'happyaccess' ) ) );
-			$html .= '<p class="description">' . esc_html__( 'Making new codes stops the old ones from working.', 'happyaccess' ) . '</p>';
+			$body  = self::row( self::state( self::codes_left( $left ) ), self::button( 'backup-regenerate', __( 'Make new codes', 'happyaccess' ), $ui['button'] ) );
+			$body .= self::help( $ui, __( 'Making new codes stops the old ones from working.', 'happyaccess' ) );
 		} else {
-			$html .= '<p class="description">' . esc_html__( 'Turn on the app or email codes first.', 'happyaccess' ) . '</p>';
+			$body = self::help( $ui, __( 'Turn on the app or email codes first.', 'happyaccess' ) );
 		}
-		$html .= '</td></tr>';
+		$html .= self::method( $ui, __( 'Backup codes', 'happyaccess' ), $body );
 
-		$html .= '</tbody></table>';
-		$html .= self::codes_panel();
-		$html .= self::recheck_panel();
+		$html .= $account ? '</div>' : '</tbody></table>';
+		$html .= self::codes_panel( $ui );
+		$html .= self::recheck_panel( $ui );
 		$html .= '<p class="screen-reader-text" role="status" data-happyaccess-live></p>';
 		return $html . '</div>';
+	}
+
+	/**
+	 * The classes of each layout. My Account follows the theme through
+	 * WooCommerce's own classes, including the block theme button class.
+	 *
+	 * @param string $layout LAYOUT_ADMIN or LAYOUT_ACCOUNT.
+	 * @return array<string,string>
+	 */
+	private static function ui( $layout ) {
+		if ( self::LAYOUT_ACCOUNT !== $layout ) {
+			return array(
+				'layout'  => self::LAYOUT_ADMIN,
+				'button'  => 'button',
+				'primary' => 'button button-primary',
+				'link'    => 'button-link',
+				'input'   => 'regular-text',
+				'help'    => 'description',
+				'error'   => 'notice notice-error inline',
+				'field'   => '',
+			);
+		}
+		$theme  = function_exists( 'wc_wp_theme_get_element_class_name' ) ? (string) wc_wp_theme_get_element_class_name( 'button' ) : '';
+		$button = trim( 'woocommerce-Button button ' . $theme );
+		return array(
+			'layout'  => self::LAYOUT_ACCOUNT,
+			'button'  => $button,
+			'primary' => $button . ' alt',
+			'link'    => 'happyaccess-ts-link',
+			'input'   => 'woocommerce-Input woocommerce-Input--text input-text',
+			'help'    => 'happyaccess-ts-help',
+			'error'   => 'woocommerce-error',
+			'field'   => 'woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide',
+		);
+	}
+
+	/**
+	 * One method: a table row on the profile, a block with a heading in My Account.
+	 *
+	 * @param array  $ui    Classes of the layout.
+	 * @param string $label Plain text name of the method.
+	 * @param string $body  Markup of the value.
+	 * @return string
+	 */
+	private static function method( array $ui, $label, $body ) {
+		if ( self::LAYOUT_ACCOUNT === $ui['layout'] ) {
+			return '<div class="happyaccess-ts-method"><h3 class="happyaccess-ts-label">' . esc_html( $label ) . '</h3>' . $body . '</div>';
+		}
+		return '<tr><th scope="row">' . esc_html( $label ) . '</th><td>' . $body . '</td></tr>';
+	}
+
+	/**
+	 * The help text under a method's status line.
+	 *
+	 * @param array  $ui   Classes of the layout.
+	 * @param string $text Plain text.
+	 * @return string
+	 */
+	private static function help( array $ui, $text ) {
+		return '<p class="' . esc_attr( $ui['help'] ) . '">' . esc_html( $text ) . '</p>';
+	}
+
+	/**
+	 * The opening of a paragraph with a label and its field.
+	 *
+	 * @param array $ui Classes of the layout.
+	 * @return string
+	 */
+	private static function field_open( array $ui ) {
+		return '' === $ui['field'] ? '<p>' : '<p class="' . esc_attr( $ui['field'] ) . '">';
+	}
+
+	/**
+	 * What goes between a label and its field: a line break on the profile.
+	 * WooCommerce's form rows put the field on its own line.
+	 *
+	 * @param array $ui Classes of the layout.
+	 * @return string
+	 */
+	private static function field_break( array $ui ) {
+		return self::LAYOUT_ACCOUNT === $ui['layout'] ? '' : '<br />';
 	}
 
 	/**
@@ -399,45 +550,48 @@ final class Profile {
 	/**
 	 * The app setup panel, filled in by the script after app/begin.
 	 *
+	 * @param array $ui Classes of the layout.
 	 * @return string
 	 */
-	private static function app_panel() {
+	private static function app_panel( array $ui ) {
 		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="app" hidden>';
 		$html .= '<p>' . esc_html__( 'Scan this QR code with your authenticator app.', 'happyaccess' ) . '</p>';
 		$html .= SetupSteps::qr_and_key( '', '' );
-		$html .= '<p><label for="happyaccess-ts-profile-code">' . esc_html__( 'Code from the app', 'happyaccess' ) . '</label><br />';
-		$html .= SetupSteps::code_input( 'happyaccess-ts-profile-code', '', false, 'regular-text happyaccess-ts-code' ) . '</p>';
-		$html .= '<p>' . self::button( 'app-confirm', __( 'Turn on two-step login', 'happyaccess' ), 'button button-primary' );
-		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), 'button-link' ) . '</p>';
+		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-profile-code">' . esc_html__( 'Code from the app', 'happyaccess' ) . '</label>' . self::field_break( $ui );
+		$html .= SetupSteps::code_input( 'happyaccess-ts-profile-code', '', false, $ui['input'] . ' happyaccess-ts-code' ) . '</p>';
+		$html .= '<p>' . self::button( 'app-confirm', __( 'Turn on two-step login', 'happyaccess' ), $ui['primary'], true );
+		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
 		return $html . '</div>';
 	}
 
 	/**
 	 * The backup codes panel, filled in by the script after a change that
-	 * made new codes. Done reloads the profile.
+	 * made new codes. Done reloads the page.
 	 *
+	 * @param array $ui Classes of the layout.
 	 * @return string
 	 */
-	private static function codes_panel() {
+	private static function codes_panel( array $ui ) {
 		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="codes" hidden>';
-		$html .= SetupSteps::codes_block( array(), false, 'h3' );
-		$html .= '<p><button type="button" id="happyaccess-ts-continue" class="button button-primary" data-happyaccess-action="done">' . esc_html__( 'Done', 'happyaccess' ) . '</button></p>';
+		$html .= SetupSteps::codes_block( array(), false, 'h3', $ui['button'] );
+		$html .= '<p><button type="button" id="happyaccess-ts-continue" class="' . esc_attr( $ui['primary'] ) . '" data-happyaccess-action="done" data-happyaccess-primary>' . esc_html__( 'Done', 'happyaccess' ) . '</button></p>';
 		return $html . '</div>';
 	}
 
 	/**
 	 * The re-check panel, shown when a change needs it.
 	 *
+	 * @param array $ui Classes of the layout.
 	 * @return string
 	 */
-	private static function recheck_panel() {
+	private static function recheck_panel( array $ui ) {
 		$html  = '<div class="happyaccess-ts-panel" data-happyaccess-panel="recheck" hidden>';
 		$html .= '<p>' . esc_html__( "Confirm it's you to change two-step login.", 'happyaccess' ) . '</p>';
-		$html .= '<p><label for="happyaccess-ts-recheck" data-label-password="' . esc_attr__( 'Current password', 'happyaccess' ) . '" data-label-code="' . esc_attr__( 'Code from your app, or a backup code', 'happyaccess' ) . '">' . esc_html__( 'Current password', 'happyaccess' ) . '</label><br />';
-		$html .= '<input type="password" id="happyaccess-ts-recheck" class="regular-text" value="" autocomplete="current-password" spellcheck="false" /></p>';
-		$html .= '<p>' . self::button( 'recheck', __( 'Confirm', 'happyaccess' ), 'button button-primary' );
-		$html .= ' <button type="button" class="button-link" data-happyaccess-action="recheck-mode" data-label-password="' . esc_attr__( 'Use a code instead', 'happyaccess' ) . '" data-label-code="' . esc_attr__( 'Use your password instead', 'happyaccess' ) . '">' . esc_html__( 'Use a code instead', 'happyaccess' ) . '</button>';
-		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), 'button-link' ) . '</p>';
+		$html .= self::field_open( $ui ) . '<label for="happyaccess-ts-recheck" data-label-password="' . esc_attr__( 'Current password', 'happyaccess' ) . '" data-label-code="' . esc_attr__( 'Code from your app, or a backup code', 'happyaccess' ) . '">' . esc_html__( 'Current password', 'happyaccess' ) . '</label>' . self::field_break( $ui );
+		$html .= '<input type="password" id="happyaccess-ts-recheck" class="' . esc_attr( $ui['input'] ) . '" value="" autocomplete="current-password" spellcheck="false" /></p>';
+		$html .= '<p>' . self::button( 'recheck', __( 'Confirm', 'happyaccess' ), $ui['primary'], true );
+		$html .= ' <button type="button" class="' . esc_attr( $ui['link'] ) . '" data-happyaccess-action="recheck-mode" data-label-password="' . esc_attr__( 'Use a code instead', 'happyaccess' ) . '" data-label-code="' . esc_attr__( 'Use your password instead', 'happyaccess' ) . '">' . esc_html__( 'Use a code instead', 'happyaccess' ) . '</button>';
+		$html .= ' ' . self::button( 'cancel', __( 'Cancel', 'happyaccess' ), $ui['link'] ) . '</p>';
 		return $html . '</div>';
 	}
 
@@ -488,14 +642,15 @@ final class Profile {
 	}
 
 	/**
-	 * A button the script handles.
+	 * A button the script handles. Enter in a panel's field runs its primary button.
 	 *
 	 * @param string $action    Action name.
 	 * @param string $label     Label.
 	 * @param string $css_class Classes.
+	 * @param bool   $primary   Whether it is the panel's primary button.
 	 * @return string
 	 */
-	private static function button( $action, $label, $css_class = 'button' ) {
-		return '<button type="button" class="' . esc_attr( $css_class ) . '" data-happyaccess-action="' . esc_attr( $action ) . '">' . esc_html( $label ) . '</button>';
+	private static function button( $action, $label, $css_class = 'button', $primary = false ) {
+		return '<button type="button" class="' . esc_attr( $css_class ) . '" data-happyaccess-action="' . esc_attr( $action ) . '"' . ( $primary ? ' data-happyaccess-primary' : '' ) . '>' . esc_html( $label ) . '</button>';
 	}
 }

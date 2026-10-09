@@ -465,7 +465,8 @@ final class Challenge {
 
 	/**
 	 * Shows the backup code count once after a login that used one of the
-	 * last codes: as an admin notice, or on My Account.
+	 * last codes: as an admin notice, or on My Account with a link to where
+	 * the user makes new ones.
 	 *
 	 * @return void
 	 */
@@ -491,15 +492,20 @@ final class Challenge {
 		);
 
 		$left = (int) $left;
+		if ( doing_action( 'woocommerce_account_content' ) ) {
+			echo '<div class="woocommerce-info">' . sprintf(
+				/* translators: 1: backup codes left, 2: link to where new ones are made. */
+				esc_html( _n( 'You have %1$d backup code left. Make new ones on %2$s.', 'You have %1$d backup codes left. Make new ones on %2$s.', $left, 'happyaccess' ) ),
+				(int) $left,
+				Profile::link_for( wp_get_current_user() ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Profile::link_for().
+			) . '</div>';
+			return;
+		}
 		$text = sprintf(
 			/* translators: %d: backup codes left. */
 			_n( 'You have %d backup code left. Make new ones on your profile.', 'You have %d backup codes left. Make new ones on your profile.', $left, 'happyaccess' ),
 			$left
 		);
-		if ( doing_action( 'woocommerce_account_content' ) ) {
-			echo '<div class="woocommerce-info">' . esc_html( $text ) . '</div>';
-			return;
-		}
 		echo '<div class="notice notice-warning"><p>' . esc_html( $text ) . '</p></div>';
 	}
 

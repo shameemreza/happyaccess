@@ -1,5 +1,6 @@
 /**
- * HappyAccess two-step section on the user's own profile.
+ * HappyAccess two-step section on the user's own profile, and in
+ * WooCommerce My Account, which prints the same section with its own classes.
  *
  * Each button posts to a happyaccess/v1/twostep route for the current user.
  * A change that needs a fresh re-check opens the inline re-check, then runs
@@ -8,7 +9,7 @@
  * backup codes came back: those show once, and Done reloads.
  *
  * The section sits inside the profile form, so Enter in one of its fields
- * runs the field's own button instead of saving the profile.
+ * runs the panel's primary button instead of saving the profile.
  */
 ( function () {
 	'use strict';
@@ -151,9 +152,9 @@
 			list.appendChild( item );
 		}
 		hidePanels();
-		var table = find( '.form-table' );
-		if ( table ) {
-			table.hidden = true;
+		var methods = find( '[data-happyaccess-methods]' );
+		if ( methods ) {
+			methods.hidden = true;
 		}
 		box.hidden = false;
 		if ( 'function' === typeof shared.setUpCodes ) {
@@ -278,7 +279,11 @@
 			}
 			pending = null;
 			clearError();
-			find( '#happyaccess-twostep' ).focus();
+			// The profile's heading, or in My Account the section itself.
+			var top = document.getElementById( 'happyaccess-twostep' );
+			if ( top ) {
+				top.focus();
+			}
 		},
 		done: reload,
 	};
@@ -305,7 +310,7 @@
 		}
 		// Enter would submit the profile form around the section.
 		event.preventDefault();
-		var primary = box.querySelector( '.button-primary[data-happyaccess-action]' );
+		var primary = box.querySelector( '[data-happyaccess-primary]' );
 		if ( primary && ! primary.disabled ) {
 			primary.click();
 		}

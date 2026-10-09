@@ -189,10 +189,10 @@ final class SetupSteps {
 	private static function handle_done( \WP_User $user, array $pending, $hash, array $state, array $carry, $post ) {
 		$carry['method'] = $state['done'];
 		if ( null === $post || 'continue' !== self::text( $post, self::FIELD ) ) {
-			return self::done_screen( $carry );
+			return self::done_screen( $user, $carry );
 		}
 		if ( ! self::nonce_ok( $post ) ) {
-			return self::done_screen( $carry, self::expired_page() );
+			return self::done_screen( $user, $carry, self::expired_page() );
 		}
 		self::drop_state( $hash );
 		return Challenge::finish( $user, $pending, $carry );
@@ -607,9 +607,10 @@ final class SetupSteps {
 	 * @param string[] $codes    Plain backup codes.
 	 * @param bool     $required Whether the browser requires the check.
 	 * @param string   $heading  Heading element: h2 on the login screen, h3 inside the profile section.
+	 * @param string   $button   Classes of Copy and Download, for My Account's theme buttons.
 	 * @return string
 	 */
-	public static function codes_block( array $codes, $required, $heading = 'h2' ) {
+	public static function codes_block( array $codes, $required, $heading = 'h2', $button = 'button' ) {
 		$heading = 'h3' === $heading ? 'h3' : 'h2';
 		$site    = wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
 		$host    = (string) wp_parse_url( home_url(), PHP_URL_HOST );
@@ -623,8 +624,8 @@ final class SetupSteps {
 		$body .= '<p><strong>' . esc_html__( "These codes won't be shown again.", 'happyaccess' ) . '</strong></p>';
 		$body .= '<ul class="happyaccess-ts-codes" id="happyaccess-ts-codes">' . $items . '</ul>';
 		$body .= '<p class="happyaccess-ts-tools" hidden>';
-		$body .= '<button type="button" class="button" data-happyaccess-copy>' . esc_html__( 'Copy', 'happyaccess' ) . '</button> ';
-		$body .= '<button type="button" class="button" data-happyaccess-download data-filename="' . esc_attr( 'backup-codes-' . sanitize_file_name( '' !== $host ? $host : 'site' ) . '.txt' ) . '" data-heading="' . esc_attr(
+		$body .= '<button type="button" class="' . esc_attr( $button ) . '" data-happyaccess-copy>' . esc_html__( 'Copy', 'happyaccess' ) . '</button> ';
+		$body .= '<button type="button" class="' . esc_attr( $button ) . '" data-happyaccess-download data-filename="' . esc_attr( 'backup-codes-' . sanitize_file_name( '' !== $host ? $host : 'site' ) . '.txt' ) . '" data-heading="' . esc_attr(
 			sprintf(
 				/* translators: %s: site name. */
 				__( 'Two-step login backup codes for %s', 'happyaccess' ),
@@ -638,18 +639,20 @@ final class SetupSteps {
 	}
 
 	/**
-	 * The screen after setup when the codes were already shown.
+	 * The screen after setup when the codes were already shown. The link goes
+	 * to My Account for a user WooCommerce keeps out of wp-admin.
 	 *
+	 * @param \WP_User       $user   The user.
 	 * @param array          $carry  Carried values, with method.
 	 * @param \WP_Error|null $errors Errors to show, already escaped.
 	 * @return array
 	 */
-	private static function done_screen( array $carry, $errors = null ) {
+	private static function done_screen( \WP_User $user, array $carry, $errors = null ) {
 		$body  = self::form_open( 'happyaccess-ts-codes-form' );
 		$body .= '<p>' . sprintf(
-			/* translators: %s: link to the two-step section of the profile. */
+			/* translators: %s: link to the two-step section of the profile or the account page. */
 			esc_html__( "Your backup codes were shown once. If you didn't save them, make new ones on %s.", 'happyaccess' ),
-			'<a href="' . esc_url( Profile::url() ) . '">' . esc_html__( 'your profile', 'happyaccess' ) . '</a>'
+			Profile::link_for( $user )
 		) . '</p>';
 		$body .= self::hidden( 'continue', $carry );
 		$body .= '<p class="submit"><input type="submit" class="button button-primary button-large" value="' . esc_attr__( 'Continue', 'happyaccess' ) . '" /></p>';

@@ -17,6 +17,12 @@ final class Features {
 	const ALL = array( 'support_access', 'passwordless', 'two_step' );
 
 	/**
+	 * Non-autoloaded flag: the rewrite rules need a flush on the next init,
+	 * once the My Account endpoint of two-step login is registered.
+	 */
+	const REWRITE_FLUSH_OPTION = 'happyaccess_rewrite_flush';
+
+	/**
 	 * Whether a feature is on.
 	 *
 	 * @param string $feature Feature key.
@@ -39,5 +45,20 @@ final class Features {
 		}
 		Settings::update( array( 'features' => array( $feature => (bool) $enabled ) ) );
 		return true;
+	}
+
+	/**
+	 * Asks for one rewrite flush on the next request. Two-step login adds a
+	 * My Account endpoint, and its rules only exist once the rules are
+	 * built again with it registered.
+	 *
+	 * @return void
+	 */
+	public static function request_rewrite_flush() {
+		Internal::run(
+			static function () {
+				update_option( self::REWRITE_FLUSH_OPTION, '1', false );
+			}
+		);
 	}
 }
