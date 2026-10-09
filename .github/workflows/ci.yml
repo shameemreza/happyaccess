@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phpcs:
+    name: PHPCS and PHPCompatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Composer packages
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: PHPCS
+        run: vendor/bin/phpcs -q
+
+      - name: PHPCompatibility (PHP 7.4 and later)
+        run: composer lint:compat
+
+  js:
+    name: JavaScript tests, lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The repo pins Node in .nvmrc. @wordpress/scripts 36 needs Node 22.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: JavaScript tests
+        run: npm run test:js
+
+      - name: Lint JavaScript
+        run: npm run lint:js
+
+      - name: Lint styles
+        run: npm run lint:css
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle size
+        run: npm run size
+
+  phpunit:
+    name: PHPUnit on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: [ '7.4', '8.4' ]
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # Composer stops a script after 300 seconds unless told otherwise.
+      COMPOSER_PROCESS_TIMEOUT: 0
+      WP_CORE_DIR: /tmp/wordpress
+      WP_TESTS_DB_NAME: happyaccess_tests
+      WP_TESTS_DB_USER: root
+      WP_TESTS_DB_HOST: 127.0.0.1
+      # The My Account tests load WooCommerce from next to HappyAccess. This
+      # is the version they were last checked against.
+      WOOCOMMERCE_VERSION: 11.1.2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # The reCAPTCHA form tests run in jsdom, and they fail instead of
+      # skipping when CI is set and the npm packages are missing.
+      - name: Install npm packages
+        run: npm ci
+
+      # The release test needs the build files.
+      - name: Build
+        run: npm run build
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, sodium, openssl
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Composer packages
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # WordPress core matches the wp-phpunit test library Composer installed.
+      - name: Install WordPress and the test database
+        run: bin/install-wp-tests.sh "$WP_TESTS_DB_NAME" "$WP_TESTS_DB_USER" "$WP_TESTS_DB_HOST" "$(composer show wp-phpunit/wp-phpunit --format=json | jq -r '.versions[0]')"
+
+      - name: Install WooCommerce for the My Account tests
+        run: |
+          curl -fsSL "https://downloads.wordpress.org/plugin/woocommerce.${WOOCOMMERCE_VERSION}.zip" -o /tmp/woocommerce.zip
+          unzip -q /tmp/woocommerce.zip -d "$WP_CORE_DIR/wp-content/plugins/"
+
+      - name: PHPUnit, single site
+        run: composer test
+
+      - name: PHPUnit, multisite
+        run: composer test:multisite
+
+      - name: Release files
+        run: composer test:release

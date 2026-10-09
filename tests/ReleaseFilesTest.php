@@ -3,10 +3,44 @@
  * Release file tests: the version in every place, and what the .distignore
  * lets into the zip.
  *
+ * A normal run checks the build files only when a build exists. Set
+ * HAPPYACCESS_RELEASE_TEST (composer test:release does) to make a missing
+ * build fail.
+ *
  * @package HappyAccess
  */
 
 class ReleaseFilesTest extends WP_UnitTestCase {
+
+	/**
+	 * The files npm run build writes, all of which ship.
+	 */
+	const BUILD_FILES = array( 'build/index.js', 'build/index.asset.php', 'build/style-index.css', 'build/blocks.js', 'build/blocks.asset.php' );
+
+	/**
+	 * Repo-only files that must stay out of the zip.
+	 */
+	const REPO_ONLY = array( 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md', '.github/workflows/ci.yml', '.github/ISSUE_TEMPLATE/bug_report.yml', '.github/ISSUE_TEMPLATE/feature_request.yml', '.github/ISSUE_TEMPLATE/config.yml', 'bin/install-wp-tests.sh' );
+
+	/**
+	 * Whether this is a release run, where the build must exist.
+	 *
+	 * @return bool
+	 */
+	private function release_run() {
+		return (bool) getenv( 'HAPPYACCESS_RELEASE_TEST' );
+	}
+
+	/**
+	 * The Version field of the plugin header.
+	 *
+	 * @return string
+	 */
+	private function header_version() {
+		$header = get_file_data( $this->root() . 'happyaccess.php', array( 'version' => 'Version' ) );
+		$this->assertMatchesRegularExpression( '/^\d+\.\d+\.\d+$/', $header['version'] );
+		return $header['version'];
+	}
 
 	/**
 	 * Plugin root, with a trailing slash.
@@ -45,15 +79,21 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 	}
 
 	public function test_the_version_is_the_same_in_the_header_the_constant_package_json_and_the_readme() {
-		$header  = get_file_data( $this->root() . 'happyaccess.php', array( 'version' => 'Version' ) );
+		$version = $this->header_version();
 		$package = json_decode( (string) file_get_contents( $this->root() . 'package.json' ), true );
 		$readme  = $this->readme_headers();
 
-		$this->assertSame( '1.1.0', $header['version'] );
-		$this->assertSame( $header['version'], $this->constant_in_main_file() );
-		$this->assertSame( $header['version'], $package['version'] );
-		$this->assertSame( $header['version'], $readme['stable'] );
-		$this->assertSame( $header['version'], HAPPYACCESS_VERSION, 'tests/load-plugin.php defines another version' );
+		$this->assertSame( $version, $this->constant_in_main_file() );
+		$this->assertSame( $version, $package['version'] );
+		$this->assertSame( $version, $readme['stable'] );
+		$this->assertSame( $version, HAPPYACCESS_VERSION, 'tests/load-plugin.php defines another version' );
+	}
+
+	public function test_the_changelog_starts_with_the_header_version() {
+		$changelog = (string) file_get_contents( $this->root() . 'CHANGELOG.md' );
+
+		$this->assertSame( 1, preg_match( '/^## (\S+)/m', $changelog, $match ) );
+		$this->assertSame( $this->header_version(), $match[1] );
 	}
 
 	public function test_the_header_describes_the_three_features_in_plain_words() {
@@ -141,7 +181,7 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 
 	public function test_the_distignore_names_the_folders_and_files_kept_out_of_the_release() {
 		$patterns = $this->distignore_patterns();
-		foreach ( array( '/.superpowers', '/_trash', '/.claude', '/review-repro', '/patches', '/admin-app', '/tests', '/vitest*', '/phpcs.xml.dist', '/node_modules', '/vendor' ) as $required ) {
+		foreach ( array( '/.superpowers', '/_trash', '/.claude', '/.github', '/bin', '/review-repro', '/patches', '/admin-app', '/tests', '/vitest*', '/phpcs.xml.dist', '/node_modules', '/vendor', '/README.md', '/SECURITY.md', '/CONTRIBUTING.md', '/CHANGELOG.md' ) as $required ) {
 			$this->assertContains( $required, $patterns );
 		}
 	}
@@ -151,7 +191,7 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 
 		$this->assertNotEmpty( $files );
 		foreach ( $files as $file ) {
-			foreach ( array( 'tests/', 'admin-app/', 'vendor/', 'node_modules/', '_trash/', 'review-repro/', 'patches/' ) as $folder ) {
+			foreach ( array( 'tests/', 'admin-app/', 'vendor/', 'node_modules/', '_trash/', 'review-repro/', 'patches/', 'bin/' ) as $folder ) {
 				$this->assertStringStartsNotWith( $folder, $file );
 			}
 			foreach ( explode( '/', $file ) as $part ) {
@@ -178,11 +218,41 @@ class ReleaseFilesTest extends WP_UnitTestCase {
 			'assets/vendor/qrcode-LICENSE.txt',
 			'languages/happyaccess.pot',
 		);
-		if ( is_readable( $this->root() . 'build/index.js' ) ) {
-			$kept = array_merge( $kept, array( 'build/index.js', 'build/index.asset.php', 'build/style-index.css', 'build/blocks.js', 'build/blocks.asset.php' ) );
+		if ( $this->release_run() ) {
+			foreach ( self::BUILD_FILES as $file ) {
+				$this->assertFileExists( $this->root() . $file, 'A release needs the build. Run npm run build first.' );
+			}
+		}
+		if ( $this->release_run() || is_readable( $this->root() . 'build/index.js' ) ) {
+			$kept = array_merge( $kept, self::BUILD_FILES );
 		}
 		foreach ( $kept as $file ) {
 			$this->assertContains( $file, $files );
+		}
+	}
+
+	public function test_the_release_holds_only_the_allowed_top_level_entries() {
+		$top = array();
+		foreach ( $this->dist_files( $this->distignore_patterns() ) as $file ) {
+			$top[] = explode( '/', $file )[0];
+		}
+		$top = array_values( array_unique( $top ) );
+		sort( $top );
+
+		$allowed = array( 'assets', 'blocks', 'happyaccess.php', 'languages', 'readme.txt', 'src', 'templates', 'uninstall.php' );
+		if ( $this->release_run() || is_dir( $this->root() . 'build' ) ) {
+			$allowed[] = 'build';
+			sort( $allowed );
+		}
+		$this->assertSame( $allowed, $top );
+	}
+
+	public function test_the_repo_only_files_exist_and_stay_out_of_the_release() {
+		$files = $this->dist_files( $this->distignore_patterns() );
+
+		foreach ( self::REPO_ONLY as $file ) {
+			$this->assertFileExists( $this->root() . $file );
+			$this->assertNotContains( $file, $files );
 		}
 	}
 }

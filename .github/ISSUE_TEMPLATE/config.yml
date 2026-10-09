@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security issue
+    url: https://github.com/shameemreza/happyaccess/security/policy
+    about: Please report security issues privately, not in a public issue.
+  - name: Get help with HappyAccess
+    url: https://wordpress.org/support/plugin/happyaccess/
+    about: For questions about setting it up or using it, the WordPress.org support forum is the best place.

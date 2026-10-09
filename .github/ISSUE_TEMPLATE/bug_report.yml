@@ -1,0 +1,120 @@
+name: Bug report
+description: Something in HappyAccess doesn't work the way it should.
+labels: [ "bug" ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The more detail you add, the faster I can reproduce it.
+
+        Found a security issue? Please don't post it here. Report it privately through the [security policy](https://github.com/shameemreza/happyaccess/security/policy).
+
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Which part of HappyAccess?
+      options:
+        - Temporary access
+        - Passwordless login
+        - Two-step login
+        - New device alerts
+        - Admin screen or settings
+        - WP-CLI
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, including any error message, word for word.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Start from a fresh page load if you can.
+      placeholder: |
+        1. Go to Users > HappyAccess.
+        2. Create a pass with ...
+        3. Open the link in a private window.
+        4. See the error.
+    validations:
+      required: true
+
+  - type: input
+    id: happyaccess-version
+    attributes:
+      label: HappyAccess version
+      placeholder: "1.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: wp-version
+    attributes:
+      label: WordPress version
+      placeholder: "7.1"
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      description: Tools > Site Health > Info > Server shows it.
+      placeholder: "8.3"
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: Who hosts the site, or the local tool you use (Herd, wp-env, Local).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: multisite
+    attributes:
+      label: Is it a multisite?
+      options:
+        - "No"
+        - Yes, network activated
+        - Yes, activated on one site
+    validations:
+      required: true
+
+  - type: textarea
+    id: plugins
+    attributes:
+      label: Other plugins that might be involved
+      description: Security, login, two-step, cache and hidden login URL plugins matter most here.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Anything from the PHP error log or the browser console. Remove codes, links and email addresses first.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the open and closed issues, and this isn't one of them.
+          required: true
+        - label: This isn't a security issue.
+          required: true

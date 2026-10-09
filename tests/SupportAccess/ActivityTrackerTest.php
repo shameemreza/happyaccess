@@ -90,14 +90,15 @@ class ActivityTrackerTest extends WP_UnitTestCase {
 
 	public function test_plugin_activation_is_tracked() {
 		wp_set_current_user( $this->temp );
-		do_action( 'activated_plugin', 'hello.php', false );
-		$this->assertContains( 'Activated plugin: hello.php', $this->summaries() );
+		// A file no install has, so the summary falls back to the file name on any WordPress.
+		do_action( 'activated_plugin', 'happyaccess-missing/missing.php', false );
+		$this->assertContains( 'Activated plugin: happyaccess-missing/missing.php', $this->summaries() );
 	}
 
 	public function test_plugin_deactivation_is_tracked() {
 		wp_set_current_user( $this->temp );
-		do_action( 'deactivated_plugin', 'hello.php', false );
-		$this->assertContains( 'Deactivated plugin: hello.php', $this->summaries() );
+		do_action( 'deactivated_plugin', 'happyaccess-missing/missing.php', false );
+		$this->assertContains( 'Deactivated plugin: happyaccess-missing/missing.php', $this->summaries() );
 	}
 
 	public function test_theme_switch_is_tracked() {
