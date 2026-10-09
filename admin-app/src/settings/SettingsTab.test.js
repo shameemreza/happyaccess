@@ -727,6 +727,45 @@ describe( 'Settings tab', () => {
 			expect( liveText() ).toBe( 'Two-step login turned off' );
 		} );
 
+		it( 'shows the network note in place of the switch on a subsite of a network-active install', async () => {
+			const { container } = await renderTab( {
+				twoStepNetwork: 'main',
+			} );
+
+			expect(
+				screen.queryByRole( 'switch', { name: 'Two-step login' } )
+			).not.toBeInTheDocument();
+			// The notice also speaks its text, so look inside the tab only.
+			expect(
+				within( container ).getByText(
+					"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site."
+				)
+			).toBeInTheDocument();
+			// Temporary access and passwordless login stay per site.
+			expect(
+				screen.getByRole( 'switch', { name: 'Temporary access' } )
+			).toBeInTheDocument();
+			expect(
+				screen.getByRole( 'switch', { name: 'Passwordless login' } )
+			).toBeInTheDocument();
+
+			expect( await axe( container ) ).toHaveNoViolations();
+		} );
+
+		it( 'keeps the switch on the main site and on a subdirectory network', async () => {
+			const main = await renderTab( { twoStepNetwork: '' } );
+			expect( twoStepSwitch() ).toBeInTheDocument();
+			main.unmount();
+
+			const { container } = await renderTab( {
+				twoStepNetwork: 'subdir',
+			} );
+			expect( twoStepSwitch() ).toBeInTheDocument();
+			expect(
+				within( container ).queryByText( /whole network/ )
+			).not.toBeInTheDocument();
+		} );
+
 		it( 'has no accessibility violations with the question open', async () => {
 			const user = userEvent.setup();
 			const { container } = await renderTab( {

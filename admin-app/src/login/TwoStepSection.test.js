@@ -74,6 +74,8 @@ const RECOVERY =
 const DISABLE_LINE = "define( 'HAPPYACCESS_DISABLE_TWOSTEP', true );";
 const REQUIRED_NOTE =
 	'People in these roles set up two-step login the next time they log in.';
+const NETWORK_NOTE =
+	"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.";
 
 async function renderSection( bootData = boot() ) {
 	const view = render(
@@ -391,9 +393,7 @@ describe( 'Two-step section', () => {
 	it( 'says when the main site sets two-step login for the whole network', async () => {
 		const main = await renderSection( boot( { twoStepNetwork: 'main' } ) );
 		expect(
-			within( main.container ).getByText(
-				"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Changes here don't apply."
-			)
+			within( main.container ).getByText( NETWORK_NOTE )
 		).toBeInTheDocument();
 		main.unmount();
 
@@ -411,6 +411,40 @@ describe( 'Two-step section', () => {
 		expect(
 			within( single.container ).queryByText( /whole network/ )
 		).not.toBeInTheDocument();
+	} );
+
+	it( 'shows the network note in place of the form on a subsite of a network-active install', async () => {
+		mockServer(
+			settingsFixture( {
+				two_step: twoStep( { role_policy: { editor: 'required' } } ),
+			} )
+		);
+		const { container } = await renderSection(
+			boot( { twoStepNetwork: 'main' } )
+		);
+
+		expect(
+			within( container ).getByText( NETWORK_NOTE )
+		).toBeInTheDocument();
+		expect( container.querySelector( 'form' ) ).toBeNull();
+		expect( screen.queryByRole( 'combobox' ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'checkbox' ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'switch' ) ).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole( 'button', { name: 'Save changes' } )
+		).not.toBeInTheDocument();
+		expect( screen.queryByText( REQUIRED_NOTE ) ).not.toBeInTheDocument();
+		// Recovery works on every site, so it still shows.
+		expect( screen.getByText( DISABLE_LINE ) ).toBeInTheDocument();
+
+		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+
+	it( 'keeps the form on the main site and on a single site', async () => {
+		const single = await renderSection( boot( { twoStepNetwork: '' } ) );
+		expect( saveButton() ).toBeInTheDocument();
+		expect( screen.getAllByRole( 'combobox' ).length ).toBeGreaterThan( 0 );
+		single.unmount();
 	} );
 
 	it( 'has no accessibility violations, with the notes showing', async () => {

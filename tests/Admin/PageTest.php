@@ -215,6 +215,20 @@ class PageTest extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * The app hides the two-step controls only for 'main'. The network
+	 * values are covered in NetworkSettingsTest, under composer test:multisite.
+	 */
+	public function test_boot_data_leaves_the_two_step_controls_editable_on_a_single_site() {
+		if ( is_multisite() ) {
+			$this->markTestSkipped( 'Single site only.' );
+		}
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_site_option( 'active_sitewide_plugins', array( HAPPYACCESS_PLUGIN_BASENAME => time() ) );
+
+		$this->assertSame( '', Page::boot_data()['twoStepNetwork'] );
+	}
+
 	public function test_boot_data_says_when_another_two_step_plugin_is_active() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$this->assertFalse( Page::boot_data()['otherTwoFactor'] );

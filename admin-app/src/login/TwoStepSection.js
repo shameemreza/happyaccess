@@ -16,6 +16,7 @@ import {
 	graceOptions,
 	graceSettings,
 	graceValue,
+	networkNote,
 	otherPluginsNotice,
 	roleChoices,
 	sameRoles,
@@ -119,6 +120,26 @@ export default function TwoStepSection( { boot } ) {
 
 	if ( ! settings ) {
 		return null;
+	}
+
+	// The main site's settings rule here, so there is nothing to edit.
+	if ( 'main' === boot?.twoStepNetwork ) {
+		return (
+			<section
+				className="ha-card"
+				aria-labelledby={ `${ ids }-twostep-title` }
+			>
+				<div className="ha-card__body ha-settings__form">
+					<h2 id={ `${ ids }-twostep-title` }>
+						{ __( 'Two-step login', 'happyaccess' ) }
+					</h2>
+					<Notice status="info" isDismissible={ false }>
+						{ networkNote() }
+					</Notice>
+					<RecoveryNote />
+				</div>
+			</section>
+		);
 	}
 
 	const stored = settings.two_step || {};
@@ -245,14 +266,6 @@ export default function TwoStepSection( { boot } ) {
 				<h2 id={ `${ ids }-twostep-title` }>
 					{ __( 'Two-step login', 'happyaccess' ) }
 				</h2>
-				{ 'main' === boot?.twoStepNetwork && (
-					<Notice status="info" isDismissible={ false }>
-						{ __(
-							"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Changes here don't apply.",
-							'happyaccess'
-						) }
-					</Notice>
-				) }
 				{ 'subdir' === boot?.twoStepNetwork && (
 					<Notice status="warning" isDismissible={ false }>
 						{ __(

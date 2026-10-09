@@ -165,3 +165,16 @@ export function otherPluginsQuestion( names ) {
 		listNames( names )
 	);
 }
+
+/**
+ * Shown on a subsite while HappyAccess is network active, in place of the
+ * two-step controls: the main site's settings apply there.
+ *
+ * @return {string} The note.
+ */
+export function networkNote() {
+	return __(
+		"HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site.",
+		'happyaccess'
+	);
+}

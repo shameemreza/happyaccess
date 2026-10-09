@@ -185,6 +185,7 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 							<SettingsTab
 								onFeaturesChange={ updateFeatures }
 								otherTwoStep={ appBoot.otherTwoStep }
+								twoStepNetwork={ appBoot.twoStepNetwork }
 							/>
 						) }
 						{ ! [

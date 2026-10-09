@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-09T10:06:50+00:00\n"
+"POT-Creation-Date: 2026-10-09T10:18:02+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: happyaccess\n"
@@ -2887,6 +2887,10 @@ msgstr ""
 msgid "%1$s and %2$s"
 msgstr ""
 
+#: build/index.js:25
+msgid "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Change them on the main site."
+msgstr ""
+
 #. translators: 1: a role, as a group of people, like "Administrators". 2: users with two-step login on. 3: all users with the role.
 #: build/index.js:26
 #, js-format
@@ -2949,10 +2953,6 @@ msgstr ""
 
 #: build/index.js:29
 msgid "Required"
-msgstr ""
-
-#: build/index.js:29
-msgid "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Changes here don't apply."
 msgstr ""
 
 #: build/index.js:29

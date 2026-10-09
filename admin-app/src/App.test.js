@@ -184,6 +184,19 @@ describe( 'App shell', () => {
 		expect( screen.getByLabelText( 'Administrator' ) ).toBeInTheDocument();
 	} );
 
+	it( 'gives the Settings tab the network flag, so a subsite has no two-step switch', async () => {
+		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
+		render( <App boot={ boot( { twoStepNetwork: 'main' } ) } /> );
+		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
+
+		expect(
+			screen.queryByRole( 'switch', { name: 'Two-step login' } )
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole( 'switch', { name: 'Passwordless login' } )
+		).toBeInTheDocument();
+	} );
+
 	it( 'shows the Login tab when Passwordless is switched on in Settings, and hides it when it is switched off', async () => {
 		window.localStorage.setItem( 'happyaccess.tab', 'settings' );
 		const user = userEvent.setup();

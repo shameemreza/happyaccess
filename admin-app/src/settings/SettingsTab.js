@@ -10,7 +10,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useSettings } from '../data/DataProvider';
 import { useAnnounce } from '../hooks/useAnnounce';
 import LoadingLine from '../LoadingLine';
-import { otherPluginsQuestion } from '../login/twoStepModel';
+import { networkNote, otherPluginsQuestion } from '../login/twoStepModel';
 import { InlineConfirm } from '../support/GrantRow';
 import LoginPreview from './LoginPreview';
 import {
@@ -64,15 +64,19 @@ function endedText( count ) {
  * access off asks first, since it ends every pass, and so does turning
  * two-step login on while another two-step plugin is active. Everything
  * else waits for "Save changes", which sends only the keys that changed.
+ * On a subsite of a network-active install the main site's two-step
+ * setting applies, so a note takes the place of the two-step switch.
  *
  * @param {Object}                     props                  Props.
  * @param {(features: Object) => void} props.onFeaturesChange Called with the saved feature switches.
  * @param {string[]}                   props.otherTwoStep     Names of the active two-step plugins of other vendors.
+ * @param {string}                     props.twoStepNetwork   'main' on a subsite that follows the main site.
  * @return {Element} The tab.
  */
 export default function SettingsTab( {
 	onFeaturesChange = noop,
 	otherTwoStep = NONE,
+	twoStepNetwork = '',
 } ) {
 	const announce = useAnnounce();
 	const { settings, loading, saving, error, refresh, save } = useSettings();
@@ -139,6 +143,7 @@ export default function SettingsTab( {
 	const supportOn = !! saved( 'features.support_access' );
 	const passwordlessOn = !! saved( 'features.passwordless' );
 	const twoStepOn = !! saved( 'features.two_step' );
+	const twoStepShared = 'main' === twoStepNetwork;
 	const otherNames = Array.isArray( otherTwoStep ) ? otherTwoStep : NONE;
 	const patch = buildPatch( edits );
 	const recaptchaOn = !! val( 'security.recaptcha_enabled' );
@@ -448,14 +453,25 @@ export default function SettingsTab( {
 										'happyaccess'
 									) }
 								</div>
+								{ twoStepShared && (
+									<Notice
+										className="ha-feature__note"
+										status="info"
+										isDismissible={ false }
+									>
+										{ networkNote() }
+									</Notice>
+								) }
 							</div>
-							<Switch
-								ref={ twoStepRef }
-								checked={ twoStepOn }
-								onChange={ onTwoStepSwitch }
-								aria-labelledby={ `${ ids }-twostep-name` }
-								aria-describedby={ `${ ids }-twostep-desc` }
-							/>
+							{ ! twoStepShared && (
+								<Switch
+									ref={ twoStepRef }
+									checked={ twoStepOn }
+									onChange={ onTwoStepSwitch }
+									aria-labelledby={ `${ ids }-twostep-name` }
+									aria-describedby={ `${ ids }-twostep-desc` }
+								/>
+							) }
 						</li>
 					</ul>
 					{ confirmOff && (
