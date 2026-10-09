@@ -9,15 +9,15 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-09T19:29:11+00:00\n"
+"POT-Creation-Date: 2026-10-09T20:02:09+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: happyaccess\n"
 
 #. Plugin Name of the plugin
 #: happyaccess.php
-#: src/Admin/Page.php:113
-#: src/Admin/Page.php:114
+#: src/Admin/Page.php:143
+#: src/Admin/Page.php:144
 #: src/Core/Privacy.php:193
 #: src/Core/Privacy.php:207
 #: build/index.js:2
@@ -46,14 +46,14 @@ msgid "https://shameem.dev/"
 msgstr ""
 
 #. translators: %d: number of support passes ended.
-#: src/Admin/Page.php:83
+#: src/Admin/Page.php:124
 #, php-format
 msgid "Emergency lock ended %d support pass."
 msgid_plural "Emergency lock ended %d support passes."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/Page.php:263
+#: src/Admin/Page.php:293
 msgid "The HappyAccess admin app is not built yet. Run npm ci and npm run build in the plugin folder."
 msgstr ""
 
@@ -285,7 +285,7 @@ msgid "Two-step login setup put off"
 msgstr ""
 
 #: src/Core/EventLabels.php:96
-#: src/Features/TwoStep/Challenge.php:1837
+#: src/Features/TwoStep/Challenge.php:1873
 #: templates/emails/twostep-site-alert.php:13
 msgid "Many wrong two-step login codes"
 msgstr ""
@@ -736,8 +736,8 @@ msgstr ""
 
 #: src/Core/Privacy.php:370
 #: src/Core/SettingLabels.php:39
-#: src/Features/TwoStep/Challenge.php:1622
-#: src/Features/TwoStep/Challenge.php:1648
+#: src/Features/TwoStep/Challenge.php:1658
+#: src/Features/TwoStep/Challenge.php:1684
 #: src/Features/TwoStep/MyAccount.php:106
 #: src/Features/TwoStep/Profile.php:409
 #: src/Features/TwoStep/Profile.php:597
@@ -973,22 +973,21 @@ msgstr ""
 msgid "Turned off %s"
 msgstr ""
 
-#: src/Features/Passwordless/Forms.php:197
+#: src/Features/Passwordless/Forms.php:203
 #: src/Features/Passwordless/LoginSteps.php:251
 msgid "Enter your email or username."
 msgstr ""
 
-#: src/Features/Passwordless/Forms.php:198
+#: src/Features/Passwordless/Forms.php:204
 msgid "Enter the login code from your email."
 msgstr ""
 
-#: src/Features/Passwordless/Forms.php:199
+#: src/Features/Passwordless/Forms.php:205
 #: build/index.js:2
 msgid "Something went wrong. Try again."
 msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:112
-#: src/Features/Passwordless/RolePolicy.php:212
 #: templates/login/passwordless-form.php:54
 #: build/index.js:41
 msgid "Email me a login code"
@@ -996,8 +995,8 @@ msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:217
 #: src/Features/Passwordless/LoginSteps.php:320
-#: src/Features/TwoStep/Challenge.php:602
-#: src/Features/TwoStep/Challenge.php:1122
+#: src/Features/TwoStep/Challenge.php:608
+#: src/Features/TwoStep/Challenge.php:1158
 #: src/Features/TwoStep/Profile.php:206
 #: src/Features/TwoStep/SetupSteps.php:771
 msgid "This page expired. Try again."
@@ -1028,7 +1027,7 @@ msgstr ""
 #. translators: %d: minutes.
 #: src/Features/Passwordless/LoginSteps.php:835
 #: src/Features/SupportAccess/LoginSteps.php:490
-#: src/Features/TwoStep/Challenge.php:1953
+#: src/Features/TwoStep/Challenge.php:1989
 #: src/Features/TwoStep/RestController.php:549
 #, php-format
 msgid "Too many attempts. Try again in %d minute."
@@ -1037,7 +1036,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Features/Passwordless/LoginSteps.php:847
-#: src/Features/TwoStep/Challenge.php:1967
+#: src/Features/TwoStep/Challenge.php:2003
 msgid "Login is updating. Try again in a minute."
 msgstr ""
 
@@ -1082,14 +1081,14 @@ msgstr ""
 #: src/Features/Passwordless/LoginSteps.php:978
 #: src/Features/SupportAccess/LoginSteps.php:517
 #: src/Features/SupportAccess/LoginSteps.php:550
-#: src/Features/TwoStep/Challenge.php:1607
+#: src/Features/TwoStep/Challenge.php:1643
 #: templates/login/passwordless-form.php:45
 #: build/index.js:41
 msgid "Log in"
 msgstr ""
 
 #: src/Features/Passwordless/LoginSteps.php:942
-#: src/Features/TwoStep/Challenge.php:1696
+#: src/Features/TwoStep/Challenge.php:1732
 #: src/Features/TwoStep/Profile.php:643
 #: src/Features/TwoStep/SetupSteps.php:562
 msgid "Send a new code"
@@ -1144,12 +1143,6 @@ msgstr ""
 msgid "This request is not allowed."
 msgstr ""
 
-#. translators: %s: link with the text "Email me a login code".
-#: src/Features/Passwordless/RolePolicy.php:217
-#, php-format
-msgid "This account logs in with an email code. Use '%s' below."
-msgstr ""
-
 #: src/Features/SupportAccess/AccountGuard.php:147
 msgid "Temporary support accounts can't change account details."
 msgstr ""
@@ -1162,34 +1155,35 @@ msgstr ""
 msgid "Temporary support accounts can't authorize API access."
 msgstr ""
 
-#: src/Features/SupportAccess/AdminBar.php:57
+#: src/Features/SupportAccess/AdminBar.php:58
+#: src/Features/SupportAccess/Notifications.php:448
 #: build/index.js:30
 msgid "Emergency lock"
 msgstr ""
 
-#: src/Features/SupportAccess/AdminBar.php:83
+#: src/Features/SupportAccess/AdminBar.php:84
 msgid "Lock all temporary access now? This ends every support session and signs support out."
 msgstr ""
 
 #. translators: %s: time left, for example "2 hours".
-#: src/Features/SupportAccess/AdminBar.php:85
+#: src/Features/SupportAccess/AdminBar.php:86
 #: src/Features/SupportAccess/AdminBar.php:225
 #, php-format
 msgid "Temporary access ends in %s"
 msgstr ""
 
-#: src/Features/SupportAccess/AdminBar.php:86
+#: src/Features/SupportAccess/AdminBar.php:87
 #: src/Features/SupportAccess/AdminBar.php:226
 msgid "Temporary access has ended"
 msgstr ""
 
-#: src/Features/SupportAccess/AdminBar.php:87
-#: src/Features/SupportAccess/AdminBar.php:104
+#: src/Features/SupportAccess/AdminBar.php:88
+#: src/Features/SupportAccess/AdminBar.php:105
 msgid "less than a minute"
 msgstr ""
 
 #. translators: %d: number of minutes.
-#: src/Features/SupportAccess/AdminBar.php:134
+#: src/Features/SupportAccess/AdminBar.php:135
 #: assets/admin-bar.js:12
 #: build/index.js:4
 #, php-format,js-format
@@ -1199,7 +1193,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of hours.
-#: src/Features/SupportAccess/AdminBar.php:145
+#: src/Features/SupportAccess/AdminBar.php:146
 #: assets/admin-bar.js:16
 #: build/index.js:24
 #: build/index.js:63
@@ -1210,7 +1204,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of days.
-#: src/Features/SupportAccess/AdminBar.php:156
+#: src/Features/SupportAccess/AdminBar.php:157
 #: assets/admin-bar.js:20
 #: build/index.js:23
 #: build/index.js:33
@@ -1221,7 +1215,7 @@ msgid_plural "%d days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Features/SupportAccess/AdminBar.php:187
+#: src/Features/SupportAccess/AdminBar.php:188
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -1833,30 +1827,26 @@ msgstr ""
 msgid "Time ran out"
 msgstr ""
 
-#: src/Features/SupportAccess/Notifications.php:448
-msgid "Emergency Lock"
-msgstr ""
-
 #. translators: %s: label of the support grant.
 #: src/Features/SupportAccess/TempUsers.php:62
 #, php-format
 msgid "Temporary access: %s"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:320
+#: src/Features/TwoStep/Challenge.php:326
 msgid "Finish logging in with your two-step login code."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:677
+#: src/Features/TwoStep/Challenge.php:683
 msgid "Your login took too long. Log in again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:678
+#: src/Features/TwoStep/Challenge.php:684
 msgid "Too many wrong codes. Log in again."
 msgstr ""
 
 #. translators: 1: backup codes left, 2: link to where new ones are made.
-#: src/Features/TwoStep/Challenge.php:720
+#: src/Features/TwoStep/Challenge.php:726
 #, php-format
 msgid "You have %1$d backup code left. Make new ones on %2$s."
 msgid_plural "You have %1$d backup codes left. Make new ones on %2$s."
@@ -1864,86 +1854,86 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: backup codes left.
-#: src/Features/TwoStep/Challenge.php:728
+#: src/Features/TwoStep/Challenge.php:734
 #, php-format
 msgid "You have %d backup code left. Make new ones on your profile."
 msgid_plural "You have %d backup codes left. Make new ones on your profile."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Features/TwoStep/Challenge.php:797
+#: src/Features/TwoStep/Challenge.php:833
 msgid "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:800
+#: src/Features/TwoStep/Challenge.php:836
 msgid "Your role needs two-step login. Log in on the login page to set it up."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:802
+#: src/Features/TwoStep/Challenge.php:838
 msgid "This account uses two-step login. Log in on the login page."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:888
+#: src/Features/TwoStep/Challenge.php:924
 #: templates/emails/twostep-secret.php:12
 msgid "Authenticator app codes can't be checked"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1316
+#: src/Features/TwoStep/Challenge.php:1352
 #: src/Features/TwoStep/RestController.php:289
 msgid "That code didn't work. Try again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1393
+#: src/Features/TwoStep/Challenge.php:1429
 msgid "You have logged in successfully."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1590
+#: src/Features/TwoStep/Challenge.php:1626
 #: build/index.js:41
 msgid "Authenticator app code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1591
+#: src/Features/TwoStep/Challenge.php:1627
 #: src/Features/TwoStep/SetupSteps.php:535
 msgid "Email code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1592
+#: src/Features/TwoStep/Challenge.php:1628
 msgid "Backup code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1613
+#: src/Features/TwoStep/Challenge.php:1649
 #: src/Features/TwoStep/Profile.php:377
 #: src/Features/TwoStep/SetupSteps.php:407
 msgid "We sent a code to your email address."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1615
+#: src/Features/TwoStep/Challenge.php:1651
 #: src/Features/TwoStep/RestController.php:344
 msgid "We already sent several codes. Check your email, or wait a few minutes and try again."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1617
+#: src/Features/TwoStep/Challenge.php:1653
 msgid "Enter the code from your authenticator app."
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1649
+#: src/Features/TwoStep/Challenge.php:1685
 msgid "Log in again"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1693
+#: src/Features/TwoStep/Challenge.php:1729
 msgid "Use your authenticator app"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1696
+#: src/Features/TwoStep/Challenge.php:1732
 msgid "Email me a code instead"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1705
+#: src/Features/TwoStep/Challenge.php:1741
 #: build/index.js:41
 msgid "Use a backup code"
 msgstr ""
 
-#: src/Features/TwoStep/Challenge.php:1868
+#: src/Features/TwoStep/Challenge.php:1904
 #: templates/emails/twostep-account-lock-text.php:17
 #: templates/emails/twostep-account-lock.php:14
 msgid "Two-step login is paused for your account"
@@ -2392,7 +2382,7 @@ msgstr ""
 msgid "Another change to two-step login is running. Try again."
 msgstr ""
 
-#: src/Login/Session.php:77
+#: src/Login/Session.php:83
 msgid "Temporary support accounts sign in with their access link or code."
 msgstr ""
 
