@@ -18,8 +18,6 @@ export const AUTHOR_URL =
 export const RATE_URL =
 	'https://wordpress.org/support/plugin/happyaccess/reviews/#new-post';
 export const SUPPORT_URL = 'https://wordpress.org/support/plugin/happyaccess/';
-export const DOCS_URL =
-	'https://github.com/shameemreza/happyaccess/tree/main/docs';
 
 const VIEWS = [ 'early', 'ask', 'credit' ];
 
@@ -149,59 +147,37 @@ export default function AuthorCard() {
 
 	return (
 		<div className={ `ha-author ha-author--${ view }` }>
-			<div className="ha-author__top">
-				<img
-					className="ha-author__photo"
-					src={ context.photo }
-					alt=""
-					width="40"
-					height="40"
-				/>
-				<div className="ha-author__who">
-					<a
-						className="ha-author__name"
-						href={ AUTHOR_URL }
-						target="_blank"
-						rel="noopener noreferrer"
+			{ 'early' === view && (
+				<p className="ha-author__note">
+					<svg
+						className="ha-author__quote"
+						width="14"
+						height="11"
+						viewBox="0 0 14 11"
+						aria-hidden="true"
+						focusable="false"
 					>
-						{ __( 'Shameem Reza', 'happyaccess' ) }
-						<NewTabNote />
-					</a>
-					<div className="ha-author__role">
-						{ __( 'Built HappyAccess', 'happyaccess' ) }
-						<span aria-hidden="true"> · </span>
-						<a
-							href={ DOCS_URL }
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							{ __( 'Docs', 'happyaccess' ) }
-							<NewTabNote />
-						</a>
-						<span aria-hidden="true"> · </span>
-						<a
-							href={ SUPPORT_URL }
-							target="_blank"
-							rel="noopener noreferrer"
-						>
-							{ __( 'Support', 'happyaccess' ) }
-							<NewTabNote />
-						</a>
-					</div>
-				</div>
-			</div>
-			{ 'ask' === view && (
-				<Button
-					className="ha-author__hide"
-					icon={ close }
-					iconSize={ 16 }
-					size="small"
-					label={ __( 'Hide this', 'happyaccess' ) }
-					onClick={ () => choose( 'dismissed', 'credit' ) }
-				/>
+						<path
+							fill="currentColor"
+							d="M0 11V6.6C0 2.9 1.9.7 5.4 0l.6 1.6C4 2.2 3 3.4 2.9 5H6v6H0Zm8 0V6.6C8 2.9 9.9.7 13.4 0l.6 1.6C12 2.2 11 3.4 10.9 5H14v6H8Z"
+						/>
+					</svg>
+					{ __(
+						'I kept seeing admin passwords sent by email, and accounts nobody deleted. HappyAccess is my fix for that.',
+						'happyaccess'
+					) }
+				</p>
 			) }
 			{ 'ask' === view && (
 				<>
+					<Button
+						className="ha-author__hide"
+						icon={ close }
+						iconSize={ 16 }
+						size="small"
+						label={ __( 'Hide this', 'happyaccess' ) }
+						onClick={ () => choose( 'dismissed', 'credit' ) }
+					/>
 					<p className="ha-author__line">
 						{ __(
 							'Is HappyAccess helping you? A quick rating helps others find it.',
@@ -241,6 +217,41 @@ export default function AuthorCard() {
 					{ __( 'Thank you! That really helps.', 'happyaccess' ) }
 				</p>
 			) }
+			<div className="ha-author__sign">
+				<img
+					className="ha-author__photo"
+					src={ context.photo }
+					alt=""
+					width="28"
+					height="28"
+				/>
+				<span className="ha-author__by">
+					<a
+						className="ha-author__name"
+						href={ AUTHOR_URL }
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{ __( 'Shameem Reza', 'happyaccess' ) }
+						<NewTabNote />
+					</a>
+					<span className="ha-author__role">
+						<span aria-hidden="true"> · </span>
+						{ __( 'built HappyAccess', 'happyaccess' ) }
+					</span>
+				</span>
+				{ 'early' === view && (
+					<a
+						className="ha-author__forum"
+						href={ SUPPORT_URL }
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{ __( 'Questions? Ask in the forum', 'happyaccess' ) }
+						<NewTabNote />
+					</a>
+				) }
+			</div>
 		</div>
 	);
 }

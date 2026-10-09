@@ -100,76 +100,35 @@
 		margin-block-start: 24px;
 	}
 
+	// A short note from the maker, then the signature row under it.
 	.ha-author {
 		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 		padding: 12px 14px;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;
 		background: #fff;
 	}
 
-	.ha-author__top {
-		display: flex;
-		align-items: center;
-		gap: 12px;
+	.ha-author__note,
+	.ha-author__line {
+		margin: 0;
+		color: var(--ha-text);
+		font-size: 13px;
+		line-height: 1.5;
 	}
 
-	// Room for the close button, so the text never runs under it.
-	.ha-author--ask .ha-author__top {
+	// Room for the close button, so the rating line never runs under it.
+	.ha-author--ask .ha-author__line {
 		padding-inline-end: 24px;
 	}
 
-	.ha-author__photo {
-		flex-shrink: 0;
-		inline-size: 40px;
-		block-size: 40px;
-		border-radius: 50%;
-		object-fit: cover;
-	}
-
-	// Two lines, centered against the photo: the name, then the role line.
-	.ha-author__who {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-		line-height: 1.4;
-	}
-
-	.ha-author__name {
-		align-self: flex-start;
-		font-weight: 600;
-	}
-
-	.ha-author__role {
-		color: var(--ha-muted);
-		font-size: 12px;
-	}
-
-	.ha-author__role a {
-		color: var(--ha-muted);
-		text-decoration: underline;
-		white-space: nowrap;
-	}
-
-	.ha-author__role a:hover,
-	.ha-author__role a:focus {
-		color: var(--ha-text);
-	}
-
-	.ha-author-credit a {
-		font-weight: 500;
-	}
-
-	.ha-author__hide.components-button {
-		position: absolute;
-		inset-block-start: 6px;
-		inset-inline-end: 6px;
-		color: var(--ha-muted);
-	}
-
-	.ha-author__line {
-		margin: 10px 0 0;
-		color: var(--ha-text);
+	.ha-author__quote {
+		margin-inline-end: 6px;
+		vertical-align: 0;
+		color: #0e8a5f;
 	}
 
 	.ha-author__line:focus {
@@ -185,7 +144,60 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-		margin-block-start: 10px;
+	}
+
+	// The forum link sits at the end of the row, and wraps under it when
+	// the column is narrow.
+	.ha-author__sign {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 8px;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	.ha-author__photo {
+		flex-shrink: 0;
+		inline-size: 28px;
+		block-size: 28px;
+		border-radius: 50%;
+		object-fit: cover;
+	}
+
+	.ha-author__by {
+		min-width: 0;
+	}
+
+	.ha-author__name {
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.ha-author__role {
+		color: var(--ha-muted);
+	}
+
+	.ha-author__forum {
+		margin-inline-start: auto;
+		color: var(--ha-muted);
+		text-decoration: underline;
+	}
+
+	.ha-author__forum:hover,
+	.ha-author__forum:focus {
+		color: var(--ha-text);
+	}
+
+	.ha-author-credit a {
+		font-weight: 500;
+	}
+
+	.ha-author__hide.components-button {
+		position: absolute;
+		inset-block-start: 6px;
+		inset-inline-end: 6px;
+		color: var(--ha-muted);
 	}
 
 	.ha-author-credit {
@@ -198,7 +210,8 @@
 	.ha-header__help,
 	.ha-disclosure,
 	.ha-row__link,
-	.ha-active__foot a {
+	.ha-active__foot a,
+	.ha-author__forum {
 		display: inline-flex;
 		align-items: center;
 		min-height: 24px;
