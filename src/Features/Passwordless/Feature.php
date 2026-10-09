@@ -52,8 +52,15 @@ final class Feature {
 		}
 
 		add_filter( 'block_type_metadata', array( __CLASS__, 'block_metadata' ) );
-		register_block_type( HAPPYACCESS_PLUGIN_DIR . 'blocks/login' );
+		$block = register_block_type( HAPPYACCESS_PLUGIN_DIR . 'blocks/login' );
 		remove_filter( 'block_type_metadata', array( __CLASS__, 'block_metadata' ) );
+
+		// Core sets the text domain from block.json; this adds the bundled translations, as the admin app has.
+		if ( $block instanceof \WP_Block_Type ) {
+			foreach ( $block->editor_script_handles as $handle ) {
+				wp_set_script_translations( $handle, 'happyaccess', HAPPYACCESS_PLUGIN_DIR . 'languages' );
+			}
+		}
 	}
 
 	/**

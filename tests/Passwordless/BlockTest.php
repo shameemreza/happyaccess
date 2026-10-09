@@ -181,6 +181,19 @@ class PasswordlessBlockTest extends WP_UnitTestCase {
 		rmdir( $dir );
 	}
 
+	public function test_the_editor_script_loads_its_translations_from_the_plugin_languages_folder() {
+		if ( ! is_readable( HAPPYACCESS_PLUGIN_DIR . 'build/blocks.asset.php' ) ) {
+			$this->markTestSkipped( 'Run npm run build first.' );
+		}
+		$this->boot();
+
+		$handles = WP_Block_Type_Registry::get_instance()->get_registered( self::NAME )->editor_script_handles;
+		$this->assertNotEmpty( $handles );
+		$script = wp_scripts()->registered[ $handles[0] ];
+		$this->assertSame( 'happyaccess', $script->textdomain );
+		$this->assertSame( HAPPYACCESS_PLUGIN_DIR . 'languages', $script->translations_path );
+	}
+
 	/**
 	 * The editor preview runs through the REST block renderer as a logged-in
 	 * user, so the form must show there although the front end hides it.

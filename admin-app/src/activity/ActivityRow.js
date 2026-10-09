@@ -27,7 +27,7 @@ export default function ActivityRow( { item, expanded, onToggle } ) {
 		pass = item.pass;
 	} else if ( item.token_id > 0 ) {
 		pass = sprintf(
-			/* translators: %d: the id of a support pass that no longer exists. */
+			/* translators: %d: the id of a support pass. */
 			__( 'Pass #%d', 'happyaccess' ),
 			item.token_id
 		);

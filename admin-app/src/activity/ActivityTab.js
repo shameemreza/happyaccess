@@ -169,7 +169,7 @@ export default function ActivityTab( {
 		passLabel = picked.label;
 	} else if ( grantsLoaded ) {
 		passLabel = sprintf(
-			/* translators: %d: the id of a support pass that was revoked. */
+			/* translators: %d: the id of a support pass. */
 			__( 'Pass #%d', 'happyaccess' ),
 			passId
 		);

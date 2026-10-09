@@ -182,6 +182,8 @@ class PageTest extends WP_UnitTestCase {
 		$before = wp_scripts()->get_data( Page::HANDLE, 'before' );
 		$this->assertStringContainsString( 'window.happyaccessBoot = ', implode( '', (array) $before ) );
 		$this->assertContains( 'wp-components', wp_styles()->registered[ Page::HANDLE ]->deps );
+		$this->assertSame( 'happyaccess', wp_scripts()->registered[ Page::HANDLE ]->textdomain );
+		$this->assertSame( HAPPYACCESS_PLUGIN_DIR . 'languages', wp_scripts()->registered[ Page::HANDLE ]->translations_path );
 	}
 
 	public function test_nothing_enqueues_when_no_menu_was_registered() {

@@ -274,7 +274,7 @@ final class LoginSteps {
 				'token_id' => $grant['id'],
 				'user_id'  => $user_id,
 				'summary'  => sprintf(
-					/* translators: %s: grant label. */
+					/* translators: %s: label of the support grant. */
 					__( 'Temporary access used: %s', 'happyaccess' ),
 					$grant['label']
 				),

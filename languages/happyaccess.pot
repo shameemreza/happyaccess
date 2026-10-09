@@ -1,0 +1,4088 @@
+# Copyright (C) 2026 Shameem Reza
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: HappyAccess 1.1.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/happyaccess\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-10-09T10:06:50+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: happyaccess\n"
+
+#. Plugin Name of the plugin
+#: happyaccess.php
+#: src/Admin/Page.php:112
+#: src/Admin/Page.php:113
+#: src/Core/Privacy.php:191
+#: src/Core/Privacy.php:205
+#: build/index.js:2
+#: build/index.js:20
+msgid "HappyAccess"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: happyaccess.php
+msgid "https://wordpress.org/plugins/happyaccess"
+msgstr ""
+
+#. Description of the plugin
+#: happyaccess.php
+msgid "Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords."
+msgstr ""
+
+#. Author of the plugin
+#: happyaccess.php
+msgid "Shameem Reza"
+msgstr ""
+
+#. Author URI of the plugin
+#: happyaccess.php
+msgid "https://shameem.dev/"
+msgstr ""
+
+#. translators: %d: number of support passes ended.
+#: src/Admin/Page.php:82
+#, php-format
+msgid "Emergency lock ended %d support pass."
+msgid_plural "Emergency lock ended %d support passes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Admin/Page.php:262
+msgid "The HappyAccess admin app is not built yet. Run npm ci and npm run build in the plugin folder."
+msgstr ""
+
+#: src/Core/EventLabels.php:42
+msgid "Support pass created"
+msgstr ""
+
+#: src/Core/EventLabels.php:43
+msgid "Support pass extended"
+msgstr ""
+
+#: src/Core/EventLabels.php:44
+msgid "Support pass paused"
+msgstr ""
+
+#: src/Core/EventLabels.php:45
+msgid "Support pass resumed"
+msgstr ""
+
+#: src/Core/EventLabels.php:46
+msgid "Login details renewed"
+msgstr ""
+
+#: src/Core/EventLabels.php:47
+msgid "Support pass ended"
+msgstr ""
+
+#: src/Core/EventLabels.php:48
+msgid "Temporary user deleted"
+msgstr ""
+
+#: src/Core/EventLabels.php:49
+msgid "Temporary user could not be deleted"
+msgstr ""
+
+#: src/Core/EventLabels.php:50
+msgid "Access details emailed"
+msgstr ""
+
+#: src/Core/EventLabels.php:51
+msgid "Emergency Lock turned on"
+msgstr ""
+
+#: src/Core/EventLabels.php:52
+msgid "HappyAccess settings changed"
+msgstr ""
+
+#: src/Core/EventLabels.php:53
+msgid "Logged in"
+msgstr ""
+
+#: src/Core/EventLabels.php:54
+msgid "Login failed"
+msgstr ""
+
+#: src/Core/EventLabels.php:55
+msgid "Login blocked"
+msgstr ""
+
+#: src/Core/EventLabels.php:56
+msgid "Plugin activated"
+msgstr ""
+
+#: src/Core/EventLabels.php:57
+msgid "Plugin deactivated"
+msgstr ""
+
+#: src/Core/EventLabels.php:58
+msgid "Plugin deleted"
+msgstr ""
+
+#: src/Core/EventLabels.php:59
+msgid "Plugins or themes updated"
+msgstr ""
+
+#: src/Core/EventLabels.php:60
+msgid "Theme switched"
+msgstr ""
+
+#: src/Core/EventLabels.php:61
+msgid "Theme deleted"
+msgstr ""
+
+#: src/Core/EventLabels.php:62
+msgid "Content created"
+msgstr ""
+
+#: src/Core/EventLabels.php:63
+msgid "Content updated"
+msgstr ""
+
+#: src/Core/EventLabels.php:64
+msgid "Content moved to trash"
+msgstr ""
+
+#: src/Core/EventLabels.php:65
+msgid "Content deleted"
+msgstr ""
+
+#: src/Core/EventLabels.php:66
+#: build/index.js:29
+#: build/index.js:31
+#: build/index.js:61
+msgid "Settings saved"
+msgstr ""
+
+#: src/Core/EventLabels.php:67
+msgid "Order status changed"
+msgstr ""
+
+#: src/Core/EventLabels.php:68
+msgid "User updated"
+msgstr ""
+
+#: src/Core/EventLabels.php:69
+msgid "User created"
+msgstr ""
+
+#: src/Core/EventLabels.php:70
+msgid "User role changed"
+msgstr ""
+
+#: src/Core/EventLabels.php:71
+msgid "User role added"
+msgstr ""
+
+#: src/Core/EventLabels.php:72
+msgid "Role permissions changed"
+msgstr ""
+
+#: src/Core/EventLabels.php:73
+msgid "Role change blocked"
+msgstr ""
+
+#: src/Core/EventLabels.php:74
+msgid "Personal data erased"
+msgstr ""
+
+#: src/Core/EventLabels.php:75
+msgid "Webhook created"
+msgstr ""
+
+#: src/Core/EventLabels.php:76
+msgid "API key request blocked"
+msgstr ""
+
+#: src/Core/EventLabels.php:77
+msgid "Administrator account made"
+msgstr ""
+
+#: src/Core/EventLabels.php:78
+msgid "Administrator login details changed"
+msgstr ""
+
+#: src/Core/EventLabels.php:79
+msgid "Role given admin-level permissions"
+msgstr ""
+
+#: src/Core/EventLabels.php:80
+msgid "HappyAccess updated"
+msgstr ""
+
+#: src/Core/EventLabels.php:81
+#: src/Features/Passwordless/LoginSteps.php:207
+msgid "Login code requested"
+msgstr ""
+
+#: src/Core/EventLabels.php:82
+msgid "Logged in without a password"
+msgstr ""
+
+#: src/Core/EventLabels.php:83
+msgid "Passwordless login failed"
+msgstr ""
+
+#: src/Core/EventLabels.php:84
+msgid "Passwordless login locked"
+msgstr ""
+
+#: src/Core/EventLabels.php:85
+#: build/index.js:60
+msgid "Two-step login turned on"
+msgstr ""
+
+#: src/Core/EventLabels.php:86
+#: build/index.js:60
+msgid "Two-step login turned off"
+msgstr ""
+
+#: src/Core/EventLabels.php:87
+#: src/Features/TwoStep/UserState.php:580
+msgid "Two-step login passed"
+msgstr ""
+
+#: src/Core/EventLabels.php:88
+msgid "Two-step login failed"
+msgstr ""
+
+#: src/Core/EventLabels.php:89
+msgid "Two-step login locked"
+msgstr ""
+
+#: src/Core/EventLabels.php:90
+#: src/Features/TwoStep/UserState.php:275
+msgid "Two-step login reset"
+msgstr ""
+
+#: src/Core/EventLabels.php:91
+#: src/Features/TwoStep/BackupCodes.php:132
+msgid "Backup code used"
+msgstr ""
+
+#: src/Core/EventLabels.php:92
+#: src/Features/TwoStep/BackupCodes.php:53
+msgid "Backup codes renewed"
+msgstr ""
+
+#: src/Core/EventLabels.php:93
+#: src/Features/TwoStep/SetupSteps.php:221
+msgid "Two-step login setup put off"
+msgstr ""
+
+#: src/Core/EventLabels.php:94
+#: src/Features/TwoStep/Challenge.php:1745
+#: templates/emails/twostep-site-alert.php:13
+msgid "Many wrong two-step login codes"
+msgstr ""
+
+#: src/Core/EventLabels.php:95
+msgid "Authenticator app secret can't be read"
+msgstr ""
+
+#: src/Core/EventLabels.php:96
+msgid "Login from a new device"
+msgstr ""
+
+#: src/Core/Privacy.php:157
+msgid "HappyAccess gives support staff temporary access to this site. When someone uses a temporary access link or code, the site stores the IP address and browser user agent of that visit, the login times, and a list of the actions taken while the access was active. The list holds names and titles of what changed, never the values of settings or passwords."
+msgstr ""
+
+#: src/Core/Privacy.php:158
+msgid "When an administrator creates temporary access for a person, the site also stores the label they entered, the IP allowlist, and, if they entered one, the email address of the recipient. The administrator's user account is recorded as the creator."
+msgstr ""
+
+#. translators: %d: number of days.
+#: src/Core/Privacy.php:161
+#, php-format
+msgid "Log entries are deleted after %d day. Temporary access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day."
+msgid_plural "Log entries are deleted after %d days. Temporary access records (label, recipient email and allowlist) are kept until the access ends plus the same number of days, then deleted. Login attempt records and expired login challenges are deleted after one day."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Core/Privacy.php:169
+msgid "If reCAPTCHA is turned on for support logins, the visitor's IP address and browser details are sent to Google to check that the visit is from a person. Google handles that data under its own privacy policy."
+msgstr ""
+
+#: src/Core/Privacy.php:170
+msgid "Site owners can export or erase this data from the Tools menu. Erasing an email address ends any active temporary access for it, removes the IP address and user agent from the related log entries, and clears the recipient email, label and allowlist from the temporary access records."
+msgstr ""
+
+#: src/Core/Privacy.php:171
+msgid "When a user sets up two-step login, the site stores their two-step login settings, the secret of their authenticator app, which is encrypted, and their backup codes, stored only as hashes that can't be turned back into codes."
+msgstr ""
+
+#: src/Core/Privacy.php:172
+msgid "When new device alerts are on for a user's role, the site sets a cookie named happyaccess_dev at login. It holds a random id that tells the site it has seen this browser before, and it is kept for one year. For each user, the site keeps a list of up to 20 browsers: a hash of each id and the time it was last seen. A login from a browser that isn't on the list sends the user an email with the time, the browser name and the IP address."
+msgstr ""
+
+#: src/Core/Privacy.php:173
+msgid "Exporting a user's data includes the two-step login methods they have on, how many backup codes are left and when each known browser was last seen, never the secret, the codes or the ids. Erasing it removes the list of known browsers. The two-step login settings are kept, because they protect the account."
+msgstr ""
+
+#: src/Core/Privacy.php:261
+msgid "HappyAccess activity log"
+msgstr ""
+
+#: src/Core/Privacy.php:262
+msgid "Events recorded for this user by HappyAccess."
+msgstr ""
+
+#: src/Core/Privacy.php:266
+#: build/index.js:3
+msgid "Event"
+msgstr ""
+
+#: src/Core/Privacy.php:270
+msgid "Date (UTC)"
+msgstr ""
+
+#: src/Core/Privacy.php:274
+#: templates/emails/login-alert.php:33
+#: templates/emails/new-device.php:37
+#: build/index.js:3
+#: build/index.js:11
+msgid "IP address"
+msgid_plural "IP addresses"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Core/Privacy.php:278
+msgid "User agent"
+msgstr ""
+
+#: src/Core/Privacy.php:282
+msgid "Summary"
+msgstr ""
+
+#: src/Core/Privacy.php:292
+msgid "Created (UTC)"
+msgstr ""
+
+#: src/Core/Privacy.php:296
+msgid "Expires (UTC)"
+msgstr ""
+
+#: src/Core/Privacy.php:300
+#: templates/emails/admin-created.php:56
+msgid "Role"
+msgstr ""
+
+#: src/Core/Privacy.php:312
+msgid "Label"
+msgstr ""
+
+#: src/Core/Privacy.php:316
+msgid "Recipient email"
+msgstr ""
+
+#: src/Core/Privacy.php:323
+msgid "IP allowlist"
+msgstr ""
+
+#: src/Core/Privacy.php:332
+msgid "HappyAccess temporary access"
+msgstr ""
+
+#: src/Core/Privacy.php:333
+msgid "Temporary access records that name this user or email address."
+msgstr ""
+
+#: src/Core/Privacy.php:366
+#: src/Features/TwoStep/Challenge.php:1530
+#: src/Features/TwoStep/Challenge.php:1556
+#: src/Features/TwoStep/MyAccount.php:106
+#: src/Features/TwoStep/Profile.php:400
+#: src/Features/TwoStep/Profile.php:549
+#: build/index.js:29
+#: build/index.js:60
+msgid "Two-step login"
+msgstr ""
+
+#: src/Core/Privacy.php:367
+msgid "Two-step login methods, backup codes left and the browsers this user logged in from."
+msgstr ""
+
+#: src/Core/Privacy.php:373
+#: src/Features/TwoStep/Profile.php:424
+#: src/Features/TwoStep/Profile.php:551
+#: src/Features/TwoStep/SetupSteps.php:507
+msgid "Authenticator app"
+msgstr ""
+
+#: src/Core/Privacy.php:377
+#: src/Features/TwoStep/Profile.php:437
+#: src/Features/TwoStep/Profile.php:552
+#: src/Features/TwoStep/SetupSteps.php:527
+msgid "Email codes"
+msgstr ""
+
+#: src/Core/Privacy.php:388
+msgid "Methods turned on"
+msgstr ""
+
+#: src/Core/Privacy.php:389
+msgid "None"
+msgstr ""
+
+#: src/Core/Privacy.php:392
+msgid "Backup codes left"
+msgstr ""
+
+#: src/Core/Privacy.php:412
+msgid "Last seen (UTC)"
+msgstr ""
+
+#: src/Core/Privacy.php:510
+msgid "Log entries were kept without IP address or browser details until the retention period ends."
+msgstr ""
+
+#: src/Core/Privacy.php:514
+msgid "Some log summaries may still contain the grant label."
+msgstr ""
+
+#: src/Core/Privacy.php:518
+msgid "Two-step login settings were kept, because they protect the account."
+msgstr ""
+
+#: src/Features/Passwordless/Forms.php:185
+#: src/Features/Passwordless/LoginSteps.php:184
+msgid "Enter your email or username."
+msgstr ""
+
+#: src/Features/Passwordless/Forms.php:186
+msgid "Enter the login code from your email."
+msgstr ""
+
+#: src/Features/Passwordless/Forms.php:187
+#: build/index.js:2
+msgid "Something went wrong. Try again."
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:111
+#: src/Features/Passwordless/RolePolicy.php:212
+#: templates/login/passwordless-form.php:54
+#: build/index.js:30
+msgid "Email me a login code"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:155
+#: src/Features/Passwordless/LoginSteps.php:253
+#: src/Features/TwoStep/Challenge.php:532
+#: src/Features/TwoStep/Challenge.php:1031
+#: src/Features/TwoStep/Profile.php:197
+#: src/Features/TwoStep/SetupSteps.php:770
+msgid "This page expired. Try again."
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:202
+msgid "Login code not sent: too many requests"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:209
+msgid "Login code could not be made"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:303
+msgid "Login code cancelled after too many wrong tries"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:305
+msgid "Login code did not work"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:308
+msgid "That code is not right or has expired. Ask for a new code."
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:349
+#: src/Features/SupportAccess/LoginSteps.php:186
+msgid "This page expired. Select Log in again."
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:358
+msgid "Open the link from your email again, then select Log in."
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:368
+msgid "Login link did not work"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:406
+msgid "Logged in with a login code or link"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:526
+msgid "Your login code"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:627
+msgid "Login codes paused for the whole site after too many wrong codes"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:631
+#: templates/emails/passwordless-lock.php:13
+msgid "Login codes are paused"
+msgstr ""
+
+#. translators: %d: minutes.
+#: src/Features/Passwordless/LoginSteps.php:757
+#: src/Features/SupportAccess/LoginSteps.php:436
+#: src/Features/TwoStep/Challenge.php:1861
+#: src/Features/TwoStep/RestController.php:549
+#, php-format
+msgid "Too many attempts. Try again in %d minute."
+msgid_plural "Too many attempts. Try again in %d minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Features/Passwordless/LoginSteps.php:769
+#: src/Features/TwoStep/Challenge.php:1875
+msgid "Login is updating. Try again in a minute."
+msgstr ""
+
+#. translators: %d: minutes until the login code expires.
+#: src/Features/Passwordless/LoginSteps.php:792
+#, php-format
+msgid "If that account exists, we sent a login code to its email address. It expires in %d minute."
+msgid_plural "If that account exists, we sent a login code to its email address. It expires in %d minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Features/Passwordless/LoginSteps.php:830
+#: templates/login/passwordless-form.php:28
+msgid "Email or username"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:834
+#: templates/login/passwordless-form.php:32
+msgid "Send login code"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:836
+msgid "Log in with a password"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:840
+#: src/Features/Passwordless/LoginSteps.php:867
+msgid "Log in with a code"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:856
+#: templates/login/passwordless-form.php:37
+msgid "Login code"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:858
+#: templates/login/passwordless-form.php:42
+msgid "Remember me"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:861
+#: src/Features/Passwordless/LoginSteps.php:898
+#: src/Features/SupportAccess/LoginSteps.php:463
+#: src/Features/SupportAccess/LoginSteps.php:495
+#: src/Features/TwoStep/Challenge.php:1515
+#: templates/login/passwordless-form.php:45
+#: build/index.js:30
+msgid "Log in"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:863
+#: src/Features/TwoStep/Challenge.php:1604
+#: src/Features/TwoStep/Profile.php:595
+#: src/Features/TwoStep/SetupSteps.php:561
+msgid "Send a new code"
+msgstr ""
+
+#. translators: 1: site name, 2: display name of the account.
+#: src/Features/Passwordless/LoginSteps.php:885
+#, php-format
+msgid "Log in to %1$s as %2$s"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:903
+#: src/Features/Passwordless/LoginSteps.php:922
+msgid "Log in with a link"
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:918
+msgid "This login link has expired or was already used."
+msgstr ""
+
+#: src/Features/Passwordless/LoginSteps.php:923
+msgid "Send a new login code"
+msgstr ""
+
+#: src/Features/Passwordless/Requests.php:55
+msgid "The login request is not valid."
+msgstr ""
+
+#: src/Features/Passwordless/Requests.php:58
+#: src/Features/Passwordless/Requests.php:62
+#: src/Features/Passwordless/Requests.php:96
+msgid "Login codes could not be made. Try again later."
+msgstr ""
+
+#: src/Features/Passwordless/Requests.php:146
+#: src/Features/TwoStep/EmailMethod.php:154
+msgid "Too many wrong codes. Ask for a new code."
+msgstr ""
+
+#: src/Features/Passwordless/Requests.php:297
+#: src/Features/TwoStep/EmailMethod.php:217
+#: src/Features/TwoStep/RestController.php:365
+msgid "That code is not right or has expired."
+msgstr ""
+
+#: src/Features/Passwordless/Requests.php:306
+msgid "This login link is not valid or has expired. Ask for a new one."
+msgstr ""
+
+#: src/Features/Passwordless/RestController.php:102
+#: src/Features/Passwordless/RestController.php:105
+msgid "This request is not allowed."
+msgstr ""
+
+#: src/Features/Passwordless/RolePolicy.php:153
+msgid "Password allowed for an email code only account because login codes are not working"
+msgstr ""
+
+#. translators: %s: link with the text "Email me a login code".
+#: src/Features/Passwordless/RolePolicy.php:217
+#, php-format
+msgid "This account logs in with an email code. Use '%s' below."
+msgstr ""
+
+#: src/Features/SupportAccess/AccountGuard.php:147
+msgid "Temporary support accounts can't change account details."
+msgstr ""
+
+#: src/Features/SupportAccess/AccountGuard.php:162
+msgid "Temporary support accounts can't manage API keys."
+msgstr ""
+
+#: src/Features/SupportAccess/AccountGuard.php:176
+msgid "Temporary support accounts can't authorize API access."
+msgstr ""
+
+#: src/Features/SupportAccess/AccountGuard.php:194
+msgid "Blocked a WooCommerce API key request"
+msgstr ""
+
+#. translators: 1: user login, 2: comma separated role slugs.
+#: src/Features/SupportAccess/ActivityTracker.php:365
+#, php-format
+msgid "Created user: %1$s (%2$s)"
+msgstr ""
+
+#. translators: 1: user login, 2: old role slugs, 3: new role slug.
+#: src/Features/SupportAccess/ActivityTracker.php:403
+#, php-format
+msgid "Changed role for %1$s: %2$s to %3$s"
+msgstr ""
+
+#. translators: 1: user login, 2: role slug.
+#: src/Features/SupportAccess/ActivityTracker.php:437
+#, php-format
+msgid "Added role to %1$s: %2$s"
+msgstr ""
+
+#. translators: %d: privacy request id.
+#: src/Features/SupportAccess/ActivityTracker.php:463
+#, php-format
+msgid "Ran a personal data erasure (#%d)"
+msgstr ""
+
+#. translators: %d: webhook id.
+#: src/Features/SupportAccess/ActivityTracker.php:484
+#, php-format
+msgid "Created WooCommerce webhook #%d"
+msgstr ""
+
+#: src/Features/SupportAccess/ActivityTracker.php:818
+msgid "none"
+msgstr ""
+
+#: src/Features/SupportAccess/AdminBar.php:57
+#: build/index.js:19
+msgid "Emergency lock"
+msgstr ""
+
+#: src/Features/SupportAccess/AdminBar.php:81
+msgid "Lock all temporary access now? This ends every support session and signs support out."
+msgstr ""
+
+#. translators: %s: time left, for example "2 hours".
+#: src/Features/SupportAccess/AdminBar.php:83
+#: src/Features/SupportAccess/AdminBar.php:244
+#, php-format
+msgid "Temporary access ends in %s"
+msgstr ""
+
+#: src/Features/SupportAccess/AdminBar.php:84
+#: src/Features/SupportAccess/AdminBar.php:245
+msgid "Temporary access has ended"
+msgstr ""
+
+#: src/Features/SupportAccess/AdminBar.php:85
+#: src/Features/SupportAccess/AdminBar.php:120
+msgid "less than a minute"
+msgstr ""
+
+#. translators: %d: number of minutes, singular.
+#. translators: %d: number of minutes.
+#: src/Features/SupportAccess/AdminBar.php:88
+#: src/Features/SupportAccess/AdminBar.php:150
+#: build/index.js:4
+#, php-format,js-format
+msgid "%d min"
+msgid_plural "%d mins"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of minutes, plural.
+#: src/Features/SupportAccess/AdminBar.php:90
+#, php-format
+msgid "%d mins"
+msgstr ""
+
+#. translators: %d: number of hours, singular.
+#. translators: %d: number of hours.
+#: src/Features/SupportAccess/AdminBar.php:94
+#: src/Features/SupportAccess/AdminBar.php:161
+#: build/index.js:39
+#: build/index.js:58
+#, php-format,js-format
+msgid "%d hour"
+msgid_plural "%d hours"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of hours, plural.
+#: src/Features/SupportAccess/AdminBar.php:96
+#, php-format
+msgid "%d hours"
+msgstr ""
+
+#. translators: %d: number of days, singular.
+#. translators: %d: number of days.
+#: src/Features/SupportAccess/AdminBar.php:100
+#: src/Features/SupportAccess/AdminBar.php:172
+#: build/index.js:22
+#: build/index.js:38
+#: build/index.js:57
+#, php-format,js-format
+msgid "%d day"
+msgid_plural "%d days"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of days, plural.
+#: src/Features/SupportAccess/AdminBar.php:102
+#, php-format
+msgid "%d days"
+msgstr ""
+
+#. translators: %d: number of grants ended.
+#: src/Features/SupportAccess/AdminBar.php:191
+#, php-format
+msgid "Emergency lock ended %d grant."
+msgid_plural "Emergency lock ended %d grants."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Features/SupportAccess/AdminBar.php:206
+msgid "You are not allowed to do this."
+msgstr ""
+
+#: src/Features/SupportAccess/AdminBar.php:258
+msgid "End session"
+msgstr ""
+
+#. translators: %s: user login.
+#: src/Features/SupportAccess/AdminWatch.php:80
+#, php-format
+msgid "Made an administrator account: %s"
+msgstr ""
+
+#. translators: %s: role name.
+#: src/Features/SupportAccess/AdminWatch.php:197
+#, php-format
+msgid "Made new accounts get an admin-level role: %s"
+msgstr ""
+
+#. translators: %s: role name.
+#: src/Features/SupportAccess/AdminWatch.php:199
+#, php-format
+msgid "Gave admin-level permissions to the role: %s"
+msgstr ""
+
+#. translators: %s: user login.
+#: src/Features/SupportAccess/AdminWatch.php:287
+#, php-format
+msgid "Changed login details for administrator: %s"
+msgstr ""
+
+#: src/Features/SupportAccess/CapabilityGuard.php:544
+msgid "Temporary support accounts can't remove HappyAccess."
+msgstr ""
+
+#: src/Features/SupportAccess/CapabilityGuard.php:729
+#: src/Features/SupportAccess/CapabilityGuard.php:751
+#: src/Features/SupportAccess/CapabilityGuard.php:791
+#: src/Features/SupportAccess/CapabilityGuard.php:810
+msgid "Temporary support accounts can't change this setting."
+msgstr ""
+
+#: src/Features/SupportAccess/CapabilityGuard.php:1094
+msgid "Invalid user ID."
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:208
+msgid "Content"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:209
+msgid "Posts, pages, media and comments"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:212
+msgid "Store"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:213
+msgid "WooCommerce orders, products and coupons"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:216
+msgid "Appearance"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:217
+msgid "Themes, menus, widgets and the site editor"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:220
+msgid "Plugins and updates"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:221
+msgid "Turn plugins on or off, install and update"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:224
+msgid "Users"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:225
+msgid "See, add and edit accounts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:228
+msgid "Site settings"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:229
+msgid "Settings screens, import and export"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:232
+msgid "Tools"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:233
+msgid "Dashboard, Customizer and unfiltered HTML"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:245
+msgid "Write and edit their own posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:246
+msgid "Edit posts by others"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:247
+msgid "Publish posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:248
+msgid "Delete posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:249
+msgid "Delete posts by others"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:250
+msgid "Edit pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:251
+msgid "Edit pages by others"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:252
+msgid "Publish pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:253
+msgid "Delete pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:254
+msgid "Upload media"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:255
+msgid "Moderate comments"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:256
+msgid "Manage categories and tags"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:257
+msgid "Edit published posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:258
+msgid "Edit private posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:259
+msgid "Delete published posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:260
+msgid "Delete private posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:261
+msgid "Read private posts"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:262
+msgid "Edit published pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:263
+msgid "Edit private pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:264
+msgid "Delete pages by others"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:265
+msgid "Delete published pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:266
+msgid "Delete private pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:267
+msgid "Read private pages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:268
+msgid "Manage links"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:269
+msgid "WooCommerce settings and status"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:270
+msgid "See reports and analytics"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:271
+msgid "View and edit orders"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:272
+msgid "View orders"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:273
+msgid "Delete orders"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:274
+msgid "Edit products"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:275
+msgid "Publish products"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:276
+msgid "Delete products"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:277
+msgid "Edit coupons"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:278
+msgid "Manage product categories and tags"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:279
+msgid "Change the theme"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:280
+msgid "Menus, widgets and the site editor"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:281
+msgid "Turn plugins on and off"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:282
+msgid "Install plugins"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:283
+msgid "Upload plugin files"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:284
+msgid "Update plugins"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:285
+msgid "Delete plugins"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:286
+msgid "Install themes"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:287
+msgid "Upload theme files"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:288
+msgid "Update themes"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:289
+msgid "Delete themes"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:290
+msgid "Update WordPress"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:291
+msgid "Install languages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:292
+msgid "Update languages"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:293
+msgid "See the user list"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:294
+msgid "Add users"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:295
+msgid "Edit users, including passwords and emails"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:296
+msgid "Change user roles"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:297
+msgid "Delete users"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:298
+msgid "Remove users from the site"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:299
+msgid "Change site settings"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:300
+msgid "Import content"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:301
+msgid "Export content"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:302
+msgid "Change the dashboard"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:303
+msgid "Use the Customizer"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:304
+msgid "Post unfiltered HTML"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:504
+msgid "Other plugins on this site"
+msgstr ""
+
+#: src/Features/SupportAccess/Catalog.php:505
+msgid "Found in your site's roles"
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:57
+msgid "Use --notify=first, every or off."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:153
+msgid "No owner is set for this grant, so nobody will get login alerts. Pass --user=<id|login> to set one."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:158
+msgid "The grant was created but could not be read back."
+msgstr ""
+
+#. translators: %d: grant id.
+#: src/Features/SupportAccess/Cli.php:163
+#, php-format
+msgid "Created grant %d. The link and code below are shown once."
+msgstr ""
+
+#. translators: %s: login link.
+#: src/Features/SupportAccess/Cli.php:165
+#, php-format
+msgid "Link: %s"
+msgstr ""
+
+#. translators: %s: access code.
+#: src/Features/SupportAccess/Cli.php:167
+#, php-format
+msgid "Code: %s"
+msgstr ""
+
+#. translators: %s: email address.
+#: src/Features/SupportAccess/Cli.php:174
+#, php-format
+msgid "Emailed the access details to %s."
+msgstr ""
+
+#. translators: %s: email address.
+#: src/Features/SupportAccess/Cli.php:177
+#, php-format
+msgid "Could not email %s. Share the details above yourself."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:182
+msgid "The --redirect URL was dropped because it is not on this site."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:219
+msgid "No current grants."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:250
+msgid "Give the id of exactly one grant."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:262
+#: src/Features/SupportAccess/Cli.php:322
+msgid "That grant does not exist or has already ended."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:268
+msgid "Extended."
+msgstr ""
+
+#. translators: 1: grant id, 2: new expiry date and time.
+#: src/Features/SupportAccess/Cli.php:272
+#, php-format
+msgid "Grant %1$d now ends %2$s."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:309
+msgid "Give either the id of one grant or --all."
+msgstr ""
+
+#: src/Features/SupportAccess/Cli.php:314
+msgid "End all active temporary access?"
+msgstr ""
+
+#. translators: %d: number of grants ended.
+#: src/Features/SupportAccess/Cli.php:317
+#, php-format
+msgid "Ended %d grant."
+msgid_plural "Ended %d grants."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: grant id.
+#: src/Features/SupportAccess/Cli.php:326
+#, php-format
+msgid "Ended grant %d."
+msgstr ""
+
+#. translators: %s: flag name, for example --allow-installs.
+#: src/Features/SupportAccess/Cli.php:356
+#, php-format
+msgid "Use true or false for --%s."
+msgstr ""
+
+#. translators: %s: flag name, for example --expires.
+#: src/Features/SupportAccess/Cli.php:392
+#, php-format
+msgid "Use a whole number followed by d or h for %s, for example 3d or 12h."
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:82
+msgid "A label is required."
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:91
+msgid "The email address is not valid."
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:98
+msgid "The access level is not valid."
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:104
+#: src/Features/SupportAccess/Grants.php:109
+msgid "The role does not exist."
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:123
+msgid "Confirm that you trust this person with full access."
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:144
+msgid "None of the IP addresses is valid."
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Grants.php:234
+#, php-format
+msgid "Temporary access granted to %s"
+msgstr ""
+
+#: src/Features/SupportAccess/Grants.php:265
+msgid "Pick at least one permission."
+msgstr ""
+
+#. translators: %s: capability name.
+#: src/Features/SupportAccess/Grants.php:273
+#, php-format
+msgid "This permission can't be given: %s"
+msgstr ""
+
+#. translators: %s: capability name.
+#: src/Features/SupportAccess/Grants.php:279
+#, php-format
+msgid "You can't give a permission you don't have: %s"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Grants.php:490
+#, php-format
+msgid "Temporary access extended for %s"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Grants.php:517
+#, php-format
+msgid "Temporary access suspended for %s"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Grants.php:541
+#, php-format
+msgid "Temporary access resumed for %s"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Grants.php:574
+#, php-format
+msgid "Temporary access code and link replaced for %s"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Grants.php:660
+#, php-format
+msgid "Temporary access ended for %s"
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:69
+#: build/index.js:55
+#: build/index.js:77
+msgid "Log in with an access code"
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:220
+msgid "Your temporary access has expired."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:223
+msgid "Your temporary access was revoked by the site owner."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:226
+msgid "Your temporary access is paused by the site owner."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:229
+msgid "Your temporary access has ended."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:235
+#: templates/emails/access-ended.php:16
+msgid "Temporary access ended"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/LoginSteps.php:278
+#: src/Features/SupportAccess/Notifications.php:85
+#, php-format
+msgid "Temporary access used: %s"
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:310
+msgid "Couldn't set up the support account"
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:317
+#: src/Features/SupportAccess/LoginSteps.php:468
+#: src/Features/SupportAccess/LoginSteps.php:500
+#: src/Features/SupportAccess/LoginSteps.php:519
+#: src/Features/SupportAccess/Notifications.php:158
+#: src/Features/SupportAccess/TempUsers.php:60
+#: build/index.js:2
+#: build/index.js:13
+#: build/index.js:55
+#: build/index.js:60
+#: build/index.js:61
+#: build/index.js:81
+msgid "Temporary access"
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:319
+msgid "Couldn't set up your support account. Ask the site owner to send a new link or code."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:420
+msgid "That code didn't work. Check it and try again."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:449
+msgid "Temporary access is getting ready. Try again in a minute."
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:460
+#: src/Features/SupportAccess/Notifications.php:76
+msgid "Access code"
+msgstr ""
+
+#. translators: 1: site name, 2: grant label.
+#: src/Features/SupportAccess/LoginSteps.php:486
+#, php-format
+msgid "Log in to %1$s as %2$s?"
+msgstr ""
+
+#: src/Features/SupportAccess/LoginSteps.php:515
+msgid "This link has expired or isn't valid anymore."
+msgstr ""
+
+#: src/Features/SupportAccess/MenuGuard.php:187
+msgid "This page isn't part of your temporary access."
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:73
+#: templates/emails/access-bundle.php:25
+#: build/index.js:76
+msgid "Login link"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:79
+msgid "Login link or access code"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Notifications.php:131
+#, php-format
+msgid "Temporary access ended: %s"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/Notifications.php:175
+#, php-format
+msgid "Access details emailed for %s"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:245
+msgid "password"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:245
+msgid "email address"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:302
+#: templates/emails/admin-created.php:30
+msgid "A support pass changed an administrator's login details"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:305
+#: templates/emails/admin-created.php:28
+msgid "A support pass gave a role admin-level permissions"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:308
+#: templates/emails/admin-created.php:32
+msgid "A support pass made an administrator account"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:374
+#: templates/emails/site-lock.php:13
+msgid "Code logins are paused"
+msgstr ""
+
+#. translators: %s: site name.
+#: src/Features/SupportAccess/Notifications.php:391
+#, php-format
+msgid "Here's temporary access to %s:"
+msgstr ""
+
+#. translators: %s: login link.
+#: src/Features/SupportAccess/Notifications.php:393
+#, php-format
+msgid "Login link: %s"
+msgstr ""
+
+#. translators: 1: address of the code screen, 2: access code.
+#: src/Features/SupportAccess/Notifications.php:395
+#, php-format
+msgid "Or open %1$s and enter this code: %2$s"
+msgstr ""
+
+#. translators: %s: date and time the access ends.
+#: src/Features/SupportAccess/Notifications.php:397
+#: templates/emails/access-bundle.php:42
+#, php-format
+msgid "Access ends %s."
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:438
+msgid "Revoked by an administrator"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:440
+msgid "Time ran out"
+msgstr ""
+
+#: src/Features/SupportAccess/Notifications.php:442
+msgid "Emergency Lock"
+msgstr ""
+
+#. translators: %s: label of the support grant.
+#: src/Features/SupportAccess/TempUsers.php:62
+#, php-format
+msgid "Temporary access: %s"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:315
+msgid "Finish logging in with your two-step login code."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:606
+msgid "Your login took too long. Log in again."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:607
+msgid "Too many wrong codes. Log in again."
+msgstr ""
+
+#. translators: 1: backup codes left, 2: link to where new ones are made.
+#: src/Features/TwoStep/Challenge.php:648
+#, php-format
+msgid "You have %1$d backup code left. Make new ones on %2$s."
+msgid_plural "You have %1$d backup codes left. Make new ones on %2$s."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: backup codes left.
+#: src/Features/TwoStep/Challenge.php:656
+#, php-format
+msgid "You have %d backup code left. Make new ones on your profile."
+msgid_plural "You have %d backup codes left. Make new ones on your profile."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Features/TwoStep/Challenge.php:725
+msgid "This account uses two-step login, so it can't log in over XML-RPC. Use an application password instead."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:728
+msgid "Your role needs two-step login. Log in on the login page to set it up."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:730
+msgid "This account uses two-step login. Log in on the login page."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:816
+#: templates/emails/twostep-secret.php:12
+msgid "Authenticator app codes can't be checked"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1224
+#: src/Features/TwoStep/RestController.php:289
+msgid "That code didn't work. Try again."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1301
+msgid "You have logged in successfully."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1498
+#: build/index.js:30
+msgid "Authenticator app code"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1499
+#: src/Features/TwoStep/SetupSteps.php:534
+msgid "Email code"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1500
+msgid "Backup code"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1521
+#: src/Features/TwoStep/Profile.php:368
+#: src/Features/TwoStep/SetupSteps.php:406
+msgid "We sent a code to your email address."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1523
+#: src/Features/TwoStep/RestController.php:344
+msgid "We already sent several codes. Check your email, or wait a few minutes and try again."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1525
+msgid "Enter the code from your authenticator app."
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1557
+msgid "Log in again"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1601
+msgid "Use your authenticator app"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1604
+msgid "Email me a code instead"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1613
+#: build/index.js:30
+msgid "Use a backup code"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1738
+msgid "Many wrong two-step login codes on the site in the last hour"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1766
+msgid "Two-step login paused for this account after too many wrong codes"
+msgstr ""
+
+#: src/Features/TwoStep/Challenge.php:1776
+#: templates/emails/twostep-account-lock-text.php:16
+#: templates/emails/twostep-account-lock.php:14
+msgid "Two-step login is paused for your account"
+msgstr ""
+
+#: src/Features/TwoStep/Cli.php:67
+msgid "No user matches that id, login or email address."
+msgstr ""
+
+#. translators: %s: user login.
+#: src/Features/TwoStep/Cli.php:79
+#, php-format
+msgid "Two-step login is off for %s."
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:409
+msgid "Administrators"
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:410
+msgid "Editors"
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:411
+msgid "Authors"
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:412
+msgid "Contributors"
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:413
+msgid "Subscribers"
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:414
+msgid "Customers"
+msgstr ""
+
+#: src/Features/TwoStep/Coverage.php:415
+msgid "Shop managers"
+msgstr ""
+
+#. translators: %s: browser and system, like "Chrome on macOS".
+#: src/Features/TwoStep/DeviceAlerts.php:161
+#, php-format
+msgid "Logged in from a new device: %s"
+msgstr ""
+
+#: src/Features/TwoStep/DeviceAlerts.php:203
+msgid "Unknown browser"
+msgstr ""
+
+#. translators: 1: browser name, like "Chrome", 2: operating system, like "macOS".
+#: src/Features/TwoStep/DeviceAlerts.php:210
+#, php-format
+msgid "%1$s on %2$s"
+msgstr ""
+
+#: src/Features/TwoStep/DeviceAlerts.php:235
+#: templates/emails/new-device-text.php:19
+#: templates/emails/new-device.php:17
+msgid "New login to your account"
+msgstr ""
+
+#: src/Features/TwoStep/EmailMethod.php:69
+#: src/Features/TwoStep/EmailMethod.php:72
+#: src/Features/TwoStep/EmailMethod.php:103
+msgid "The login code could not be made. Try again later."
+msgstr ""
+
+#: src/Features/TwoStep/EmailMethod.php:184
+msgid "Your two-step login code"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:114
+msgid "your profile"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:114
+msgid "your account page"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:194
+msgid "That user does not exist."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:200
+msgid "You can't turn off two-step login for this user."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:215
+#: templates/emails/twostep-reset-text.php:16
+#: templates/emails/twostep-reset.php:14
+msgid "Two-step login was turned off"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:279
+msgid "Two-step login is paused by HAPPYACCESS_DISABLE_TWOSTEP in wp-config.php. Remove it when you're back in."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:302
+msgid "Two-step login is off for this user."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:364
+msgid "That didn't work. Try again."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:365
+msgid "Enter the code from the app."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:366
+#: src/Features/TwoStep/RestController.php:183
+msgid "Enter your password or a code."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:367
+msgid "Scan the QR code, then enter the code from the app."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:369
+msgid "Enter the code from the email."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:370
+msgid "Your new backup codes are below."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:371
+msgid "Saving."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:402
+msgid "After your password, you also enter a code from your authenticator app or your email."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:404
+#: src/Features/TwoStep/RestController.php:534
+#: src/Features/TwoStep/SetupSteps.php:427
+msgid "Your role needs two-step login."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:407
+msgid "Set up your authenticator app again. This site changed its security keys, so codes from the app can't be checked. Until then, log in with an email code or a backup code."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:415
+#: src/Features/TwoStep/Profile.php:428
+#: build/index.js:60
+msgid "Turn off"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:417
+msgid "Set up"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:423
+msgid "Codes come from an app on your phone."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:430
+#: build/index.js:60
+msgid "Turn on"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:436
+msgid "Codes go to the email address on your account."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:440
+msgid "Make new codes"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:441
+msgid "Making new codes stops the old ones from working."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:443
+msgid "Turn on the app or email codes first."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:445
+#: src/Features/TwoStep/Profile.php:553
+msgid "Backup codes"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:556
+msgid "Recovery"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:557
+msgid "Turn off two-step login for this user"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:558
+msgid "Use this when they lost their phone or their backup codes. They get an email, and they can set it up again from their account."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:572
+#: src/Features/TwoStep/SetupSteps.php:508
+msgid "Scan this QR code with your authenticator app."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:574
+#: src/Features/TwoStep/SetupSteps.php:510
+msgid "Code from the app"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:576
+#: src/Features/TwoStep/SetupSteps.php:513
+msgid "Turn on two-step login"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:577
+#: src/Features/TwoStep/Profile.php:596
+#: src/Features/TwoStep/Profile.php:627
+#: build/index.js:60
+#: build/index.js:77
+msgid "Cancel"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:591
+msgid "We sent a code to the email address on your account. Enter it to turn on email codes."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:592
+msgid "Code from the email"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:594
+#: src/Features/TwoStep/SetupSteps.php:537
+msgid "Turn on email codes"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:610
+#: build/index.js:61
+msgid "Done"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:622
+msgid "Confirm it's you to change two-step login."
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:623
+msgid "Current password"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:623
+msgid "Code from your app, or a backup code"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:625
+msgid "Confirm"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:626
+msgid "Use a code instead"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:626
+msgid "Use your password instead"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:650
+msgid "On"
+msgstr ""
+
+#: src/Features/TwoStep/Profile.php:650
+#: build/index.js:29
+#: build/index.js:64
+msgid "Off"
+msgstr ""
+
+#. translators: %d: backup codes left.
+#: src/Features/TwoStep/Profile.php:672
+#, php-format
+msgid "%d code left"
+msgid_plural "%d codes left"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Features/TwoStep/RestController.php:124
+msgid "Log in to change two-step login."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:127
+msgid "An application password can't change two-step login."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:130
+msgid "Temporary access can't change two-step login."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:147
+msgid "Confirm it's you first."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:187
+msgid "Log in again to change two-step login."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:191
+msgid "Enter your password. Codes work once two-step login is on."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:213
+msgid "That password or code didn't work."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:283
+msgid "The setup key expired. Start again."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:404
+msgid "Turn on the authenticator app or email codes first."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:525
+msgid "Two-step login isn't on for your role."
+msgstr ""
+
+#: src/Features/TwoStep/RestController.php:562
+#: src/Features/TwoStep/SetupSteps.php:396
+#: src/Features/TwoStep/UserState.php:183
+#: src/Features/TwoStep/UserState.php:186
+msgid "The authenticator app could not be set up. Try again later."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:213
+msgid "You can't put this off anymore. Set up two-step login to finish logging in."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:267
+msgid "The setup key expired. Scan the new QR code and try again."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:411
+#: src/Features/TwoStep/SetupSteps.php:592
+#: src/Features/TwoStep/SetupSteps.php:663
+msgid "Set up two-step login"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:429
+msgid "Set it up to finish logging in."
+msgstr ""
+
+#. translators: %s: date the grace period ends.
+#: src/Features/TwoStep/SetupSteps.php:434
+#, php-format
+msgid "You can skip this until %s."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:440
+msgid "This is the last time you can skip this."
+msgstr ""
+
+#. translators: %d: logins that can still skip setup.
+#: src/Features/TwoStep/SetupSteps.php:444
+#, php-format
+msgid "You can skip this %d more time."
+msgid_plural "You can skip this %d more times."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Features/TwoStep/SetupSteps.php:474
+msgid "QR code that adds this account to your authenticator app. The setup key below does the same."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:475
+msgid "Or type this setup key into the app:"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:529
+msgid "We send a code to the email address on your account. Type it in here to turn on email codes."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:531
+msgid "Email me a code"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:559
+msgid "Use an authenticator app instead"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:565
+msgid "Use email codes instead"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:568
+msgid "Later"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:587
+#: src/Features/TwoStep/SetupSteps.php:658
+#: build/index.js:61
+msgid "Continue"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:595
+#: src/Features/TwoStep/SetupSteps.php:666
+msgid "Two-step login is on."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:622
+msgid "Save your backup codes"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:623
+msgid "Each code works once. Use one to log in when you can't get a code from your app or email."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:624
+msgid "These codes won't be shown again."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:627
+#: build/index.js:72
+msgid "Copy"
+msgstr ""
+
+#. translators: %s: site name.
+#: src/Features/TwoStep/SetupSteps.php:631
+#, php-format
+msgid "Two-step login backup codes for %s"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:634
+msgid "Download as text"
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:636
+msgid "Codes copied."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:636
+msgid "Copy didn't work. Select the codes and copy them by hand."
+msgstr ""
+
+#: src/Features/TwoStep/SetupSteps.php:637
+msgid "I saved these codes"
+msgstr ""
+
+#. translators: %s: link to the two-step section of the profile or the account page.
+#: src/Features/TwoStep/SetupSteps.php:654
+#, php-format
+msgid "Your backup codes were shown once. If you didn't save them, make new ones on %s."
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:154
+msgid "Authenticator app secret can't be read, so email and backup codes stand in"
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:202
+msgid "Two-step login turned on with an authenticator app"
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:220
+msgid "Authenticator app turned off for two-step login"
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:236
+msgid "Two-step login turned on with email codes"
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:252
+msgid "Email codes turned off for two-step login"
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:296
+msgid "Another change to two-step login is running. Try again."
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:591
+msgid "Two-step login code did not work"
+msgstr ""
+
+#: src/Features/TwoStep/UserState.php:602
+msgid "Two-step login cancelled after too many wrong codes"
+msgstr ""
+
+#: src/Login/Session.php:77
+msgid "Temporary support accounts sign in with their access link or code."
+msgstr ""
+
+#: src/Plugin.php:90
+#: build/index.js:81
+msgid "Settings"
+msgstr ""
+
+#: src/Rest/GrantsController.php:500
+msgid "This support pass does not exist."
+msgstr ""
+
+#: src/Rest/GrantsController.php:513
+msgid "This support pass can't be changed in its current state."
+msgstr ""
+
+#: src/Rest/GrantsController.php:526
+msgid "The support pass couldn't be saved. Try again."
+msgstr ""
+
+#. translators: %s: setting group name.
+#: src/Rest/SettingsController.php:174
+#, php-format
+msgid "%s must be an object."
+msgstr ""
+
+#. translators: %s: setting group name.
+#: src/Rest/SettingsController.php:182
+#, php-format
+msgid "%s has a value that must be a list of role names."
+msgstr ""
+
+#. translators: %s: setting group name.
+#: src/Rest/SettingsController.php:189
+#, php-format
+msgid "%s has a value that must be an object of plain values."
+msgstr ""
+
+#. translators: %s: setting group name.
+#: src/Rest/SettingsController.php:193
+#, php-format
+msgid "%s can only hold text, numbers and true or false."
+msgstr ""
+
+#: src/Rest/SettingsController.php:361
+msgid "Please confirm before giving anyone access."
+msgstr ""
+
+#: src/Rest/SettingsController.php:374
+msgid "Settings could not be saved. Please try again."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/access-bundle.php:20
+#, php-format
+msgid "Temporary access to %s"
+msgstr ""
+
+#: templates/emails/access-bundle.php:27
+msgid "Or sign in with a code"
+msgstr ""
+
+#. translators: %s: address of the code screen.
+#: templates/emails/access-bundle.php:32
+#, php-format
+msgid "Open %s and enter this code:"
+msgstr ""
+
+#: templates/emails/access-bundle.php:47
+msgid "Anyone with the link or the code can log in. Keep this email private."
+msgstr ""
+
+#. translators: 1: grant label, 2: site name.
+#: templates/emails/access-ended.php:21
+#, php-format
+msgid "The temporary access \"%1$s\" on %2$s has ended."
+msgstr ""
+
+#: templates/emails/access-ended.php:29
+msgid "Reason"
+msgstr ""
+
+#: templates/emails/access-ended.php:33
+#: build/index.js:11
+msgid "Logins"
+msgstr ""
+
+#: templates/emails/access-ended.php:37
+#: build/index.js:14
+#: build/index.js:81
+msgid "Activity"
+msgstr ""
+
+#: templates/emails/access-ended.php:39
+msgid "No activity was recorded."
+msgstr ""
+
+#. translators: 1: grant label, 2: site name.
+#: templates/emails/admin-created.php:40
+#, php-format
+msgid "The temporary access \"%1$s\" made new accounts on %2$s get a role with admin-level permissions."
+msgstr ""
+
+#. translators: 1: grant label, 2: site name.
+#: templates/emails/admin-created.php:43
+#, php-format
+msgid "The temporary access \"%1$s\" gave a role on %2$s admin-level permissions. Everyone with that role now has them."
+msgstr ""
+
+#. translators: 1: grant label, 2: site name.
+#: templates/emails/admin-created.php:46
+#, php-format
+msgid "The temporary access \"%1$s\" changed the login details of an administrator account on %2$s."
+msgstr ""
+
+#. translators: 1: grant label, 2: site name.
+#: templates/emails/admin-created.php:49
+#, php-format
+msgid "The temporary access \"%1$s\" made an administrator account on %2$s."
+msgstr ""
+
+#: templates/emails/admin-created.php:60
+msgid "Permissions"
+msgstr ""
+
+#: templates/emails/admin-created.php:65
+msgid "Login"
+msgstr ""
+
+#: templates/emails/admin-created.php:69
+msgid "Email"
+msgstr ""
+
+#: templates/emails/admin-created.php:75
+msgid "Changed"
+msgstr ""
+
+#: templates/emails/admin-created.php:80
+#: templates/emails/login-alert.php:29
+#: templates/emails/new-device.php:29
+msgid "Time"
+msgstr ""
+
+#: templates/emails/admin-created.php:84
+msgid "Review the users on your site"
+msgstr ""
+
+#: templates/emails/admin-created.php:86
+msgid "More changes like this may follow. See the activity log for the full list."
+msgstr ""
+
+#: templates/emails/admin-created.php:86
+msgid "Open the activity log"
+msgstr ""
+
+#: templates/emails/admin-created.php:88
+msgid "Full and custom temporary access can do this by design. If you did not expect it, revoke the access from the HappyAccess screen."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/layout.php:36
+#, php-format
+msgid "Sent by HappyAccess on %s."
+msgstr ""
+
+#: templates/emails/login-alert.php:16
+msgid "Temporary access was used"
+msgstr ""
+
+#. translators: 1: grant label, 2: site name.
+#: templates/emails/login-alert.php:21
+#, php-format
+msgid "Someone signed in to %2$s with the temporary access \"%1$s\"."
+msgstr ""
+
+#: templates/emails/login-alert.php:37
+msgid "Method"
+msgstr ""
+
+#: templates/emails/login-alert.php:41
+msgid "If you did not expect this, revoke the access from the HappyAccess screen."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/new-device-text.php:22
+#: templates/emails/new-device.php:22
+#, php-format
+msgid "Your account on %s just logged in from a device it has not used before."
+msgstr ""
+
+#. translators: %s: login time.
+#: templates/emails/new-device-text.php:25
+#, php-format
+msgid "Time: %s"
+msgstr ""
+
+#. translators: %s: browser and system, like "Chrome on macOS".
+#: templates/emails/new-device-text.php:27
+#, php-format
+msgid "Browser: %s"
+msgstr ""
+
+#. translators: %s: IP address.
+#: templates/emails/new-device-text.php:29
+#, php-format
+msgid "IP address: %s"
+msgstr ""
+
+#: templates/emails/new-device-text.php:31
+#: templates/emails/new-device.php:41
+msgid "If this wasn't you, change your password now."
+msgstr ""
+
+#: templates/emails/new-device-text.php:36
+#: templates/emails/new-device.php:43
+msgid "Turn on two-step login to keep your account safe."
+msgstr ""
+
+#: templates/emails/new-device.php:33
+msgid "Browser"
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/passwordless-code-text.php:20
+#: templates/emails/passwordless-code.php:21
+#: templates/emails/twostep-code-text.php:18
+#: templates/emails/twostep-code.php:19
+#, php-format
+msgid "Log in to %s"
+msgstr ""
+
+#. translators: %s: login code.
+#: templates/emails/passwordless-code-text.php:23
+#, php-format
+msgid "Your login code is %s"
+msgstr ""
+
+#: templates/emails/passwordless-code-text.php:25
+#: templates/emails/passwordless-code.php:28
+msgid "Or open this login link:"
+msgstr ""
+
+#. translators: %d: minutes until the login code expires.
+#: templates/emails/passwordless-code-text.php:30
+#: templates/emails/passwordless-code.php:35
+#, php-format
+msgid "The code and the link expire in %d minute."
+msgid_plural "The code and the link expire in %d minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: IP address.
+#: templates/emails/passwordless-code-text.php:35
+#: templates/emails/passwordless-code.php:46
+#, php-format
+msgid "The request came from IP address %s."
+msgstr ""
+
+#: templates/emails/passwordless-code-text.php:39
+#: templates/emails/passwordless-code.php:52
+msgid "If you didn't ask for this, you can ignore this email."
+msgstr ""
+
+#: templates/emails/passwordless-code-text.php:39
+#: templates/emails/passwordless-code.php:52
+msgid "Your password still works."
+msgstr ""
+
+#: templates/emails/passwordless-code.php:26
+msgid "Your login code is"
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/passwordless-lock.php:18
+#, php-format
+msgid "Too many wrong login codes were entered on %s. Emailed login codes are paused for the whole site."
+msgstr ""
+
+#. translators: %s: number of minutes.
+#: templates/emails/passwordless-lock.php:27
+#: templates/emails/site-lock.php:27
+#, php-format
+msgid "The pause lasts about %s minute."
+msgid_plural "The pause lasts about %s minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: templates/emails/passwordless-lock.php:32
+msgid "Login links still work. If you didn't expect this, check the HappyAccess activity log."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/site-lock.php:18
+#, php-format
+msgid "Too many wrong codes were entered on %s. Code logins are paused for the whole site."
+msgstr ""
+
+#: templates/emails/site-lock.php:32
+msgid "Login links still work. If this was not you or a support agent, check the HappyAccess activity log."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/twostep-account-lock-text.php:19
+#: templates/emails/twostep-account-lock.php:19
+#, php-format
+msgid "Too many wrong two-step login codes were entered for your account on %s."
+msgstr ""
+
+#. translators: %s: number of minutes.
+#: templates/emails/twostep-account-lock-text.php:21
+#: templates/emails/twostep-account-lock.php:25
+#, php-format
+msgid "Your account takes no codes for about %s minute."
+msgid_plural "Your account takes no codes for about %s minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: templates/emails/twostep-account-lock-text.php:23
+#: templates/emails/twostep-account-lock.php:30
+msgid "Codes are asked for only after the right password or in a logged-in session, so whoever typed them may know your password."
+msgstr ""
+
+#. translators: %s: URL of the lost password page.
+#: templates/emails/twostep-account-lock-text.php:25
+#, php-format
+msgid "If this wasn't you, reset your password: %s"
+msgstr ""
+
+#: templates/emails/twostep-account-lock-text.php:26
+msgid "That also ends the pause."
+msgstr ""
+
+#. translators: %s: link to the lost password page.
+#: templates/emails/twostep-account-lock.php:35
+#, php-format
+msgid "If this wasn't you, %s. That also ends the pause."
+msgstr ""
+
+#: templates/emails/twostep-account-lock.php:36
+msgid "reset your password"
+msgstr ""
+
+#. translators: %s: login code.
+#: templates/emails/twostep-code-text.php:21
+#, php-format
+msgid "Your two-step login code is %s"
+msgstr ""
+
+#. translators: %d: minutes until the login code expires.
+#: templates/emails/twostep-code-text.php:25
+#: templates/emails/twostep-code.php:31
+#, php-format
+msgid "It expires in %d minute."
+msgid_plural "It expires in %d minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: IP address.
+#: templates/emails/twostep-code-text.php:30
+#: templates/emails/twostep-code.php:42
+#, php-format
+msgid "The login attempt came from IP address %s."
+msgstr ""
+
+#: templates/emails/twostep-code-text.php:34
+#: templates/emails/twostep-code.php:48
+msgid "If you didn't try to log in, change your password."
+msgstr ""
+
+#: templates/emails/twostep-code.php:24
+msgid "Your two-step login code is"
+msgstr ""
+
+#. translators: %s: display name of the admin.
+#: templates/emails/twostep-reset-text.php:19
+#: templates/emails/twostep-reset.php:19
+#, php-format
+msgid "Two-step login was turned off for your account by %s."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/twostep-reset-text.php:22
+#: templates/emails/twostep-reset.php:28
+#, php-format
+msgid "You can now log in to %s with your password alone."
+msgstr ""
+
+#. translators: %s: URL of the user's profile or account page.
+#: templates/emails/twostep-reset-text.php:24
+#, php-format
+msgid "You can set it up again from your account: %s"
+msgstr ""
+
+#: templates/emails/twostep-reset-text.php:26
+#: templates/emails/twostep-reset.php:39
+msgid "If you didn't ask for this, change your password and contact the site owner."
+msgstr ""
+
+#. translators: %s: link to the user's profile or account page.
+#: templates/emails/twostep-reset.php:34
+#, php-format
+msgid "You can set it up again from %s."
+msgstr ""
+
+#. translators: %s: site name.
+#: templates/emails/twostep-secret.php:17
+#, php-format
+msgid "A user logged in to %s with an authenticator app secret that can't be read any more. This happens when the security keys and salts in wp-config.php change, or when the HappyAccess site key is lost in a move or a cleanup."
+msgstr ""
+
+#: templates/emails/twostep-secret.php:22
+msgid "Two-step login stays on for these users. They log in with an email code or a backup code, and they need to set up their authenticator app again from their profile or account page."
+msgstr ""
+
+#: templates/emails/twostep-secret.php:23
+msgid "The HappyAccess activity log lists each account. This email is sent at most once a week."
+msgstr ""
+
+#. translators: 1: number of wrong codes, 2: site name.
+#: templates/emails/twostep-site-alert.php:18
+#, php-format
+msgid "At least %1$s wrong two-step login codes were entered on %2$s in the last hour."
+msgstr ""
+
+#: templates/emails/twostep-site-alert.php:24
+msgid "Nobody is locked out because of it. An account that gets 10 wrong codes in an hour pauses on its own, and its owner gets an email."
+msgstr ""
+
+#: templates/emails/twostep-site-alert.php:25
+msgid "The HappyAccess activity log shows which accounts got the wrong codes."
+msgstr ""
+
+#: templates/login/passwordless-form.php:23
+msgid "Email me a login code instead"
+msgstr ""
+
+#: templates/login/passwordless-form.php:48
+msgid "Use a different email"
+msgstr ""
+
+#: build/blocks.js:1
+msgid "Login form"
+msgstr ""
+
+#: build/blocks.js:1
+msgid "Redirect after login"
+msgstr ""
+
+#: build/blocks.js:1
+msgid "A page on this site. Leave empty to stay on the same page."
+msgstr ""
+
+#: build/blocks.js:1
+msgid "Toggle style"
+msgstr ""
+
+#: build/blocks.js:1
+msgid "Site default"
+msgstr ""
+
+#: build/blocks.js:1
+#: build/index.js:31
+msgid "Text link"
+msgstr ""
+
+#: build/blocks.js:1
+#: build/index.js:31
+msgid "Full button"
+msgstr ""
+
+#: build/blocks.js:1
+msgid "The login form shows here while the passwordless login feature is on."
+msgstr ""
+
+#. translators: %d: HTTP status code, like 500.
+#: build/index.js:2
+#, js-format
+msgid "The server sent a reply the app could not read (HTTP %d)."
+msgstr ""
+
+#: build/index.js:2
+msgid "Could not reach the server. Check your connection and try again."
+msgstr ""
+
+#: build/index.js:2
+msgid "System"
+msgstr ""
+
+#: build/index.js:2
+#: build/index.js:13
+msgid "Admin"
+msgstr ""
+
+#: build/index.js:2
+#: build/index.js:13
+msgid "Passwordless"
+msgstr ""
+
+#: build/index.js:2
+#: build/index.js:13
+msgid "Two-step"
+msgstr ""
+
+#: build/index.js:2
+msgid "Other"
+msgstr ""
+
+#: build/index.js:2
+msgid "Not a support pass"
+msgstr ""
+
+#. translators: %d: the id of a support pass.
+#: build/index.js:3
+#: build/index.js:13
+#, js-format
+msgid "Pass #%d"
+msgstr ""
+
+#: build/index.js:3
+msgid "Not recorded"
+msgstr ""
+
+#: build/index.js:3
+msgid "Pass"
+msgstr ""
+
+#. translators: 1: number of hours. 2: number of minutes.
+#: build/index.js:5
+#, js-format
+msgid "%1$d hr %2$d min"
+msgstr ""
+
+#. translators: %d: number of logins.
+#: build/index.js:6
+#: build/index.js:23
+#: build/index.js:44
+#, js-format
+msgid "%d login"
+msgid_plural "%d logins"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: total time, like "1 hr 52 min".
+#: build/index.js:7
+#, js-format
+msgid "%s in total"
+msgstr ""
+
+#. translators: %d: number of changes.
+#: build/index.js:8
+#, js-format
+msgid "%d change"
+msgid_plural "%d changes"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: an IP address.
+#: build/index.js:9
+#, js-format
+msgid "all from %s"
+msgstr ""
+
+#. translators: %s: a list of IP addresses.
+#: build/index.js:10
+#, js-format
+msgid "from %s"
+msgstr ""
+
+#. translators: %s: the pass name.
+#: build/index.js:11
+#, js-format
+msgid "Session summary for %s"
+msgstr ""
+
+#: build/index.js:11
+msgid "Could not load the summary."
+msgstr ""
+
+#: build/index.js:11
+msgid "Session summary"
+msgstr ""
+
+#: build/index.js:11
+msgid "Changes"
+msgstr ""
+
+#: build/index.js:11
+msgid "Time in total"
+msgstr ""
+
+#. translators: %d: number of events.
+#: build/index.js:12
+#, js-format
+msgid "%d event"
+msgid_plural "%d events"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:12
+msgid "Today"
+msgstr ""
+
+#: build/index.js:12
+msgid "Yesterday"
+msgstr ""
+
+#: build/index.js:12
+msgid "Loading pass"
+msgstr ""
+
+#: build/index.js:13
+msgid "All"
+msgstr ""
+
+#. translators: %d: number of days events are kept. The link text is the Settings tab.
+#: build/index.js:14
+#, js-format
+msgid "Kept for %d day, change it in <a>Settings</a>."
+msgid_plural "Kept for %d days, change it in <a>Settings</a>."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:14
+msgid "Search activity"
+msgstr ""
+
+#. translators: %s: number of events, like "12 events".
+#: build/index.js:15
+#, js-format
+msgid "Exported %s"
+msgstr ""
+
+#: build/index.js:15
+msgid "Export CSV"
+msgstr ""
+
+#: build/index.js:15
+msgid "Type of activity"
+msgstr ""
+
+#: build/index.js:15
+msgid "Who"
+msgstr ""
+
+#: build/index.js:15
+msgid "Everyone"
+msgstr ""
+
+#. translators: %s: the name of the person using the screen.
+#: build/index.js:16
+#, js-format
+msgid "%s (you)"
+msgstr ""
+
+#: build/index.js:16
+msgid "When"
+msgstr ""
+
+#: build/index.js:16
+msgid "Last 7 days"
+msgstr ""
+
+#: build/index.js:16
+msgid "Last 30 days"
+msgstr ""
+
+#: build/index.js:16
+msgid "Custom range"
+msgstr ""
+
+#: build/index.js:16
+msgid "From"
+msgstr ""
+
+#: build/index.js:16
+msgid "To"
+msgstr ""
+
+#: build/index.js:16
+#: build/index.js:28
+#: build/index.js:31
+#: build/index.js:59
+#: build/index.js:63
+#: build/index.js:65
+msgid "Try again"
+msgstr ""
+
+#: build/index.js:16
+msgid "Loading activity."
+msgstr ""
+
+#: build/index.js:16
+msgid "No activity matches these filters."
+msgstr ""
+
+#. translators: 1: events on this page. 2: events in all.
+#: build/index.js:17
+#, js-format
+msgid "Showing %1$d of %2$d event."
+msgid_plural "Showing %1$d of %2$d events."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: the current page number. 2: the number of pages.
+#: build/index.js:18
+#, js-format
+msgid "Previous page, page %1$d of %2$d"
+msgstr ""
+
+#: build/index.js:18
+msgid "Previous"
+msgstr ""
+
+#. translators: 1: the current page number. 2: the number of pages.
+#: build/index.js:19
+#, js-format
+msgid "Next page, page %1$d of %2$d"
+msgstr ""
+
+#: build/index.js:19
+msgid "Next"
+msgstr ""
+
+#: build/index.js:19
+msgid "End every support pass now?"
+msgstr ""
+
+#: build/index.js:19
+msgid "Everyone using a pass is logged out and their accounts are deleted."
+msgstr ""
+
+#: build/index.js:19
+#: build/index.js:45
+#: build/index.js:60
+#: build/index.js:63
+msgid "Keep access"
+msgstr ""
+
+#. translators: %d: number of passes that were ended.
+#: build/index.js:20
+#, js-format
+msgid "%d pass ended"
+msgid_plural "%d passes ended"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:20
+msgid "End all passes"
+msgstr ""
+
+#: build/index.js:20
+msgid "Temporary access, passwordless login and two-step login, in one place."
+msgstr ""
+
+#: build/index.js:20
+msgid "Help and docs"
+msgstr ""
+
+#: build/index.js:20
+msgid "Password or email code"
+msgstr ""
+
+#: build/index.js:20
+msgid "Email code only"
+msgstr ""
+
+#. translators: %s: a line of PHP to add to wp-config.php.
+#: build/index.js:21
+#, js-format
+msgid "Anyone who can read this email inbox can log in as this role. If email stops working, add <code>%s</code> to wp-config.php to get back in."
+msgstr ""
+
+#: build/index.js:21
+#: build/index.js:30
+msgid "No roles found."
+msgstr ""
+
+#. translators: %s: a grace period, like "4 logins" or "10 days".
+#: build/index.js:24
+#, js-format
+msgid "Custom (%s)"
+msgstr ""
+
+#. translators: 1: plugin names, comma separated, 2: the last plugin name.
+#: build/index.js:25
+#, js-format
+msgid "%1$s and %2$s"
+msgstr ""
+
+#. translators: 1: a role, as a group of people, like "Administrators". 2: users with two-step login on. 3: all users with the role.
+#: build/index.js:26
+#, js-format
+msgid "%1$s: %2$d of %3$d"
+msgstr ""
+
+#. translators: %d: users who still have to set up two-step login.
+#: build/index.js:27
+#, js-format
+msgid "%d still setting up"
+msgid_plural "%d still setting up"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: users whose grace period is over, with no two-step method.
+#: build/index.js:28
+#, js-format
+msgid "%d can't skip anymore"
+msgid_plural "%d can't skip anymore"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:28
+msgid "Who has two-step login"
+msgstr ""
+
+#: build/index.js:28
+msgid "People with the app or email codes on, by role."
+msgstr ""
+
+#: build/index.js:28
+msgid "Loading counts"
+msgstr ""
+
+#: build/index.js:28
+msgid "Could not load the counts."
+msgstr ""
+
+#. translators: %s: plugin names, like "WP 2FA" or "WP 2FA and Kadence Security".
+#: build/index.js:29
+#, js-format
+msgid "%s handles two-step login for some accounts. They aren't counted here."
+msgstr ""
+
+#: build/index.js:29
+msgid "No users yet."
+msgstr ""
+
+#: build/index.js:29
+msgid "Counts are updated every 5 minutes."
+msgstr ""
+
+#: build/index.js:29
+msgid "If someone is locked out, turn it off on their profile, run <cli />, or add this line to wp-config.php:"
+msgstr ""
+
+#: build/index.js:29
+msgid "Optional"
+msgstr ""
+
+#: build/index.js:29
+msgid "Required"
+msgstr ""
+
+#: build/index.js:29
+msgid "HappyAccess is on for the whole network, so two-step login follows the main site's settings. Changes here don't apply."
+msgstr ""
+
+#: build/index.js:29
+msgid "Sites on this network share their logins, so a login on another site counts here too. Turn on HappyAccess for the whole network, or turn on two-step login with the same roles on every site."
+msgstr ""
+
+#. translators: %s: plugin names, like "WP 2FA" or "WP 2FA and Kadence Security".
+#: build/index.js:30
+#, js-format
+msgid "%s already adds two-step login. HappyAccess skips accounts that use it, so nobody is asked twice."
+msgid_plural "%s already add two-step login. HappyAccess skips accounts that use them, so nobody is asked twice."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:30
+msgid "How each role uses two-step login"
+msgstr ""
+
+#: build/index.js:30
+msgid "People in these roles set up two-step login the next time they log in."
+msgstr ""
+
+#: build/index.js:30
+msgid "Grace period for required roles"
+msgstr ""
+
+#: build/index.js:30
+msgid "Block XML-RPC login for accounts with two-step login"
+msgstr ""
+
+#: build/index.js:30
+msgid "New device alerts"
+msgstr ""
+
+#: build/index.js:30
+msgid "Email a user when their account logs in from a new device"
+msgstr ""
+
+#: build/index.js:30
+msgid "The email shows the time, browser and IP address."
+msgstr ""
+
+#: build/index.js:30
+#: build/index.js:31
+#: build/index.js:61
+msgid "Save changes"
+msgstr ""
+
+#: build/index.js:30
+#: build/index.js:31
+#: build/index.js:61
+msgid "Unsaved changes"
+msgstr ""
+
+#: build/index.js:30
+#: build/index.js:31
+#: build/index.js:61
+msgid "Saved"
+msgstr ""
+
+#: build/index.js:30
+msgid "Username or email address"
+msgstr ""
+
+#: build/index.js:30
+msgid "Password"
+msgstr ""
+
+#: build/index.js:30
+msgid "The WordPress login form, with an \"Email me a login code\" link under it, then a second step that asks for an authenticator app code, with a link to use a backup code."
+msgstr ""
+
+#: build/index.js:30
+msgid "The WordPress login form, then a second step that asks for an authenticator app code, with a link to use a backup code."
+msgstr ""
+
+#: build/index.js:30
+msgid "The WordPress login form, with an \"Email me a login code\" link under it."
+msgstr ""
+
+#: build/index.js:30
+msgid "The WordPress login form."
+msgstr ""
+
+#: build/index.js:30
+msgid "What people see"
+msgstr ""
+
+#: build/index.js:30
+msgid "Updates as you change these settings."
+msgstr ""
+
+#: build/index.js:30
+#: build/index.js:55
+msgid "Lost your password?"
+msgstr ""
+
+#. translators: %d: number of minutes.
+#: build/index.js:31
+#: build/index.js:40
+#: build/index.js:59
+#, js-format
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:31
+msgid "WordPress login page"
+msgstr ""
+
+#: build/index.js:31
+msgid "WooCommerce My Account"
+msgstr ""
+
+#: build/index.js:31
+msgid "WooCommerce checkout"
+msgstr ""
+
+#: build/index.js:31
+#: build/index.js:59
+msgid "Loading settings"
+msgstr ""
+
+#: build/index.js:31
+#: build/index.js:59
+msgid "Could not load the settings."
+msgstr ""
+
+#: build/index.js:31
+#: build/index.js:60
+msgid "Passwordless login"
+msgstr ""
+
+#: build/index.js:31
+msgid "Code lifetime"
+msgstr ""
+
+#: build/index.js:31
+msgid "Button style"
+msgstr ""
+
+#: build/index.js:31
+msgid "How the 'Email me a login code instead' option looks on WooCommerce forms, the shortcode and the block. The WordPress login page always shows a link."
+msgstr ""
+
+#: build/index.js:31
+msgid "Show the email code option on"
+msgstr ""
+
+#: build/index.js:31
+msgid "How each role logs in"
+msgstr ""
+
+#: build/index.js:31
+msgid "Accounts that use two-step login from another plugin can't use email codes. They log in with their password and that plugin's check."
+msgstr ""
+
+#: build/index.js:31
+#: build/index.js:68
+msgid "Administrator (full access)"
+msgstr ""
+
+#: build/index.js:31
+#: build/index.js:68
+msgid "Custom access"
+msgstr ""
+
+#: build/index.js:31
+#: build/index.js:68
+msgid "Administrator (protected)"
+msgstr ""
+
+#. translators: %d: number of days the pass lasts.
+#: build/index.js:32
+#, js-format
+msgid "%d day pass"
+msgid_plural "%d day pass"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of hours the pass lasts.
+#: build/index.js:33
+#, js-format
+msgid "%d hour pass"
+msgid_plural "%d hour pass"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of minutes the pass lasts.
+#: build/index.js:34
+#, js-format
+msgid "%d minute pass"
+msgid_plural "%d minute pass"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of days, as in 2d.
+#: build/index.js:35
+#, js-format
+msgid "%dd"
+msgstr ""
+
+#. translators: %d: number of hours, as in 5h.
+#: build/index.js:36
+#, js-format
+msgid "%dh"
+msgstr ""
+
+#. translators: %d: number of minutes, as in 40m.
+#: build/index.js:37
+#, js-format
+msgid "%dm"
+msgstr ""
+
+#: build/index.js:40
+msgid "Ending now"
+msgstr ""
+
+#. translators: %s: time left, like 2 days 4 hours.
+#: build/index.js:41
+#, js-format
+msgid "Ends in %s"
+msgstr ""
+
+#. translators: %s: how long ago, like "5 hours ago".
+#: build/index.js:42
+#, js-format
+msgid "One-time pass, logged in %s"
+msgstr ""
+
+#. translators: 1: how long ago, like "14 minutes ago". 2: the login count.
+#: build/index.js:43
+#, js-format
+msgid "Last login %1$s, %2$s"
+msgstr ""
+
+#: build/index.js:44
+msgid "Never logged in"
+msgstr ""
+
+#: build/index.js:44
+msgid "Used once"
+msgstr ""
+
+#: build/index.js:44
+msgid "Suspended"
+msgstr ""
+
+#: build/index.js:44
+msgid "Active"
+msgstr ""
+
+#. translators: %s: date and time the pass ends.
+#: build/index.js:45
+#, js-format
+msgid "Access ends %s"
+msgstr ""
+
+#: build/index.js:45
+msgid "Revoke now"
+msgstr ""
+
+#. translators: %s: who the pass was for.
+#: build/index.js:46
+#, js-format
+msgid "Access revoked for %s"
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:47
+#, js-format
+msgid "Revoke access for %s? They're logged out right away and the account is deleted."
+msgstr ""
+
+#: build/index.js:47
+msgid "Keep the current ones"
+msgstr ""
+
+#: build/index.js:47
+msgid "Make new ones"
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:48
+#, js-format
+msgid "New link and code made for %s"
+msgstr ""
+
+#: build/index.js:48
+msgid "This makes a new link and code. The old ones stop working and anyone using this pass is logged out. A suspended pass stays suspended."
+msgstr ""
+
+#: build/index.js:48
+msgid "Add time:"
+msgstr ""
+
+#. translators: 1: who the pass is for. 2: number of days added.
+#: build/index.js:49
+#, js-format
+msgid "Access for %1$s extended by %2$d day"
+msgid_plural "Access for %1$s extended by %2$d days"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: number of days to add.
+#: build/index.js:50
+#, js-format
+msgid "+%d day"
+msgid_plural "+%d days"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d: the most days a pass can last.
+#: build/index.js:51
+#, js-format
+msgid "This pass already ends at the %d-day limit."
+msgstr ""
+
+#. translators: %d: the most days a pass can last.
+#: build/index.js:52
+#, js-format
+msgid "Never more than %d day from now. If they're logged in before it ends, their session carries on."
+msgid_plural "Never more than %d days from now. If they're logged in before it ends, their session carries on."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:52
+msgid "This one-time pass is used. For another login, use New link and code."
+msgstr ""
+
+#: build/index.js:52
+msgid "If they are not logged in, they use the link or code as before."
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:53
+#, js-format
+msgid "Actions for %s"
+msgstr ""
+
+#: build/index.js:53
+msgid "Extend"
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:54
+#, js-format
+msgid "Access resumed for %s"
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:55
+#, js-format
+msgid "Access suspended for %s"
+msgstr ""
+
+#: build/index.js:55
+msgid "Resume"
+msgstr ""
+
+#: build/index.js:55
+msgid "Suspend"
+msgstr ""
+
+#: build/index.js:55
+msgid "New link and code"
+msgstr ""
+
+#: build/index.js:55
+msgid "View activity"
+msgstr ""
+
+#: build/index.js:55
+msgid "Revoke"
+msgstr ""
+
+#: build/index.js:55
+msgid "Your login screen"
+msgstr ""
+
+#: build/index.js:55
+msgid "Updates as you change features."
+msgstr ""
+
+#: build/index.js:55
+msgid "5 tries, then 30 minutes"
+msgstr ""
+
+#: build/index.js:55
+msgid "3 tries, then 30 minutes"
+msgstr ""
+
+#: build/index.js:55
+msgid "10 tries, then 15 minutes"
+msgstr ""
+
+#. translators: 1: number of wrong codes, 2: number of minutes.
+#: build/index.js:56
+#, js-format
+msgid "Custom (%1$d tries, %2$d minutes)"
+msgstr ""
+
+#: build/index.js:57
+msgid "1 year"
+msgstr ""
+
+#: build/index.js:59
+msgid "Temporary access turned on"
+msgstr ""
+
+#. translators: %d: number of passes that were ended.
+#: build/index.js:60
+#, js-format
+msgid "Temporary access turned off. %d pass ended."
+msgid_plural "Temporary access turned off. %d passes ended."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:60
+msgid "Temporary access turned off"
+msgstr ""
+
+#: build/index.js:60
+msgid "What HappyAccess does on this site"
+msgstr ""
+
+#: build/index.js:60
+msgid "Turn on only what you need. Anything off adds no code to your pages."
+msgstr ""
+
+#: build/index.js:60
+msgid "Give a support person, developer or agency a login link or code that ends by itself. No shared passwords, no accounts left behind."
+msgstr ""
+
+#: build/index.js:60
+msgid "Let people log in with a code or link sent to their email."
+msgstr ""
+
+#: build/index.js:60
+msgid "Passwordless login turned on"
+msgstr ""
+
+#: build/index.js:60
+msgid "Passwordless login turned off"
+msgstr ""
+
+#: build/index.js:60
+msgid "Ask for a second step after the password: an app code, an email code or a backup code."
+msgstr ""
+
+#: build/index.js:60
+msgid "Turn off temporary access? Every current pass ends now."
+msgstr ""
+
+#. translators: %s: plugin names, like "WP 2FA" or "WP 2FA and Kadence Security".
+#: build/index.js:61
+#, js-format
+msgid "%s already adds two-step login. HappyAccess skips accounts that use it, so nobody is asked twice. Turn on HappyAccess two-step login anyway?"
+msgid_plural "%s already add two-step login. HappyAccess skips accounts that use them, so nobody is asked twice. Turn on HappyAccess two-step login anyway?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:61
+msgid "Safety and privacy"
+msgstr ""
+
+#: build/index.js:61
+msgid "Wrong codes before a pause"
+msgstr ""
+
+#: build/index.js:61
+msgid "Keep activity for"
+msgstr ""
+
+#: build/index.js:61
+msgid "Visitor IP comes from"
+msgstr ""
+
+#: build/index.js:61
+msgid "Pick Cloudflare only if your site is behind Cloudflare. Your server must accept traffic only from Cloudflare."
+msgstr ""
+
+#: build/index.js:61
+msgid "Direct connection (most sites)"
+msgstr ""
+
+#: build/index.js:61
+msgid "Cloudflare"
+msgstr ""
+
+#: build/index.js:61
+msgid "X-Forwarded-For header"
+msgstr ""
+
+#: build/index.js:61
+msgid "X-Real-IP header"
+msgstr ""
+
+#: build/index.js:61
+msgid "Default pass length"
+msgstr ""
+
+#: build/index.js:61
+msgid "Shorten IP addresses in the log"
+msgstr ""
+
+#: build/index.js:61
+msgid "Keep a log"
+msgstr ""
+
+#: build/index.js:61
+msgid "Turning this off also stops the support activity record."
+msgstr ""
+
+#: build/index.js:61
+msgid "Delete all HappyAccess data when the plugin is deleted"
+msgstr ""
+
+#: build/index.js:61
+msgid "reCAPTCHA"
+msgstr ""
+
+#: build/index.js:61
+msgid "Adds a Google reCAPTCHA check to the access code screen."
+msgstr ""
+
+#: build/index.js:61
+msgid "Site key"
+msgstr ""
+
+#: build/index.js:61
+msgid "Secret key"
+msgstr ""
+
+#: build/index.js:61
+msgid "Type a new key to replace the saved one."
+msgstr ""
+
+#: build/index.js:61
+msgid "A secret key is saved"
+msgstr ""
+
+#: build/index.js:61
+msgid "reCAPTCHA secret key removed"
+msgstr ""
+
+#: build/index.js:61
+msgid "Remove"
+msgstr ""
+
+#: build/index.js:61
+msgid "Features"
+msgstr ""
+
+#: build/index.js:61
+msgid "Consent"
+msgstr ""
+
+#: build/index.js:61
+msgid "Set up HappyAccess"
+msgstr ""
+
+#: build/index.js:61
+msgid "Two quick choices. You can change both later in Settings."
+msgstr ""
+
+#: build/index.js:61
+msgid "Setup steps"
+msgstr ""
+
+#: build/index.js:61
+msgid "What do you want to use?"
+msgstr ""
+
+#: build/index.js:61
+msgid "Pick any. Features you leave off add nothing to your site."
+msgstr ""
+
+#: build/index.js:61
+msgid "Login links and codes for support people, that end by themselves."
+msgstr ""
+
+#: build/index.js:61
+msgid "Before you give anyone access"
+msgstr ""
+
+#: build/index.js:61
+msgid "Read this once. It applies to every support pass you create."
+msgstr ""
+
+#: build/index.js:61
+msgid "A support pass lets someone outside your team into your site's admin, for as long as you choose."
+msgstr ""
+
+#: build/index.js:61
+msgid "Protected admin blocks the riskiest actions and logs what they do, but it is not a sandbox. Only give access to people you trust."
+msgstr ""
+
+#: build/index.js:61
+msgid "Their login, IP address and actions are recorded here so you can review them. You are responsible for telling your visitors if your privacy policy needs it."
+msgstr ""
+
+#: build/index.js:61
+msgid "I understand, and I'll only give access to people I trust."
+msgstr ""
+
+#: build/index.js:61
+msgid "You're all set"
+msgstr ""
+
+#: build/index.js:61
+msgid "Next time support asks for access, create a pass here instead of a new user and a shared password."
+msgstr ""
+
+#: build/index.js:61
+msgid "Create your first support pass"
+msgstr ""
+
+#: build/index.js:61
+msgid "Back"
+msgstr ""
+
+#: build/index.js:61
+msgid "Finish setup"
+msgstr ""
+
+#. translators: 1: what happened, 2: how long ago, like "9 minutes ago".
+#: build/index.js:62
+#, js-format
+msgid "Latest: %1$s, %2$s"
+msgstr ""
+
+#: build/index.js:62
+msgid "Who has access"
+msgstr ""
+
+#. translators: %d: number of passes in the list.
+#: build/index.js:63
+#, js-format
+msgid "%d in the list"
+msgstr ""
+
+#: build/index.js:63
+msgid "Revoke all"
+msgstr ""
+
+#: build/index.js:63
+msgid "Revoke all now"
+msgstr ""
+
+#: build/index.js:63
+msgid "All access revoked"
+msgstr ""
+
+#: build/index.js:63
+msgid "Revoke every pass below? Everyone using a pass is logged out and their accounts are deleted."
+msgstr ""
+
+#: build/index.js:63
+msgid "Loading passes"
+msgstr ""
+
+#: build/index.js:63
+#: build/index.js:79
+msgid "Nobody has access."
+msgstr ""
+
+#: build/index.js:63
+msgid "Passes you create show here, with the time each one has left."
+msgstr ""
+
+#: build/index.js:63
+msgid "See all activity"
+msgstr ""
+
+#. translators: 1: parent menu name, 2: sub menu name.
+#: build/index.js:64
+#, js-format
+msgid "%1$s › %2$s"
+msgstr ""
+
+#: build/index.js:64
+msgid "Administrator (uses the level above)"
+msgstr ""
+
+#: build/index.js:64
+msgid "More options"
+msgstr ""
+
+#: build/index.js:64
+msgid "One-time use"
+msgstr ""
+
+#: build/index.js:64
+msgid "The link and code work for one login. That session can carry on until access ends."
+msgstr ""
+
+#: build/index.js:64
+msgid "Or give a different role"
+msgstr ""
+
+#: build/index.js:64
+msgid "Login alerts"
+msgstr ""
+
+#: build/index.js:64
+msgid "First login"
+msgstr ""
+
+#: build/index.js:64
+msgid "Every login"
+msgstr ""
+
+#: build/index.js:64
+msgid "Hide admin screens"
+msgstr ""
+
+#: build/index.js:64
+msgid "Only allow these IP addresses"
+msgstr ""
+
+#: build/index.js:64
+msgid "Separate several with commas."
+msgstr ""
+
+#: build/index.js:64
+msgid "Any IP address"
+msgstr ""
+
+#: build/index.js:64
+msgid "After login, open"
+msgstr ""
+
+#: build/index.js:64
+msgid "A path like /wp-admin/edit.php. Leave it empty to open the dashboard."
+msgstr ""
+
+#: build/index.js:64
+msgid "Dashboard"
+msgstr ""
+
+#: build/index.js:64
+msgid "Email it to them now"
+msgstr ""
+
+#: build/index.js:64
+msgid "Who is it for?"
+msgstr ""
+
+#: build/index.js:64
+msgid "Preview"
+msgstr ""
+
+#. translators: %s: date and time the pass ends.
+#: build/index.js:65
+#: build/index.js:76
+#, js-format
+msgid "Valid until %s"
+msgstr ""
+
+#: build/index.js:65
+msgid "Link and code appear when you create the pass."
+msgstr ""
+
+#: build/index.js:65
+msgid "Could not load the permissions."
+msgstr ""
+
+#: build/index.js:65
+msgid "Loading permissions"
+msgstr ""
+
+#: build/index.js:65
+msgid "Administrator"
+msgstr ""
+
+#: build/index.js:65
+msgid "Shop manager"
+msgstr ""
+
+#: build/index.js:65
+msgid "Editor"
+msgstr ""
+
+#: build/index.js:65
+msgid "Start from"
+msgstr ""
+
+#. translators: 1: permissions ticked, 2: permissions available.
+#: build/index.js:66
+#, js-format
+msgid "%1$d of %2$d permissions"
+msgstr ""
+
+#: build/index.js:66
+msgid "Find a permission"
+msgstr ""
+
+#: build/index.js:66
+msgid "Find a permission, like refunds or plugins"
+msgstr ""
+
+#. translators: 1: number of permissions the search shows, 2: group name.
+#: build/index.js:67
+#, js-format
+msgid "Turn on the %1$d shown in %2$s"
+msgid_plural "Turn on the %1$d shown in %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: permissions ticked in the group, 2: permissions in the group.
+#: build/index.js:68
+#, js-format
+msgid "%1$d of %2$d"
+msgstr ""
+
+#: build/index.js:68
+msgid "Admin-level"
+msgstr ""
+
+#: build/index.js:68
+msgid "No permissions match."
+msgstr ""
+
+#: build/index.js:68
+msgid "Always locked: HappyAccess settings and log, and your own account."
+msgstr ""
+
+#: build/index.js:68
+msgid "Protected admin"
+msgstr ""
+
+#: build/index.js:68
+msgid "Can fix almost anything. The risky actions are blocked. Best for most support."
+msgstr ""
+
+#: build/index.js:68
+msgid "Pick exactly what they can do, permission by permission."
+msgstr ""
+
+#: build/index.js:68
+msgid "Full admin, no limits"
+msgstr ""
+
+#: build/index.js:68
+msgid "For teams you fully trust, like your host or developer."
+msgstr ""
+
+#: build/index.js:68
+msgid "1 day"
+msgstr ""
+
+#: build/index.js:68
+msgid "3 days"
+msgstr ""
+
+#: build/index.js:68
+msgid "7 days"
+msgstr ""
+
+#: build/index.js:68
+msgid "Custom"
+msgstr ""
+
+#: build/index.js:68
+msgid "I trust this person with full access to my site"
+msgstr ""
+
+#. translators: %s: date and time the pass ends.
+#: build/index.js:69
+#, js-format
+msgid "Ends tomorrow, %s"
+msgstr ""
+
+#. translators: %s: date and time the pass ends.
+#: build/index.js:70
+#, js-format
+msgid "Ends %s"
+msgstr ""
+
+#: build/index.js:70
+msgid "Add who it's for"
+msgstr ""
+
+#: build/index.js:70
+msgid "Fix the email address"
+msgstr ""
+
+#: build/index.js:70
+msgid "The permissions have not loaded yet"
+msgstr ""
+
+#: build/index.js:70
+msgid "Tick at least one permission"
+msgstr ""
+
+#: build/index.js:70
+msgid "Tick the trust box to continue"
+msgstr ""
+
+#: build/index.js:70
+msgid "Give temporary access"
+msgstr ""
+
+#: build/index.js:70
+msgid "Creates a login link and an 8-digit code. No passwords to share, and it ends by itself."
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:71
+#, js-format
+msgid "Support pass created for %s"
+msgstr ""
+
+#: build/index.js:71
+msgid "Who is it for"
+msgstr ""
+
+#: build/index.js:71
+msgid "Their email (optional)"
+msgstr ""
+
+#: build/index.js:71
+msgid "Enter a full email address, like name@example.com."
+msgstr ""
+
+#: build/index.js:71
+msgid "Only used if you send the access by email."
+msgstr ""
+
+#: build/index.js:71
+msgid "What they can do"
+msgstr ""
+
+#: build/index.js:71
+msgid "Always blocked on this pass"
+msgstr ""
+
+#: build/index.js:71
+msgid "Changing passwords or emails, editing or deleting admins, deleting users, erasing the activity log, and turning off HappyAccess."
+msgstr ""
+
+#: build/index.js:71
+msgid "Admin-level permissions are on."
+msgstr ""
+
+#: build/index.js:71
+msgid "With these, they can change site settings, install code or manage users, which can lead to full control of your site."
+msgstr ""
+
+#: build/index.js:71
+msgid "No limits."
+msgstr ""
+
+#: build/index.js:71
+msgid "They can do anything an admin can, including installing code or creating another admin account. The pass still ends on time, every login sends you an alert, and any new admin account is flagged and emailed to you."
+msgstr ""
+
+#: build/index.js:71
+msgid "Access ends after"
+msgstr ""
+
+#. translators: %d: the most days a pass can last.
+#: build/index.js:72
+#, js-format
+msgid "Pick a date up to %d day ahead."
+msgid_plural "Pick a date up to %d days ahead."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:72
+msgid "Create support pass"
+msgstr ""
+
+#: build/index.js:72
+msgid "Copied"
+msgstr ""
+
+#. translators: %s: the keys that copy on this computer, Cmd+C or Ctrl+C.
+#: build/index.js:73
+#, js-format
+msgid "Press %s to copy"
+msgstr ""
+
+#. translators: %s: who the pass is for.
+#: build/index.js:74
+#, js-format
+msgid "Access is ready for %s"
+msgstr ""
+
+#. translators: %s: date and time the pass ends.
+#: build/index.js:75
+#, js-format
+msgid "Ends %s. Give them the link or the code, either one works."
+msgstr ""
+
+#: build/index.js:75
+msgid "Support pass"
+msgstr ""
+
+#: build/index.js:76
+msgid "Copy login link"
+msgstr ""
+
+#: build/index.js:76
+msgid "Login link copied"
+msgstr ""
+
+#: build/index.js:76
+msgid "Or the access code"
+msgstr ""
+
+#. translators: 1: the site's login address, like example.com. 2: the label of the link on the login screen.
+#: build/index.js:77
+#, js-format
+msgid "Entered at %1$s, \"%2$s\""
+msgstr ""
+
+#: build/index.js:77
+msgid "Copy access code"
+msgstr ""
+
+#: build/index.js:77
+msgid "Access code copied"
+msgstr ""
+
+#: build/index.js:77
+msgid "Hide the message"
+msgstr ""
+
+#: build/index.js:77
+msgid "See the message they get"
+msgstr ""
+
+#: build/index.js:77
+msgid "Message copied, ready to paste"
+msgstr ""
+
+#: build/index.js:77
+msgid "Copied, ready to paste"
+msgstr ""
+
+#: build/index.js:77
+msgid "Copy message with instructions"
+msgstr ""
+
+#: build/index.js:77
+msgid "Send by email"
+msgstr ""
+
+#: build/index.js:77
+msgid "This makes a new link and code and emails them. The ones shown here stop working."
+msgstr ""
+
+#. translators: %s: the email address.
+#: build/index.js:78
+#, js-format
+msgid "New link and code emailed to %s"
+msgstr ""
+
+#: build/index.js:78
+msgid "The email could not be sent. The new link and code are shown here."
+msgstr ""
+
+#: build/index.js:78
+msgid "Make new ones and send"
+msgstr ""
+
+#. translators: %s: the email address.
+#: build/index.js:79
+#, js-format
+msgid "Emailed to %s. The link and code shown here are the new ones."
+msgstr ""
+
+#: build/index.js:79
+msgid "Anyone with the link or the code can log in. For extra safety, send them through different channels. You won't see the code again, but you can make a new one any time."
+msgstr ""
+
+#: build/index.js:79
+msgid "Done, give access to someone else"
+msgstr ""
+
+#. translators: %d: number of people with a working pass.
+#: build/index.js:80
+#, js-format
+msgid "%d person has access."
+msgid_plural "%d people have access."
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/index.js:80
+msgid "Checking who has access."
+msgstr ""
+
+#. translators: 1: who the pass is for. 2: how long ago, like "14 minutes ago".
+#: build/index.js:81
+#, js-format
+msgid "%1$s logged in %2$s."
+msgstr ""
+
+#: build/index.js:81
+msgid "HappyAccess sections"
+msgstr ""
+
+#: build/index.js:81
+msgid "Login and security"
+msgstr ""
+
+#: blocks/login/block.json
+msgctxt "block title"
+msgid "HappyAccess Login"
+msgstr ""
+
+#: blocks/login/block.json
+msgctxt "block description"
+msgid "Let visitors log in with a code emailed to them. Logged-in visitors see nothing."
+msgstr ""
+
+#: blocks/login/block.json
+msgctxt "block keyword"
+msgid "login"
+msgstr ""
+
+#: blocks/login/block.json
+msgctxt "block keyword"
+msgid "passwordless"
+msgstr ""
+
+#: blocks/login/block.json
+msgctxt "block keyword"
+msgid "code"
+msgstr ""

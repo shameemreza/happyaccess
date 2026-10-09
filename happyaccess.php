@@ -3,7 +3,7 @@
  * Plugin Name:       HappyAccess
  * Plugin URI:        https://wordpress.org/plugins/happyaccess
  * Description:       Secure temporary admin access for WordPress support engineers. Generate OTP-based access without sharing passwords.
- * Version:           1.0.6
+ * Version:           1.1.0
  * Author:            Shameem Reza
  * Author URI:        https://shameem.dev/
  * License:           GPL v2 or later
@@ -11,7 +11,7 @@
  * Text Domain:       happyaccess
  * Domain Path:       /languages
  * Requires at least: 6.7
- * Tested up to:      6.9
+ * Tested up to:      7.1
  * Requires PHP:      7.4
  *
  * @package HappyAccess
@@ -22,7 +22,7 @@ use HappyAccess\Plugin;
 defined( 'ABSPATH' ) || exit;
 
 // The test bootstrap defines these first, so each one is guarded.
-defined( 'HAPPYACCESS_VERSION' ) || define( 'HAPPYACCESS_VERSION', '1.0.6' );
+defined( 'HAPPYACCESS_VERSION' ) || define( 'HAPPYACCESS_VERSION', '1.1.0' );
 defined( 'HAPPYACCESS_PLUGIN_FILE' ) || define( 'HAPPYACCESS_PLUGIN_FILE', __FILE__ );
 defined( 'HAPPYACCESS_PLUGIN_DIR' ) || define( 'HAPPYACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 defined( 'HAPPYACCESS_PLUGIN_URL' ) || define( 'HAPPYACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

@@ -10,11 +10,14 @@ use HappyAccess\Core\Capabilities;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Cron;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Core\Uninstaller;
 use HappyAccess\Plugin;
 use HappyAccess\Features\SupportAccess\Grants;
 use HappyAccess\Features\SupportAccess\TempUsers;
+use HappyAccess\Features\TwoStep\DeviceAlerts;
+use HappyAccess\Features\TwoStep\UserState;
 
 class UninstallerTest extends WP_UnitTestCase {
 
@@ -533,6 +536,43 @@ class UninstallerTest extends WP_UnitTestCase {
 			$this->assertFalse( metadata_exists( 'user', $user_id, $key ), $key . ' is still there' );
 		}
 		$this->assertSame( 'y', get_user_meta( $user_id, '_other_plugin_note', true ) );
+	}
+
+	public function test_with_delete_on_the_settings_secret_challenges_lock_failure_note_and_two_step_meta_go() {
+		$this->delete_data( true );
+		add_option( Secrets::OPTION, 'x', '', false );
+		add_option( Installer::LOCK_OPTION, 'held', '', false );
+		set_transient( Installer::FAILED_TRANSIENT, array( 'step' => 'x' ), 600 );
+		$user_id = self::factory()->user->create();
+		$keys    = $this->two_step_meta( $user_id );
+		$this->assertNotFalse( get_option( Settings::OPTION ) );
+		$this->assertTrue( Installer::table_exists( 'challenges' ) );
+
+		Uninstaller::run();
+
+		$this->assertFalse( get_option( Settings::OPTION ) );
+		$this->assertFalse( get_option( Secrets::OPTION ) );
+		$this->assertFalse( Installer::table_exists( 'challenges' ) );
+		$this->assertFalse( get_option( Installer::LOCK_OPTION ) );
+		$this->assertFalse( get_transient( Installer::FAILED_TRANSIENT ) );
+		foreach ( $keys as $key ) {
+			$this->assertFalse( metadata_exists( 'user', $user_id, $key ), $key . ' is still there' );
+		}
+	}
+
+	public function test_the_two_step_meta_list_names_every_key_the_feature_writes() {
+		$written = array( DeviceAlerts::META );
+		foreach ( ( new ReflectionClass( UserState::class ) )->getConstants() as $name => $value ) {
+			if ( 0 === strpos( $name, 'META_' ) ) {
+				$written[] = $value;
+			}
+		}
+
+		$this->assertCount( 5, $written );
+		foreach ( $written as $key ) {
+			$this->assertContains( $key, Uninstaller::TWOSTEP_META );
+		}
+		$this->assertEqualsCanonicalizing( $written, $this->two_step_meta( self::factory()->user->create() ) );
 	}
 
 	public function test_with_delete_off_the_two_step_meta_stays() {
