@@ -284,7 +284,7 @@ final class Privacy {
 					),
 					array(
 						'name'  => __( 'Summary', 'happyaccess' ),
-						'value' => (string) $row['summary'],
+						'value' => SettingLabels::summary( (string) $row['event_type'], (string) $row['summary'], empty( $row['metadata'] ) ? array() : json_decode( (string) $row['metadata'], true ) ),
 					),
 				),
 			);

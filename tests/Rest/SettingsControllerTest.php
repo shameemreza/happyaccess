@@ -471,6 +471,58 @@ class SettingsControllerTest extends RestTestCase {
 		$this->assertContains( 'settings_changed', \HappyAccess\Core\Privacy::ADMIN_EVENTS );
 	}
 
+	public function test_a_feature_switch_logs_its_new_state_as_a_boolean_only() {
+		$this->request( 'POST', '/settings', array( 'features' => array( 'passwordless' => true ) ) );
+		$this->request(
+			'POST',
+			'/settings',
+			array(
+				'features' => array( 'passwordless' => false ),
+				'privacy'  => array( 'retention_days' => 45 ),
+			)
+		);
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 2, $rows );
+		$this->assertSame( array( 'passwordless' => false ), $rows[0]['meta']['features'] );
+		$this->assertSame( array( 'passwordless' => true ), $rows[1]['meta']['features'] );
+		$this->assertSame( array( 'keys', 'features' ), array_keys( $rows[0]['meta'] ) );
+	}
+
+	public function test_a_save_without_a_switch_logs_no_feature_states() {
+		$this->request( 'POST', '/settings', array( 'privacy' => array( 'anonymize_ip' => true ) ) );
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertArrayNotHasKey( 'features', $rows[0]['meta'] );
+	}
+
+	public function test_setup_logs_finished_setup_with_the_switches_it_turned_on() {
+		$this->request(
+			'POST',
+			'/setup',
+			array(
+				'features' => array(
+					'support_access' => true,
+					'passwordless'   => true,
+					'two_step'       => false,
+				),
+				'consent'  => true,
+			)
+		);
+
+		$rows = $this->settings_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertContains( 'support.consent_given_at', $rows[0]['meta']['keys'] );
+		$this->assertSame( array( 'passwordless' => true ), $rows[0]['meta']['features'] );
+
+		$read = new WP_REST_Request( 'GET', '/' . \HappyAccess\Rest\Routes::NS . '/activity' );
+		$read->set_query_params( array( 'event' => 'settings_changed' ) );
+		$items = rest_do_request( $read )->get_data()['items'];
+		$this->assertCount( 1, $items );
+		$this->assertSame( 'Finished setup and turned on Passwordless login', $items[0]['summary'] );
+	}
+
 	public function test_a_save_that_changes_nothing_logs_nothing() {
 		$this->request( 'POST', '/settings', array( 'security' => array( 'max_attempts' => Settings::get( 'security.max_attempts' ) ) ) );
 		update_option( SettingsController::SECRET_OPTION, 'same', false );

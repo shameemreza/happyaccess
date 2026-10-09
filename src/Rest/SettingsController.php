@@ -13,6 +13,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\Features;
 use HappyAccess\Core\Internal;
 use HappyAccess\Core\Recaptcha;
+use HappyAccess\Core\SettingLabels;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\AdminBar;
 use HappyAccess\Features\SupportAccess\Catalog;
@@ -475,7 +476,7 @@ final class SettingsController {
 		$log_first = (bool) $before['privacy']['logging'] && ! $expected['privacy']['logging'];
 
 		if ( $log_first ) {
-			self::log_change( $keys );
+			self::log_change( $keys, $expected );
 		}
 		Settings::update( $changes );
 		// update_option() also returns false for an unchanged value, so compare what is stored with what was meant to be.
@@ -485,12 +486,12 @@ final class SettingsController {
 		if ( null !== $secret && ! self::write_secret( $secret ) ) {
 			// The other settings were stored, so the log still records them, without the secret.
 			if ( ! $log_first ) {
-				self::log_change( array_values( array_diff( $keys, array( 'security.recaptcha_secret_key' ) ) ) );
+				self::log_change( array_values( array_diff( $keys, array( 'security.recaptcha_secret_key' ) ) ), $expected );
 			}
 			return self::save_error();
 		}
 		if ( ! $log_first ) {
-			self::log_change( $keys );
+			self::log_change( $keys, $expected );
 		}
 
 		if ( $was_on && ! Features::is_enabled( 'support_access' ) ) {
@@ -523,21 +524,29 @@ final class SettingsController {
 	}
 
 	/**
-	 * Logs an admin settings change by key name only.
+	 * Logs an admin settings change by key name only, plus the new on or off
+	 * of any feature switch among them. The line a person reads is built
+	 * from these when the row is read (see SettingLabels::summary()).
 	 *
-	 * @param string[] $keys Changed dotted keys.
+	 * @param string[] $keys     Changed dotted keys.
+	 * @param array    $settings Settings after the change.
 	 * @return void
 	 */
-	private static function log_change( array $keys ) {
+	private static function log_change( array $keys, array $settings ) {
 		if ( ! $keys ) {
 			return;
+		}
+		$meta     = array( 'keys' => $keys );
+		$features = SettingLabels::feature_states( $keys, $settings );
+		if ( $features ) {
+			$meta['features'] = $features;
 		}
 		AuditLog::add(
 			'settings_changed',
 			array(
 				'feature' => 'core',
 				'summary' => sprintf( 'Changed settings: %s', implode( ', ', $keys ) ),
-				'meta'    => array( 'keys' => $keys ),
+				'meta'    => $meta,
 			)
 		);
 	}

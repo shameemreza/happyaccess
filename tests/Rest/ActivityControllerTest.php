@@ -467,4 +467,54 @@ class ActivityControllerTest extends RestTestCase {
 		$this->assertStringContainsString( 'LIMIT 5000', $reads[0] );
 		$this->assertStringNotContainsString( 'COUNT(', $reads[0] );
 	}
+
+	public function test_list_csv_and_privacy_export_read_a_settings_change_the_same_way() {
+		// A row as 1.0 stored it: dotted keys in the summary and no feature states.
+		AuditLog::add(
+			'settings_changed',
+			array(
+				'feature' => 'core',
+				'summary' => 'Changed settings: privacy.anonymize_ip, privacy.retention_days, support.consent_user_id',
+				'meta'    => array( 'keys' => array( 'privacy.anonymize_ip', 'privacy.retention_days', 'support.consent_user_id' ) ),
+			)
+		);
+		$expected = 'Changed settings: Keep activity for, Shorten IP addresses in the log';
+
+		$items = $this->get( '/activity', array( 'event' => 'settings_changed' ) )->get_data()['items'];
+		$this->assertSame( $expected, $items[0]['summary'] );
+
+		$rows = $this->parse_csv( $this->get( '/activity/export', array( 'event' => 'settings_changed' ) )->get_data()['csv'] );
+		$this->assertSame( $expected, $rows[1][3] );
+
+		wp_update_user(
+			array(
+				'ID'         => $this->owner,
+				'user_email' => 'owner@example.org',
+			)
+		);
+		Privacy::register();
+		$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
+		$export    = call_user_func( $exporters['happyaccess']['callback'], 'owner@example.org', 1 );
+		$summaries = array();
+		foreach ( $export['data'] as $item ) {
+			if ( 'happyaccess_logs' === $item['group_id'] ) {
+				$summaries[] = wp_list_pluck( $item['data'], 'value', 'name' )['Summary'];
+			}
+		}
+		$this->assertContains( $expected, $summaries );
+		$this->assertStringNotContainsString( 'consent', implode( ' ', $summaries ) );
+	}
+
+	public function test_a_row_without_meta_keys_keeps_its_stored_summary() {
+		AuditLog::add(
+			'settings_changed',
+			array(
+				'feature' => 'core',
+				'summary' => 'Changed settings: something',
+			)
+		);
+
+		$items = $this->get( '/activity', array( 'event' => 'settings_changed' ) )->get_data()['items'];
+		$this->assertSame( 'Changed settings: something', $items[0]['summary'] );
+	}
 }

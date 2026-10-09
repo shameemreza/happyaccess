@@ -12,6 +12,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\EventLabels;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Privacy;
+use HappyAccess\Core\SettingLabels;
 use HappyAccess\Features\SupportAccess\Grants;
 
 defined( 'ABSPATH' ) || exit;
@@ -366,7 +367,7 @@ final class ActivityController {
 				'event'       => (string) $row['event_type'],
 				'event_label' => EventLabels::label( $row['event_type'] ),
 				'kind'        => self::kind( (string) $row['event_type'] ),
-				'summary'     => (string) $row['summary'],
+				'summary'     => SettingLabels::summary( (string) $row['event_type'], (string) $row['summary'], $row['meta'] ),
 				'actor'       => array(
 					'id'   => $user_id,
 					'name' => $name,
