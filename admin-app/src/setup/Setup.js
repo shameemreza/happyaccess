@@ -300,7 +300,7 @@ export default function Setup( {
 						<p className="ha-setup__lead">
 							{ supportOn
 								? __(
-										'Next time someone needs into your admin, send them a link or code instead of a password.',
+										'Next time someone needs to get into your admin, send them a link or code instead of a password.',
 										'happyaccess'
 									)
 								: __(

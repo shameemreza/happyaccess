@@ -83,13 +83,10 @@
 			font-size: 18px;
 			font-weight: 600;
 
-			&:focus {
-				outline: none;
-			}
-
+			// Focus lands here only from code, when a step opens, so no focus box.
+			&:focus,
 			&:focus-visible {
-				outline: 2px solid var(--ha-accent);
-				outline-offset: 2px;
+				outline: none;
 			}
 		}
 	}
@@ -184,15 +181,17 @@
 		color: #007017;
 	}
 
+	// One column, primary on top, every button as wide as the widest one.
 	.ha-setup__actions {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: fit-content(100%);
 		justify-content: center;
 		gap: 8px;
 		margin-block-start: 8px;
 	}
 
 	.ha-setup__go {
+		justify-content: center;
 		height: 44px;
 		padding-inline: 20px;
 	}

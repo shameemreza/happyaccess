@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,6 +21,22 @@ async function toConsent( user ) {
 	await screen.findByRole( 'heading', {
 		name: 'Before you give anyone access',
 	} );
+}
+
+/**
+ * One block of the setup styles, by selector, as written in the source.
+ * The tests run without CSS, so the layout rules are checked here.
+ *
+ * @param {string} selector Selector that opens the block.
+ * @return {string} The block's text up to its closing brace.
+ */
+function styleBlock( selector ) {
+	const scss = readFileSync(
+		path.resolve( 'admin-app/src/setup/_setup.scss' ),
+		'utf8'
+	);
+	const start = scss.indexOf( selector + ' {' );
+	return -1 === start ? '' : scss.slice( start, scss.indexOf( '}', start ) );
 }
 
 const CONSENT = "I understand, and I'll only give access to people I trust.";
@@ -270,7 +288,7 @@ describe( 'First-run setup', () => {
 		expect(
 			screen.getByText(
 				picks.support_access
-					? 'Next time someone needs into your admin, send them a link or code instead of a password.'
+					? 'Next time someone needs to get into your admin, send them a link or code instead of a password.'
 					: "Your login options are on. Here's where to set them up."
 			)
 		).toBeInTheDocument();
@@ -572,5 +590,44 @@ describe( 'First-run setup', () => {
 
 		await finishWith( user, { passwordless: true } );
 		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+
+	it( 'stacks the Done buttons in one column of equal width, primary on top', async () => {
+		const user = userEvent.setup();
+		render( <Setup twoStepSetupUrl={ TWO_STEP_URL } /> );
+
+		await finishWith( user, {
+			support_access: true,
+			passwordless: true,
+			two_step: true,
+		} );
+
+		expect( doneButtons()[ 0 ] ).toEqual( [
+			'Give temporary access',
+			'primary',
+		] );
+		const actions = styleBlock( '.ha-setup__actions' );
+		expect( actions ).toContain( 'display: grid;' );
+		expect( actions ).toContain(
+			'grid-template-columns: fit-content(100%);'
+		);
+		expect( actions ).toContain( 'justify-content: center;' );
+		expect( actions ).not.toContain( 'flex-wrap' );
+	} );
+
+	it( 'shows no focus box on a step heading that code focuses', async () => {
+		const user = userEvent.setup();
+		render( <Setup /> );
+
+		await finishWith( user, { passwordless: true } );
+
+		const heading = screen.getByRole( 'heading', {
+			name: "You're all set",
+		} );
+		expect( heading ).toHaveFocus();
+		expect( heading ).toHaveAttribute( 'tabindex', '-1' );
+		const focus = styleBlock( '&:focus,\n\t\t\t&:focus-visible' );
+		expect( focus ).toContain( 'outline: none;' );
+		expect( focus ).not.toContain( 'solid' );
 	} );
 } );
