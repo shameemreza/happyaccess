@@ -356,10 +356,10 @@ final class Recaptcha {
 		AuditLog::add(
 			'captcha_unavailable',
 			array(
-				'feature' => 'core',
-				'user_id' => 0,
-				'summary' => __( "The security check couldn't reach Google", 'happyaccess' ),
-				'meta'    => array( 'step' => $action ),
+				'feature'     => 'core',
+				'user_id'     => 0,
+				'summary_key' => 'captcha_unavailable',
+				'meta'        => array( 'step' => $action ),
 			)
 		);
 	}
@@ -378,10 +378,10 @@ final class Recaptcha {
 		AuditLog::add(
 			'captcha_failed',
 			array(
-				'feature' => 'core',
-				'user_id' => 0,
-				'summary' => __( 'A login failed the security check', 'happyaccess' ),
-				'meta'    => array(
+				'feature'     => 'core',
+				'user_id'     => 0,
+				'summary_key' => 'captcha_failed',
+				'meta'        => array(
 					'step'   => $action,
 					'reason' => $reason,
 				),

@@ -505,6 +505,71 @@ class ActivityControllerTest extends RestTestCase {
 		$this->assertStringNotContainsString( 'consent', implode( ' ', $summaries ) );
 	}
 
+	public function test_list_csv_and_privacy_export_build_a_new_row_in_the_viewers_language() {
+		wp_update_user(
+			array(
+				'ID'         => $this->owner,
+				'user_email' => 'owner@example.org',
+			)
+		);
+		$grant = Grants::create( array( 'label' => 'Acme' ) );
+		\HappyAccess\Features\SupportAccess\AdminBar::emergency_lock();
+
+		$translate = static function ( $translation, $text, $domain ) {
+			$map = array( 'Temporary access granted to %s' => 'Zugang erteilt für %s' );
+			return 'happyaccess' === $domain && isset( $map[ $text ] ) ? $map[ $text ] : $translation;
+		};
+		$plural    = static function ( $translation, $single, $plural, $number, $domain ) {
+			return 'happyaccess' === $domain && 'Emergency lock ended %d grant.' === $single ? 'Notsperre beendete %d Zugänge.' : $translation;
+		};
+		add_filter( 'gettext', $translate, 10, 3 );
+		add_filter( 'ngettext', $plural, 10, 5 );
+		try {
+			$items = $this->get( '/activity', array( 'token_id' => $grant['id'] ) )->get_data()['items'];
+			$this->assertSame( 'Zugang erteilt für Acme', wp_list_pluck( $items, 'summary', 'event' )['grant_created'] );
+
+			$lock = $this->get( '/activity', array( 'event' => 'emergency_lock' ) )->get_data()['items'];
+			$this->assertSame( 'Notsperre beendete 1 Zugänge.', $lock[0]['summary'] );
+
+			$rows = $this->parse_csv( $this->get( '/activity/export', array( 'event' => 'grant_created' ) )->get_data()['csv'] );
+			$this->assertSame( 'Zugang erteilt für Acme', $rows[1][3] );
+
+			Privacy::register();
+			$exporters = apply_filters( 'wp_privacy_personal_data_exporters', array() );
+			$export    = call_user_func( $exporters['happyaccess']['callback'], 'owner@example.org', 1 );
+			$summaries = array();
+			foreach ( $export['data'] as $item ) {
+				if ( 'happyaccess_logs' === $item['group_id'] ) {
+					$summaries[] = wp_list_pluck( $item['data'], 'value', 'name' )['Summary'];
+				}
+			}
+			$this->assertContains( 'Notsperre beendete 1 Zugänge.', $summaries );
+		} finally {
+			remove_filter( 'gettext', $translate, 10 );
+			remove_filter( 'ngettext', $plural, 10 );
+		}
+
+		// The stored column keeps the line as it was written.
+		$stored = AuditLog::query( array( 'event' => 'grant_created' ) )['items'][0];
+		$this->assertSame( 'Temporary access granted to Acme', $stored['summary'] );
+	}
+
+	public function test_an_old_row_without_a_text_key_keeps_its_stored_summary() {
+		// A row as 1.0 stored it, translated when it was written.
+		AuditLog::add(
+			'grant_created',
+			array(
+				'summary' => 'Zugang erteilt für Altkunde',
+				'meta'    => array( 'role' => 'administrator' ),
+			)
+		);
+
+		$items = $this->get( '/activity', array( 'event' => 'grant_created' ) )->get_data()['items'];
+		$this->assertSame( 'Zugang erteilt für Altkunde', $items[0]['summary'] );
+		$rows = $this->parse_csv( $this->get( '/activity/export', array( 'event' => 'grant_created' ) )->get_data()['csv'] );
+		$this->assertSame( 'Zugang erteilt für Altkunde', $rows[1][3] );
+	}
+
 	public function test_a_row_without_meta_keys_keeps_its_stored_summary() {
 		AuditLog::add(
 			'settings_changed',

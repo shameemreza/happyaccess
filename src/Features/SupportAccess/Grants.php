@@ -228,11 +228,11 @@ final class Grants {
 		AuditLog::add(
 			'grant_created',
 			array(
-				'feature'  => 'support',
-				'token_id' => $id,
-				/* translators: %s: label of the support grant. */
-				'summary'  => sprintf( __( 'Temporary access granted to %s', 'happyaccess' ), $label ),
-				'meta'     => $log_meta,
+				'feature'      => 'support',
+				'token_id'     => $id,
+				'summary_key'  => 'grant_created',
+				'summary_args' => array( $label ),
+				'meta'         => $log_meta,
 			)
 		);
 
@@ -484,11 +484,11 @@ final class Grants {
 		AuditLog::add(
 			'grant_extended',
 			array(
-				'feature'  => 'support',
-				'token_id' => $grant['id'],
-				/* translators: %s: label of the support grant. */
-				'summary'  => sprintf( __( 'Temporary access extended for %s', 'happyaccess' ), $grant['label'] ),
-				'meta'     => array( 'expires_at' => $expires ),
+				'feature'      => 'support',
+				'token_id'     => $grant['id'],
+				'summary_key'  => 'grant_extended',
+				'summary_args' => array( $grant['label'] ),
+				'meta'         => array( 'expires_at' => $expires ),
 			)
 		);
 		return true;
@@ -513,8 +513,7 @@ final class Grants {
 		$grant = self::get( $id );
 		if ( null !== $grant ) {
 			TempUsers::destroy_sessions( $grant['user_id'] );
-			/* translators: %s: label of the support grant. */
-			self::log( 'grant_suspended', $grant, sprintf( __( 'Temporary access suspended for %s', 'happyaccess' ), $grant['label'] ) );
+			self::log( 'grant_suspended', $grant );
 		}
 		return true;
 	}
@@ -537,8 +536,7 @@ final class Grants {
 
 		$grant = self::get( $id );
 		if ( null !== $grant ) {
-			/* translators: %s: label of the support grant. */
-			self::log( 'grant_resumed', $grant, sprintf( __( 'Temporary access resumed for %s', 'happyaccess' ), $grant['label'] ) );
+			self::log( 'grant_resumed', $grant );
 		}
 		return true;
 	}
@@ -570,8 +568,7 @@ final class Grants {
 
 		TempUsers::destroy_sessions( $grant['user_id'] );
 
-		/* translators: %s: label of the support grant. */
-		self::log( 'grant_regenerated', $grant, sprintf( __( 'Temporary access code and link replaced for %s', 'happyaccess' ), $grant['label'] ) );
+		self::log( 'grant_regenerated', $grant );
 		return array(
 			'code'     => $code,
 			'link_key' => $link_key,
@@ -654,11 +651,11 @@ final class Grants {
 		AuditLog::add(
 			'grant_ended',
 			array(
-				'feature'  => 'support',
-				'token_id' => $ended['id'],
-				/* translators: %s: label of the support grant. */
-				'summary'  => sprintf( __( 'Temporary access ended for %s', 'happyaccess' ), $ended['label'] ),
-				'meta'     => array( 'reason' => $reason ),
+				'feature'      => 'support',
+				'token_id'     => $ended['id'],
+				'summary_key'  => 'grant_ended',
+				'summary_args' => array( $ended['label'] ),
+				'meta'         => array( 'reason' => $reason ),
 			)
 		);
 
@@ -862,20 +859,21 @@ final class Grants {
 	}
 
 	/**
-	 * Writes a grant audit entry.
+	 * Writes a grant audit entry. The event key is also its text key, and
+	 * the pass label its value.
 	 *
-	 * @param string $event   Event key.
-	 * @param array  $grant   Grant with id.
-	 * @param string $summary Translated summary.
+	 * @param string $event Event key.
+	 * @param array  $grant Grant with id and label.
 	 * @return void
 	 */
-	private static function log( $event, array $grant, $summary ) {
+	private static function log( $event, array $grant ) {
 		AuditLog::add(
 			$event,
 			array(
-				'feature'  => 'support',
-				'token_id' => $grant['id'],
-				'summary'  => $summary,
+				'feature'      => 'support',
+				'token_id'     => $grant['id'],
+				'summary_key'  => $event,
+				'summary_args' => array( $grant['label'] ),
 			)
 		);
 	}

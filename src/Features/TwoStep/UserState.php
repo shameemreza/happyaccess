@@ -151,7 +151,7 @@ final class UserState {
 		if ( ! self::swap_raw( $user_id, $row, $totp ) ) {
 			return false;
 		}
-		AuditLog::add( 'twostep_secret_unreadable', self::log_args( $user_id, __( "Authenticator app secret can't be read, so email and backup codes stand in", 'happyaccess' ), 'app' ) );
+		AuditLog::add( 'twostep_secret_unreadable', self::log_args( $user_id, 'twostep_secret_unreadable', 'app' ) );
 		return true;
 	}
 
@@ -199,7 +199,7 @@ final class UserState {
 		);
 		Coverage::forget();
 		if ( ! $was_on ) {
-			AuditLog::add( 'twostep_enabled', self::log_args( $user_id, __( 'Two-step login turned on with an authenticator app', 'happyaccess' ), 'app' ) );
+			AuditLog::add( 'twostep_enabled', self::log_args( $user_id, 'twostep_app_enabled', 'app' ) );
 		}
 		return true;
 	}
@@ -217,7 +217,7 @@ final class UserState {
 		}
 		delete_user_meta( $user_id, self::META_TOTP );
 		Coverage::forget();
-		AuditLog::add( 'twostep_disabled', self::log_args( $user_id, __( 'Authenticator app turned off for two-step login', 'happyaccess' ), 'app' ) );
+		AuditLog::add( 'twostep_disabled', self::log_args( $user_id, 'twostep_app_disabled', 'app' ) );
 	}
 
 	/**
@@ -233,7 +233,7 @@ final class UserState {
 		}
 		self::save_state( $user_id, array( 'email' => true ) );
 		Coverage::forget();
-		AuditLog::add( 'twostep_enabled', self::log_args( $user_id, __( 'Two-step login turned on with email codes', 'happyaccess' ), 'email' ) );
+		AuditLog::add( 'twostep_enabled', self::log_args( $user_id, 'twostep_email_enabled', 'email' ) );
 	}
 
 	/**
@@ -249,7 +249,7 @@ final class UserState {
 		}
 		self::save_state( $user_id, array( 'email' => false ) );
 		Coverage::forget();
-		AuditLog::add( 'twostep_disabled', self::log_args( $user_id, __( 'Email codes turned off for two-step login', 'happyaccess' ), 'email' ) );
+		AuditLog::add( 'twostep_disabled', self::log_args( $user_id, 'twostep_email_disabled', 'email' ) );
 	}
 
 	/**
@@ -272,7 +272,7 @@ final class UserState {
 		}
 		if ( $had ) {
 			Coverage::forget();
-			$args         = self::log_args( $user_id, __( 'Two-step login reset', 'happyaccess' ), '' );
+			$args         = self::log_args( $user_id, 'twostep_reset', '' );
 			$args['meta'] = $meta;
 			AuditLog::add( 'twostep_reset', $args );
 		}
@@ -577,7 +577,7 @@ final class UserState {
 	 * @return void
 	 */
 	public static function log_passed( $user_id, $method ) {
-		AuditLog::add( 'twostep_passed', self::log_args( $user_id, __( 'Two-step login passed', 'happyaccess' ), (string) $method ) );
+		AuditLog::add( 'twostep_passed', self::log_args( $user_id, 'twostep_passed', (string) $method ) );
 	}
 
 	/**
@@ -588,7 +588,7 @@ final class UserState {
 	 * @return void
 	 */
 	public static function log_failed( $user_id, $method ) {
-		AuditLog::add( 'twostep_failed', self::log_args( $user_id, __( 'Two-step login code did not work', 'happyaccess' ), (string) $method ) );
+		AuditLog::add( 'twostep_failed', self::log_args( $user_id, 'twostep_failed', (string) $method ) );
 	}
 
 	/**
@@ -599,23 +599,23 @@ final class UserState {
 	 * @return void
 	 */
 	public static function log_locked( $user_id, $method ) {
-		AuditLog::add( 'twostep_locked', self::log_args( $user_id, __( 'Two-step login cancelled after too many wrong codes', 'happyaccess' ), (string) $method ) );
+		AuditLog::add( 'twostep_locked', self::log_args( $user_id, 'twostep_locked', (string) $method ) );
 	}
 
 	/**
 	 * The arguments of a log entry. Never a secret or a code.
 	 *
 	 * @param int    $user_id User id.
-	 * @param string $summary Summary.
+	 * @param string $text    Text key from LogText.
 	 * @param string $method  app or email, empty when it doesn't apply.
 	 * @return array
 	 */
-	private static function log_args( $user_id, $summary, $method ) {
+	private static function log_args( $user_id, $text, $method ) {
 		return array(
-			'feature' => 'two_step',
-			'user_id' => (int) $user_id,
-			'summary' => $summary,
-			'meta'    => '' === $method ? array() : array( 'method' => $method ),
+			'feature'     => 'two_step',
+			'user_id'     => (int) $user_id,
+			'summary_key' => $text,
+			'meta'        => '' === $method ? array() : array( 'method' => $method ),
 		);
 	}
 }

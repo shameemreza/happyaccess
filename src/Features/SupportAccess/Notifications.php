@@ -13,6 +13,7 @@ use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\EventLabels;
 use HappyAccess\Core\Internal;
+use HappyAccess\Core\LogText;
 use HappyAccess\Core\Mailer;
 use HappyAccess\Core\Settings;
 use HappyAccess\Login\Router;
@@ -123,7 +124,8 @@ final class Notifications {
 		);
 		$activity = array();
 		foreach ( $log['items'] as $item ) {
-			$line = '' !== (string) $item['summary'] ? (string) $item['summary'] : EventLabels::label( (string) $item['event_type'] );
+			$text = LogText::summary( (string) $item['event_type'], (string) $item['summary'], $item['meta'] );
+			$line = '' !== $text ? $text : EventLabels::label( (string) $item['event_type'] );
 			if ( '' !== $line ) {
 				$activity[] = $line;
 			}
@@ -173,10 +175,10 @@ final class Notifications {
 			AuditLog::add(
 				'bundle_emailed',
 				array(
-					'feature'  => 'support',
-					'token_id' => $grant['id'],
-					/* translators: %s: label of the support grant. */
-					'summary'  => sprintf( __( 'Access details emailed for %s', 'happyaccess' ), $grant['label'] ),
+					'feature'      => 'support',
+					'token_id'     => $grant['id'],
+					'summary_key'  => 'bundle_emailed',
+					'summary_args' => array( $grant['label'] ),
 				)
 			);
 		}

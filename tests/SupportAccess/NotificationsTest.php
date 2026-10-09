@@ -110,6 +110,31 @@ class NotificationsTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Activated plugin: Query Monitor', $last['body'] );
 	}
 
+	public function test_access_ended_summary_builds_each_line_when_it_is_sent() {
+		$made      = Grants::create( array( 'label' => 'Acme' ) );
+		$translate = static function ( $translation, $text, $domain ) {
+			return 'happyaccess' === $domain && 'Activated plugin: %s' === $text ? 'Plugin aktiviert: %s' : $translation;
+		};
+		AuditLog::add(
+			'plugin_activated',
+			array(
+				'token_id'     => $made['id'],
+				'summary_key'  => 'plugin_activated',
+				'summary_args' => array( 'Query Monitor' ),
+			)
+		);
+		Notifications::register();
+		add_filter( 'gettext', $translate, 10, 3 );
+		try {
+			Grants::revoke( $made['id'] );
+		} finally {
+			remove_filter( 'gettext', $translate, 10 );
+		}
+		$sent = $this->sent();
+		$last = end( $sent );
+		$this->assertStringContainsString( 'Plugin aktiviert: Query Monitor', $last['body'] );
+	}
+
 	public function test_the_emails_say_temporary_access() {
 		$made  = Grants::create( array( 'label' => 'Acme' ) );
 		$grant = Grants::get( $made['id'] );

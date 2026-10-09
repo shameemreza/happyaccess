@@ -117,7 +117,7 @@ final class ActivityTracker {
 			return;
 		}
 
-		self::record( 'plugin_activated', 'Activated plugin: ' . self::plugin_name( $plugin ), array( 'plugin' => $plugin ) );
+		self::record( 'plugin_activated', 'plugin_activated', array( self::plugin_name( $plugin ) ), array( 'plugin' => $plugin ) );
 	}
 
 	/**
@@ -131,7 +131,7 @@ final class ActivityTracker {
 			return;
 		}
 
-		self::record( 'plugin_deactivated', 'Deactivated plugin: ' . self::plugin_name( $plugin ), array( 'plugin' => $plugin ) );
+		self::record( 'plugin_deactivated', 'plugin_deactivated', array( self::plugin_name( $plugin ) ), array( 'plugin' => $plugin ) );
 	}
 
 	/**
@@ -148,7 +148,7 @@ final class ActivityTracker {
 		if ( ! $deleted ) {
 			return;
 		}
-		self::record( 'plugin_deleted', 'Deleted plugin: ' . self::clip( $plugin ), array( 'plugin' => $plugin ) );
+		self::record( 'plugin_deleted', 'plugin_deleted', array( self::clip( $plugin ) ), array( 'plugin' => $plugin ) );
 	}
 
 	/**
@@ -166,11 +166,11 @@ final class ActivityTracker {
 			return;
 		}
 		if ( 'core' === $hook_extra['type'] ) {
-			self::record( 'upgrader_ran', 'Updated WordPress core', array( 'type' => 'core' ) );
+			self::record( 'upgrader_ran', 'core_updated', array(), array( 'type' => 'core' ) );
 			return;
 		}
 		if ( 'translation' === $hook_extra['type'] ) {
-			self::record( 'upgrader_ran', 'Updated translations', array( 'type' => 'translation' ) );
+			self::record( 'upgrader_ran', 'translations_updated', array(), array( 'type' => 'translation' ) );
 			return;
 		}
 		if ( ! in_array( $hook_extra['type'], array( 'plugin', 'theme' ), true ) ) {
@@ -200,17 +200,15 @@ final class ActivityTracker {
 				}
 			}
 		}
-		if ( ! $items ) {
-			$items[] = '(unknown)';
-		}
-
+		// An empty list reads as unknown; the meta keeps the word for older readers.
 		self::record(
 			'upgrader_ran',
-			sprintf( 'Installed or updated %s: %s', $type, implode( ', ', $items ) ),
+			'plugin' === $type ? 'plugins_updated' : 'themes_updated',
+			array( $items ),
 			array(
 				'type'   => $type,
 				'action' => isset( $hook_extra['action'] ) ? (string) $hook_extra['action'] : '',
-				'names'  => $items,
+				'names'  => $items ? $items : array( '(unknown)' ),
 			)
 		);
 	}
@@ -226,7 +224,7 @@ final class ActivityTracker {
 			return;
 		}
 
-		self::record( 'theme_switched', 'Switched theme to ' . self::clip( $new_name ) );
+		self::record( 'theme_switched', 'theme_switched', array( self::clip( $new_name ) ) );
 	}
 
 	/**
@@ -243,7 +241,7 @@ final class ActivityTracker {
 		if ( ! $deleted ) {
 			return;
 		}
-		self::record( 'theme_deleted', 'Deleted theme: ' . self::clip( $stylesheet ), array( 'theme' => $stylesheet ) );
+		self::record( 'theme_deleted', 'theme_deleted', array( self::clip( $stylesheet ) ), array( 'theme' => $stylesheet ) );
 	}
 
 	/**
@@ -270,7 +268,7 @@ final class ActivityTracker {
 			return;
 		}
 		self::$saved_posts[ $post->ID ] = 'post';
-		self::record_post( $fresh ? 'post_created' : 'post_updated', $fresh ? 'Created' : 'Updated', $post );
+		self::record_post( $fresh ? 'post_created' : 'post_updated', $post );
 	}
 
 	/**
@@ -291,7 +289,7 @@ final class ActivityTracker {
 			return;
 		}
 		self::$saved_posts[ $post->ID ] = 'product';
-		self::record_post( 'post_updated', 'Updated', $post );
+		self::record_post( 'post_updated', $post );
 	}
 
 	/**
@@ -309,7 +307,7 @@ final class ActivityTracker {
 		if ( ! $post instanceof \WP_Post || ! self::is_tracked_post( $post ) ) {
 			return;
 		}
-		self::record_post( 'post_trashed', 'Trashed', $post );
+		self::record_post( 'post_trashed', $post );
 	}
 
 	/**
@@ -326,7 +324,7 @@ final class ActivityTracker {
 		if ( ! $post instanceof \WP_Post || ! self::is_tracked_post( $post ) ) {
 			return;
 		}
-		self::record_post( 'post_deleted', 'Deleted', $post );
+		self::record_post( 'post_deleted', $post );
 	}
 
 	/**
@@ -345,7 +343,8 @@ final class ActivityTracker {
 
 		self::record(
 			'order_status_changed',
-			sprintf( 'Order #%d: %s to %s', (int) $order_id, $from, $to ),
+			'order_status_changed',
+			array( (int) $order_id, (string) $from, (string) $to ),
 			array(
 				'order_id' => (int) $order_id,
 				'from'     => (string) $from,
@@ -368,7 +367,7 @@ final class ActivityTracker {
 		if ( ! $user ) {
 			return;
 		}
-		self::record( 'user_updated', 'Updated user: ' . $user->user_login, array( 'user_id' => (int) $user_id ) );
+		self::record( 'user_updated', 'user_updated', array( $user->user_login ), array( 'user_id' => (int) $user_id ) );
 	}
 
 	/**
@@ -396,12 +395,8 @@ final class ActivityTracker {
 		}
 		self::record(
 			'user_created',
-			sprintf(
-				/* translators: 1: user login, 2: comma separated role slugs. */
-				__( 'Created user: %1$s (%2$s)', 'happyaccess' ),
-				$user->user_login,
-				self::role_list( $roles )
-			),
+			'user_created',
+			array( $user->user_login, self::role_list( $roles ) ),
 			array(
 				'user_id' => (int) $user_id,
 				'roles'   => array_values( $roles ),
@@ -434,13 +429,7 @@ final class ActivityTracker {
 			'user_role_changed',
 			(int) $user_id,
 			(string) $role,
-			sprintf(
-				/* translators: 1: user login, 2: old role slugs, 3: new role slug. */
-				__( 'Changed role for %1$s: %2$s to %3$s', 'happyaccess' ),
-				$user->user_login,
-				self::role_list( $old ),
-				self::role_list( $new )
-			),
+			array( $user->user_login, self::role_list( $old ), self::role_list( $new ) ),
 			array(
 				'user_id'   => (int) $user_id,
 				'old_roles' => $old,
@@ -468,12 +457,7 @@ final class ActivityTracker {
 			'user_role_added',
 			(int) $user_id,
 			(string) $role,
-			sprintf(
-				/* translators: 1: user login, 2: role slug. */
-				__( 'Added role to %1$s: %2$s', 'happyaccess' ),
-				$user->user_login,
-				self::role_list( array( (string) $role ) )
-			),
+			array( $user->user_login, self::role_list( array( (string) $role ) ) ),
 			array(
 				'user_id' => (int) $user_id,
 				'role'    => (string) $role,
@@ -494,11 +478,8 @@ final class ActivityTracker {
 		}
 		self::record(
 			'privacy_erased',
-			sprintf(
-				/* translators: %d: privacy request id. */
-				__( 'Ran a personal data erasure (#%d)', 'happyaccess' ),
-				(int) $request_id
-			),
+			'privacy_erased',
+			array( (int) $request_id ),
 			array( 'request_id' => (int) $request_id )
 		);
 	}
@@ -515,11 +496,8 @@ final class ActivityTracker {
 		}
 		self::record(
 			'wc_webhook_created',
-			sprintf(
-				/* translators: %d: webhook id. */
-				__( 'Created WooCommerce webhook #%d', 'happyaccess' ),
-				(int) $webhook_id
-			),
+			'wc_webhook_created',
+			array( (int) $webhook_id ),
 			array( 'webhook_id' => (int) $webhook_id )
 		);
 	}
@@ -569,11 +547,12 @@ final class ActivityTracker {
 			AuditLog::add(
 				$event,
 				array(
-					'feature'  => 'support',
-					'token_id' => (int) $entry['grant_id'],
-					'user_id'  => (int) $entry['actor'],
-					'summary'  => $entry['summary'],
-					'meta'     => $entry['meta'],
+					'feature'      => 'support',
+					'token_id'     => (int) $entry['grant_id'],
+					'user_id'      => (int) $entry['actor'],
+					'summary_key'  => $event,
+					'summary_args' => $entry['args'],
+					'meta'         => $entry['meta'],
 				)
 			);
 		}
@@ -583,12 +562,12 @@ final class ActivityTracker {
 			AuditLog::add(
 				'settings_saved',
 				array(
-					'feature'  => 'support',
-					'token_id' => (int) $grant_id,
-					'user_id'  => (int) $group['user_id'],
-					/* translators: %d: number of options saved. */
-					'summary'  => sprintf( _n( 'Saved settings: %d option', 'Saved settings: %d options', $count, 'happyaccess' ), $count ),
-					'meta'     => array( 'options' => $group['names'] ),
+					'feature'      => 'support',
+					'token_id'     => (int) $grant_id,
+					'user_id'      => (int) $group['user_id'],
+					'summary_key'  => 'settings_saved',
+					'summary_args' => array( $count ),
+					'meta'         => array( 'options' => $group['names'] ),
 				)
 			);
 		}
@@ -647,12 +626,13 @@ final class ActivityTracker {
 	/**
 	 * Adds one entry for the current temp user. Does nothing for anyone else.
 	 *
-	 * @param string $event   Event key.
-	 * @param string $summary Readable summary.
-	 * @param array  $meta    Names and ids only.
+	 * @param string $event Event key.
+	 * @param string $text  Text key from LogText.
+	 * @param array  $args  Values for the text: names and ids.
+	 * @param array  $meta  Names and ids only.
 	 * @return void
 	 */
-	private static function record( $event, $summary, array $meta = array() ) {
+	private static function record( $event, $text, array $args = array(), array $meta = array() ) {
 		$user_id = get_current_user_id();
 		if ( ! Capabilities::is_temp_user( $user_id ) ) {
 			return;
@@ -660,31 +640,34 @@ final class ActivityTracker {
 		AuditLog::add(
 			$event,
 			array(
-				'feature'  => 'support',
-				'token_id' => Capabilities::grant_id( $user_id ),
-				'user_id'  => $user_id,
-				'summary'  => $summary,
-				'meta'     => $meta,
+				'feature'      => 'support',
+				'token_id'     => Capabilities::grant_id( $user_id ),
+				'user_id'      => $user_id,
+				'summary_key'  => $text,
+				'summary_args' => $args,
+				'meta'         => $meta,
 			)
 		);
 	}
 
 	/**
-	 * Logs a post entry as "{verb} {type label}: {title} (#ID)".
+	 * Logs a post entry as "{verb} {type label}: {title} (#ID)". The event
+	 * key is also the text key, which holds the verb.
 	 *
-	 * @param string   $event Event key.
-	 * @param string   $verb  Created, Updated or Trashed.
+	 * @param string   $event Event key: post_created, post_updated, post_trashed or post_deleted.
 	 * @param \WP_Post $post  Post.
 	 * @return void
 	 */
-	private static function record_post( $event, $verb, \WP_Post $post ) {
+	private static function record_post( $event, \WP_Post $post ) {
 		$type  = get_post_type_object( $post->post_type );
 		$label = ( $type && isset( $type->labels->singular_name ) ) ? $type->labels->singular_name : $post->post_type;
-		$title = '' === trim( $post->post_title ) ? '(no title)' : self::clip( $post->post_title );
+		// An empty title reads as "(no title)".
+		$title = '' === trim( $post->post_title ) ? '' : self::clip( $post->post_title );
 
 		self::record(
 			$event,
-			sprintf( '%s %s: %s (#%d)', $verb, $label, $title, $post->ID ),
+			$event,
+			array( $label, $title, (int) $post->ID ),
 			array(
 				'post_id'   => (int) $post->ID,
 				'post_type' => $post->post_type,
@@ -816,14 +799,14 @@ final class ActivityTracker {
 	/**
 	 * Holds a role event until the flush, with the temp user who caused it.
 	 *
-	 * @param string $event   Event key.
-	 * @param int    $target  Id of the user whose role changed.
-	 * @param string $role    Role slug.
-	 * @param string $summary Readable summary.
-	 * @param array  $meta    Names and ids only.
+	 * @param string $event  Event key, also its text key.
+	 * @param int    $target Id of the user whose role changed.
+	 * @param string $role   Role slug.
+	 * @param array  $args   Values for the text.
+	 * @param array  $meta   Names and ids only.
 	 * @return void
 	 */
-	private static function buffer_role_event( $event, $target, $role, $summary, array $meta ) {
+	private static function buffer_role_event( $event, $target, $role, array $args, array $meta ) {
 		$key                       = self::role_key( $event, $target, $role );
 		$actor                     = get_current_user_id();
 		self::$role_events[ $key ] = array(
@@ -831,7 +814,7 @@ final class ActivityTracker {
 			'actor'    => $actor,
 			'grant_id' => Capabilities::grant_id( $actor ),
 			'event'    => $event,
-			'summary'  => $summary,
+			'args'     => $args,
 			'meta'     => $meta,
 		);
 	}
@@ -852,14 +835,14 @@ final class ActivityTracker {
 	}
 
 	/**
-	 * Role slugs joined with commas, or "none" for an empty list.
+	 * Role slugs as a list value for the log text, which joins them with
+	 * commas, or reads "none" for an empty list.
 	 *
 	 * @param string[] $roles Role slugs.
-	 * @return string
+	 * @return string[]
 	 */
 	private static function role_list( array $roles ) {
-		$roles = array_filter( array_map( 'strval', $roles ), 'strlen' );
-		return $roles ? self::clip( implode( ', ', $roles ) ) : __( 'none', 'happyaccess' );
+		return array_values( array_map( array( __CLASS__, 'clip' ), array_filter( array_map( 'strval', $roles ), 'strlen' ) ) );
 	}
 
 	/**

@@ -1825,10 +1825,10 @@ final class Challenge {
 		AuditLog::add(
 			'twostep_site_alert',
 			array(
-				'feature' => 'two_step',
-				'user_id' => 0,
-				'summary' => __( 'Many wrong two-step login codes on the site in the last hour', 'happyaccess' ),
-				'meta'    => array( 'reason' => 'site_cap' ),
+				'feature'     => 'two_step',
+				'user_id'     => 0,
+				'summary_key' => 'twostep_site_alert',
+				'meta'        => array( 'reason' => 'site_cap' ),
 			)
 		);
 
@@ -1853,10 +1853,10 @@ final class Challenge {
 		AuditLog::add(
 			'twostep_locked',
 			array(
-				'feature' => 'two_step',
-				'user_id' => (int) $user->ID,
-				'summary' => __( 'Two-step login paused for this account after too many wrong codes', 'happyaccess' ),
-				'meta'    => array(
+				'feature'     => 'two_step',
+				'user_id'     => (int) $user->ID,
+				'summary_key' => 'twostep_account_paused',
+				'meta'        => array(
 					'reason'  => 'account_cap',
 					'minutes' => $minutes,
 				),

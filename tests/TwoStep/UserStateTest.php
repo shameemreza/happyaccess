@@ -247,7 +247,13 @@ class UserStateTest extends WP_UnitTestCase {
 			$rows = $this->logged( $event );
 			$this->assertCount( 1, $rows, $event );
 			$this->assertSame( 'two_step', $rows[0]['feature'] );
-			$this->assertSame( array( 'method' => $method ), json_decode( $rows[0]['metadata'], true ) );
+			$this->assertSame(
+				array(
+					'method'      => $method,
+					'summary_key' => $event,
+				),
+				json_decode( $rows[0]['metadata'], true )
+			);
 		}
 	}
 

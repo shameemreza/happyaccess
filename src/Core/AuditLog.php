@@ -12,6 +12,16 @@ defined( 'ABSPATH' ) || exit;
 /**
  * One log for every feature. Stores names and summaries, never secrets or
  * option values.
+ *
+ * The rule for summaries: a summary is built when it is shown, in the
+ * viewer's language. A writer passes a text key from LogText and its values
+ * (summary_key and summary_args); both are kept in the row's meta, and
+ * LogText::summary() builds the line for the Activity tab, the CSV export,
+ * the privacy export and the access-ended email. The summary column keeps
+ * the line as written, in the writer's language, for search and for rows
+ * read without the meta. Settings rows are built from their changed keys
+ * (SettingLabels). Never store a sentence as the only record of a row, and
+ * never put words of the sentence in a value.
  */
 final class AuditLog {
 
@@ -36,7 +46,8 @@ final class AuditLog {
 	 * Adds an entry.
 	 *
 	 * @param string $event Event key, for example "login".
-	 * @param array  $args  feature, token_id, user_id, summary, meta.
+	 * @param array  $args  feature, token_id, user_id, summary_key, summary_args, meta. A
+	 *                      plain summary is only for rows that have no text key.
 	 * @return int New row id, or 0 when logging is off or the insert failed.
 	 */
 	public static function add( $event, array $args = array() ) {
@@ -49,14 +60,24 @@ final class AuditLog {
 		$args = wp_parse_args(
 			$args,
 			array(
-				'feature'  => 'support',
-				'token_id' => 0,
-				'summary'  => '',
-				'meta'     => array(),
+				'feature'      => 'support',
+				'token_id'     => 0,
+				'summary'      => '',
+				'summary_key'  => '',
+				'summary_args' => array(),
+				'meta'         => array(),
 			)
 		);
 		if ( ! array_key_exists( 'user_id', $args ) ) {
 			$args['user_id'] = get_current_user_id();
+		}
+		if ( '' !== $args['summary_key'] && ! LogText::exists( $args['summary_key'] ) ) {
+			_doing_it_wrong( __METHOD__, esc_html( sprintf( 'Unknown log text key: %s', (string) $args['summary_key'] ) ), '1.1.0' );
+		}
+		if ( LogText::exists( $args['summary_key'] ) ) {
+			$values          = is_array( $args['summary_args'] ) ? array_values( $args['summary_args'] ) : array();
+			$args['summary'] = LogText::render( $args['summary_key'], $values );
+			$args['meta']    = array_merge( is_array( $args['meta'] ) ? $args['meta'] : array(), LogText::meta( $args['summary_key'], $values ) );
 		}
 
 		$ip = ClientIp::get();
@@ -303,8 +324,9 @@ final class AuditLog {
 	/**
 	 * The search part of the WHERE clause. A row matches when its stored
 	 * summary contains the term, or when the line built for it at read time
-	 * would: a settings row matches the plain names of its changed keys, in
-	 * the viewer's language. The names are matched here, against the short
+	 * would: a row with a text key matches the words of its template, and a
+	 * settings row the plain names of its changed keys, in the viewer's
+	 * language. The names are matched here, against the short
 	 * list of labels, so the table is never read into PHP; the rows are then
 	 * found by the keys in their stored meta.
 	 *
@@ -316,6 +338,23 @@ final class AuditLog {
 
 		$any    = array( 'summary LIKE %s' );
 		$params = array( '%' . $wpdb->esc_like( $search ) . '%' );
+
+		$texts = array();
+		foreach ( LogText::keys_matching( $search ) as $key ) {
+			$texts[] = '"' . LogText::META_KEY . '":"' . $key . '"';
+		}
+		if ( $texts ) {
+			$any    = array_merge( $any, array_fill( 0, count( $texts ), 'metadata LIKE %s' ) );
+			$params = array_merge(
+				$params,
+				array_map(
+					static function ( $text ) use ( $wpdb ) {
+						return '%' . $wpdb->esc_like( $text ) . '%';
+					},
+					$texts
+				)
+			);
+		}
 
 		$keys = array();
 		foreach ( SettingLabels::entries_matching( $search ) as $entry ) {

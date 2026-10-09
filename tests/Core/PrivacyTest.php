@@ -176,6 +176,35 @@ class PrivacyTest extends WP_UnitTestCase {
 		$this->assertSame( 'Admin Browser', $admin['user_agent'] );
 	}
 
+	public function test_label_scrub_also_clears_the_label_from_the_text_values() {
+		global $wpdb;
+		$logs    = Installer::table( 'logs' );
+		$created = Grants::create(
+			array(
+				'label' => 'Acme',
+				'email' => 'acme@example.net',
+			)
+		);
+		Grants::extend( $created['id'], HOUR_IN_SECONDS );
+
+		$erasers = apply_filters( 'wp_privacy_personal_data_erasers', array() );
+		$result  = call_user_func( $erasers['happyaccess']['callback'], 'acme@example.net', 1 );
+		$this->assertNotContains( 'Some log summaries may still contain the grant label.', $result['messages'] );
+
+		$rows = AuditLog::query( array( 'token_id' => $created['id'] ) )['items'];
+		$this->assertNotEmpty( $rows );
+		foreach ( $rows as $row ) {
+			$line = \HappyAccess\Core\LogText::summary( $row['event_type'], $row['summary'], $row['meta'] );
+			$this->assertStringNotContainsString( 'Acme', $line, $row['event_type'] );
+			$this->assertStringNotContainsString( 'Acme', (string) wp_json_encode( $row['meta'] ), $row['event_type'] );
+		}
+		$by_event = wp_list_pluck( $rows, 'meta', 'event_type' );
+		$this->assertSame( array( '[removed]' ), $by_event['grant_created']['summary_args'] );
+		$this->assertSame( array( '[removed]' ), $by_event['grant_extended']['summary_args'] );
+		$this->assertSame( 'Temporary access granted to [removed]', \HappyAccess\Core\LogText::summary( 'grant_created', '', $by_event['grant_created'] ) );
+		$this->assertSame( '0', $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$logs} WHERE token_id = %d AND metadata LIKE %s", $created['id'], '%Acme%' ) ) );
+	}
+
 	public function test_label_scrub_only_replaces_the_trailing_label() {
 		global $wpdb;
 		$logs    = Installer::table( 'logs' );

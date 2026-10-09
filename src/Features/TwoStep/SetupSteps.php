@@ -217,10 +217,10 @@ final class SetupSteps {
 		AuditLog::add(
 			'twostep_skipped',
 			array(
-				'feature' => 'two_step',
-				'user_id' => (int) $user->ID,
-				'summary' => __( 'Two-step login setup put off', 'happyaccess' ),
-				'meta'    => array( 'grace' => Enforcement::grace_type() ),
+				'feature'     => 'two_step',
+				'user_id'     => (int) $user->ID,
+				'summary_key' => 'twostep_skipped',
+				'meta'        => array( 'grace' => Enforcement::grace_type() ),
 			)
 		);
 		$carry['method'] = '';

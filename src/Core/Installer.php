@@ -371,10 +371,11 @@ final class Installer {
 			AuditLog::add(
 				'plugin_upgraded',
 				array(
-					'feature' => 'core',
-					'user_id' => 0,
-					'summary' => sprintf( 'Upgraded from %1$s to %2$s', $previous, self::DB_VERSION ),
-					'meta'    => array_merge( array( 'codes_hashed' => $result['hashed'] ), $options['changed'] ),
+					'feature'      => 'core',
+					'user_id'      => 0,
+					'summary_key'  => 'plugin_upgraded',
+					'summary_args' => array( $previous, self::DB_VERSION ),
+					'meta'         => array_merge( array( 'codes_hashed' => $result['hashed'] ), $options['changed'] ),
 				)
 			);
 		}

@@ -169,12 +169,9 @@ final class AdminBar {
 		AuditLog::add(
 			'emergency_lock',
 			array(
-				'feature' => 'support',
-				'summary' => sprintf(
-					/* translators: %d: number of grants ended. */
-					_n( 'Emergency lock ended %d grant.', 'Emergency lock ended %d grants.', $count, 'happyaccess' ),
-					$count
-				),
+				'feature'      => 'support',
+				'summary_key'  => 'emergency_lock',
+				'summary_args' => array( $count ),
 			)
 		);
 		return $count;

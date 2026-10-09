@@ -266,14 +266,14 @@ final class LoginSteps {
 		self::send_cookie( self::COOKIE, $request_key, Clock::now() + self::lifetime() );
 
 		if ( null !== $user && $account_wait > 0 ) {
-			AuditLog::add( 'passwordless_failed', self::log_args( $user->ID, __( 'Login code not sent: too many requests', 'happyaccess' ), array( 'reason' => 'account_limit' ) ) );
+			AuditLog::add( 'passwordless_failed', self::log_args( $user->ID, 'passwordless_rate_limited', array( 'reason' => 'account_limit' ) ) );
 		} elseif ( null !== $user ) {
 			$made = Requests::create( $user, $request_key );
 			if ( is_array( $made ) ) {
 				self::queue_email( $user, $made );
-				AuditLog::add( 'passwordless_requested', self::log_args( $user->ID, __( 'Login code requested', 'happyaccess' ), array() ) );
+				AuditLog::add( 'passwordless_requested', self::log_args( $user->ID, 'passwordless_requested', array() ) );
 			} else {
-				AuditLog::add( 'passwordless_failed', self::log_args( $user->ID, __( 'Login code could not be made', 'happyaccess' ), array( 'reason' => 'not_created' ) ) );
+				AuditLog::add( 'passwordless_failed', self::log_args( $user->ID, 'passwordless_not_created', array( 'reason' => 'not_created' ) ) );
 			}
 		}
 
@@ -372,9 +372,9 @@ final class LoginSteps {
 			}
 
 			if ( 'happyaccess_code_locked' === $result->get_error_code() ) {
-				AuditLog::add( 'passwordless_locked', self::log_args( 0, __( 'Login code cancelled after too many wrong tries', 'happyaccess' ), array( 'reason' => 'attempts' ) ) );
+				AuditLog::add( 'passwordless_locked', self::log_args( 0, 'passwordless_attempts', array( 'reason' => 'attempts' ) ) );
 			} else {
-				AuditLog::add( 'passwordless_failed', self::log_args( 0, __( 'Login code did not work', 'happyaccess' ), array( 'reason' => 'invalid_code' ) ) );
+				AuditLog::add( 'passwordless_failed', self::log_args( 0, 'passwordless_invalid_code', array( 'reason' => 'invalid_code' ) ) );
 			}
 			// One message and one code for every failure, so the fifth wrong code doesn't show that the account exists.
 			return new \WP_Error( 'happyaccess_invalid_code', __( 'That code is not right or has expired. Ask for a new code.', 'happyaccess' ) );
@@ -443,7 +443,7 @@ final class LoginSteps {
 
 		$result = Requests::consume_link( $key );
 		if ( is_wp_error( $result ) ) {
-			AuditLog::add( 'passwordless_failed', self::log_args( 0, __( 'Login link did not work', 'happyaccess' ), array( 'reason' => 'invalid_link' ) ) );
+			AuditLog::add( 'passwordless_failed', self::log_args( 0, 'passwordless_invalid_link', array( 'reason' => 'invalid_link' ) ) );
 			return self::link_error();
 		}
 
@@ -481,7 +481,7 @@ final class LoginSteps {
 
 		self::forget_request( $method );
 
-		AuditLog::add( 'passwordless_login', self::log_args( $user->ID, __( 'Logged in with a login code or link', 'happyaccess' ), array( 'method' => $method ) ) );
+		AuditLog::add( 'passwordless_login', self::log_args( $user->ID, 'passwordless_login', array( 'method' => $method ) ) );
 
 		do_action( 'wp_login', $user->user_login, $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Core hook, so login listeners see this sign-in.
 
@@ -702,7 +702,7 @@ final class LoginSteps {
 			}
 		);
 
-		AuditLog::add( 'passwordless_locked', self::log_args( 0, __( 'Login codes paused for the whole site after too many wrong codes', 'happyaccess' ), array( 'reason' => 'site_cap' ) ) );
+		AuditLog::add( 'passwordless_locked', self::log_args( 0, 'passwordless_site_locked', array( 'reason' => 'site_cap' ) ) );
 
 		Mailer::send(
 			(string) get_option( 'admin_email' ),
@@ -717,16 +717,16 @@ final class LoginSteps {
 	 * username, a code or a key.
 	 *
 	 * @param int    $user_id User id, 0 when unknown.
-	 * @param string $summary Summary.
+	 * @param string $text    Text key from LogText.
 	 * @param array  $meta    Meta.
 	 * @return array
 	 */
-	private static function log_args( $user_id, $summary, array $meta ) {
+	private static function log_args( $user_id, $text, array $meta ) {
 		return array(
-			'feature' => 'passwordless',
-			'user_id' => (int) $user_id,
-			'summary' => $summary,
-			'meta'    => $meta,
+			'feature'     => 'passwordless',
+			'user_id'     => (int) $user_id,
+			'summary_key' => $text,
+			'meta'        => $meta,
 		);
 	}
 

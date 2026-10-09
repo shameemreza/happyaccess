@@ -50,7 +50,7 @@ final class BackupCodes {
 
 		AuditLog::add(
 			'twostep_backup_regenerated',
-			self::log_args( $user_id, __( 'Backup codes renewed', 'happyaccess' ) )
+			self::log_args( $user_id, 'twostep_backup_regenerated' )
 		);
 		return $codes;
 	}
@@ -129,7 +129,7 @@ final class BackupCodes {
 			if ( UserState::swap_raw( $user_id, $row, array_values( $hashes ) ) ) {
 				AuditLog::add(
 					'twostep_backup_used',
-					self::log_args( $user_id, __( 'Backup code used', 'happyaccess' ) )
+					self::log_args( $user_id, 'twostep_backup_used' )
 				);
 				return true;
 			}
@@ -152,15 +152,15 @@ final class BackupCodes {
 	 * The arguments of a log entry. Never a code.
 	 *
 	 * @param int    $user_id User id.
-	 * @param string $summary Summary.
+	 * @param string $text    Text key from LogText.
 	 * @return array
 	 */
-	private static function log_args( $user_id, $summary ) {
+	private static function log_args( $user_id, $text ) {
 		return array(
-			'feature' => 'two_step',
-			'user_id' => (int) $user_id,
-			'summary' => $summary,
-			'meta'    => array( 'remaining' => self::remaining( $user_id ) ),
+			'feature'     => 'two_step',
+			'user_id'     => (int) $user_id,
+			'summary_key' => $text,
+			'meta'        => array( 'remaining' => self::remaining( $user_id ) ),
 		);
 	}
 }

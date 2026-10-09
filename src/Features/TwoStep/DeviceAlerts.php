@@ -155,11 +155,11 @@ final class DeviceAlerts {
 		AuditLog::add(
 			'new_device_login',
 			array(
-				'feature' => 'two_step',
-				'user_id' => (int) $user->ID,
-				/* translators: %s: browser and system, like "Chrome on macOS". */
-				'summary' => sprintf( __( 'Logged in from a new device: %s', 'happyaccess' ), $browser ),
-				'meta'    => array(
+				'feature'      => 'two_step',
+				'user_id'      => (int) $user->ID,
+				'summary_key'  => 'new_device_login',
+				'summary_args' => array( $browser ),
+				'meta'         => array(
 					'browser' => $browser,
 					'emailed' => $emailed,
 				),

@@ -148,10 +148,10 @@ final class RolePolicy {
 				AuditLog::add(
 					'passwordless_failed',
 					array(
-						'feature' => 'passwordless',
-						'user_id' => (int) $account->ID,
-						'summary' => __( 'Password allowed for an email code only account because login codes are not working', 'happyaccess' ),
-						'meta'    => array( 'reason' => 'policy_suspended' ),
+						'feature'     => 'passwordless',
+						'user_id'     => (int) $account->ID,
+						'summary_key' => 'passwordless_policy_paused',
+						'meta'        => array( 'reason' => 'policy_suspended' ),
 					)
 				);
 			}

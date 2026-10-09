@@ -72,15 +72,12 @@ final class AdminWatch {
 		AuditLog::add(
 			'admin_account_created',
 			array(
-				'feature'  => 'support',
-				'token_id' => (int) $grant['id'],
-				'user_id'  => get_current_user_id(),
-				'summary'  => sprintf(
-					/* translators: %s: user login. */
-					__( 'Made an administrator account: %s', 'happyaccess' ),
-					$user->user_login
-				),
-				'meta'     => array( 'user_id' => $user_id ),
+				'feature'      => 'support',
+				'token_id'     => (int) $grant['id'],
+				'user_id'      => get_current_user_id(),
+				'summary_key'  => 'admin_account_created',
+				'summary_args' => array( $user->user_login ),
+				'meta'         => array( 'user_id' => $user_id ),
 			)
 		);
 		Notifications::admin_created( $grant, $user );
@@ -189,15 +186,12 @@ final class AdminWatch {
 		AuditLog::add(
 			'admin_role_granted',
 			array(
-				'feature'  => 'support',
-				'token_id' => (int) $grant['id'],
-				'user_id'  => get_current_user_id(),
-				'summary'  => 'default_role' === $change
-					/* translators: %s: role name. */
-					? sprintf( __( 'Made new accounts get an admin-level role: %s', 'happyaccess' ), $name )
-					/* translators: %s: role name. */
-					: sprintf( __( 'Gave admin-level permissions to the role: %s', 'happyaccess' ), $name ),
-				'meta'     => array(
+				'feature'      => 'support',
+				'token_id'     => (int) $grant['id'],
+				'user_id'      => get_current_user_id(),
+				'summary_key'  => 'default_role' === $change ? 'admin_role_default' : 'admin_role_granted',
+				'summary_args' => array( $name ),
+				'meta'         => array(
 					'role'   => $role,
 					'change' => $change,
 					'caps'   => $caps,
@@ -279,15 +273,12 @@ final class AdminWatch {
 		AuditLog::add(
 			'admin_account_changed',
 			array(
-				'feature'  => 'support',
-				'token_id' => (int) $grant['id'],
-				'user_id'  => get_current_user_id(),
-				'summary'  => sprintf(
-					/* translators: %s: user login. */
-					__( 'Changed login details for administrator: %s', 'happyaccess' ),
-					$user->user_login
-				),
-				'meta'     => array(
+				'feature'      => 'support',
+				'token_id'     => (int) $grant['id'],
+				'user_id'      => get_current_user_id(),
+				'summary_key'  => 'admin_account_changed',
+				'summary_args' => array( $user->user_login ),
+				'meta'         => array(
 					'user_id' => $user_id,
 					'fields'  => $fields,
 				),

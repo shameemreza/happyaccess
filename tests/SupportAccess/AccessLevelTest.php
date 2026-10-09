@@ -341,11 +341,13 @@ class AccessLevelTest extends WP_UnitTestCase {
 
 		$this->assertSame(
 			array(
-				'role'       => 'administrator',
-				'duration'   => DAY_IN_SECONDS,
-				'one_time'   => true,
-				'level'      => 'custom',
-				'caps_count' => 3,
+				'role'         => 'administrator',
+				'duration'     => DAY_IN_SECONDS,
+				'one_time'     => true,
+				'level'        => 'custom',
+				'caps_count'   => 3,
+				'summary_key'  => 'grant_created',
+				'summary_args' => array( 'Custom' ),
 			),
 			$custom_meta
 		);

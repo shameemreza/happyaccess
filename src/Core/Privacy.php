@@ -284,7 +284,7 @@ final class Privacy {
 					),
 					array(
 						'name'  => __( 'Summary', 'happyaccess' ),
-						'value' => SettingLabels::summary( (string) $row['event_type'], (string) $row['summary'], empty( $row['metadata'] ) ? array() : json_decode( (string) $row['metadata'], true ) ),
+						'value' => LogText::summary( (string) $row['event_type'], (string) $row['summary'], empty( $row['metadata'] ) ? array() : json_decode( (string) $row['metadata'], true ) ),
 					),
 				),
 			);
@@ -563,8 +563,11 @@ final class Privacy {
 				$suffix = ' ' . $grant['label'];
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
 				$wpdb->query( $wpdb->prepare( 'UPDATE %i SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND RIGHT( summary, CHAR_LENGTH( %s ) ) = %s', $logs, $suffix, ' [removed]', $grant['id'], $suffix, $suffix ) );
+				// The line is built from the label in the meta, so it goes there too.
+				$in_meta = '%' . $wpdb->esc_like( (string) wp_json_encode( $grant['label'] ) ) . '%';
+				self::scrub_label_in_meta( (int) $grant['id'], $grant['label'], $in_meta );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-				$left = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE token_id = %d AND summary LIKE %s', $logs, $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%' ) );
+				$left = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE token_id = %d AND ( summary LIKE %s OR metadata LIKE %s )', $logs, $grant['id'], '%' . $wpdb->esc_like( $grant['label'] ) . '%', $in_meta ) );
 				if ( $left > 0 ) {
 					$complete = false;
 				}
@@ -573,6 +576,37 @@ final class Privacy {
 			}
 		}
 		return $complete;
+	}
+
+	/**
+	 * Swaps a grant label for the placeholder among the text values of that
+	 * grant's log rows, up to PER_PAGE rows a run. A row whose meta holds the
+	 * label anywhere else is left, and counts as not done.
+	 *
+	 * @param int    $grant_id Grant id.
+	 * @param string $label    Grant label.
+	 * @param string $like     LIKE pattern for the label as stored in the meta.
+	 * @return void
+	 */
+	private static function scrub_label_in_meta( $grant_id, $label, $like ) {
+		global $wpdb;
+
+		$logs = Installer::table( 'logs' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, metadata FROM %i WHERE token_id = %d AND metadata LIKE %s ORDER BY id ASC LIMIT %d', $logs, $grant_id, $like, self::PER_PAGE ), ARRAY_A );
+		foreach ( $rows as $row ) {
+			$meta = json_decode( (string) $row['metadata'], true );
+			if ( ! is_array( $meta ) || ! isset( $meta[ LogText::META_ARGS ] ) || ! is_array( $meta[ LogText::META_ARGS ] ) ) {
+				continue;
+			}
+			foreach ( $meta[ LogText::META_ARGS ] as $index => $value ) {
+				if ( $value === $label ) {
+					$meta[ LogText::META_ARGS ][ $index ] = '[removed]';
+				}
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
+			$wpdb->update( $logs, array( 'metadata' => wp_json_encode( $meta ) ), array( 'id' => (int) $row['id'] ), array( '%s' ), array( '%d' ) );
+		}
 	}
 
 	/**

@@ -10,8 +10,8 @@ namespace HappyAccess\Core;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Stored summaries keep the text written at the time. Labels are translated
- * when read, for the person viewing.
+ * Labels are translated when read, for the person viewing, like the log
+ * lines themselves (see LogText).
  */
 final class EventLabels {
 

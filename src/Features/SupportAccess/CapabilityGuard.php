@@ -622,10 +622,10 @@ final class CapabilityGuard {
 				AuditLog::add(
 					'roles_changed',
 					array(
-						'feature'  => 'support',
-						'token_id' => Capabilities::grant_id( $user_id ),
-						'user_id'  => $user_id,
-						'summary'  => 'Roles changed while activating or updating a plugin',
+						'feature'     => 'support',
+						'token_id'    => Capabilities::grant_id( $user_id ),
+						'user_id'     => $user_id,
+						'summary_key' => 'roles_changed_plugin_work',
 					)
 				);
 			}
@@ -680,10 +680,10 @@ final class CapabilityGuard {
 		AuditLog::add(
 			'roles_changed',
 			array(
-				'feature'  => 'support',
-				'token_id' => Capabilities::grant_id( $user_id ),
-				'user_id'  => $user_id,
-				'summary'  => 'Changed role permissions',
+				'feature'     => 'support',
+				'token_id'    => Capabilities::grant_id( $user_id ),
+				'user_id'     => $user_id,
+				'summary_key' => 'roles_changed',
 			)
 		);
 	}
@@ -704,10 +704,10 @@ final class CapabilityGuard {
 		AuditLog::add(
 			'role_change_blocked',
 			array(
-				'feature'  => 'support',
-				'token_id' => Capabilities::grant_id( $user_id ),
-				'user_id'  => $user_id,
-				'summary'  => 'Blocked a change to role permissions outside plugin activation or update',
+				'feature'     => 'support',
+				'token_id'    => Capabilities::grant_id( $user_id ),
+				'user_id'     => $user_id,
+				'summary_key' => 'role_change_blocked',
 			)
 		);
 	}

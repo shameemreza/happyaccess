@@ -318,14 +318,11 @@ final class LoginSteps {
 		AuditLog::add(
 			'login_success',
 			array(
-				'token_id' => $grant['id'],
-				'user_id'  => $user_id,
-				'summary'  => sprintf(
-					/* translators: %s: label of the support grant. */
-					__( 'Temporary access used: %s', 'happyaccess' ),
-					$grant['label']
-				),
-				'meta'     => array( 'method' => $method ),
+				'token_id'     => $grant['id'],
+				'user_id'      => $user_id,
+				'summary_key'  => 'login_success',
+				'summary_args' => array( $grant['label'] ),
+				'meta'         => array( 'method' => $method ),
 			)
 		);
 
@@ -351,11 +348,11 @@ final class LoginSteps {
 		AuditLog::add(
 			'login_failed',
 			array(
-				'feature'  => 'support',
-				'token_id' => $grant['id'],
-				'user_id'  => 0,
-				'summary'  => __( "Couldn't set up the support account", 'happyaccess' ),
-				'meta'     => array( 'reason' => mb_substr( (string) $reason, 0, 190 ) ),
+				'feature'     => 'support',
+				'token_id'    => $grant['id'],
+				'user_id'     => 0,
+				'summary_key' => 'login_setup_failed',
+				'meta'        => array( 'reason' => mb_substr( (string) $reason, 0, 190 ) ),
 			)
 		);
 

@@ -207,7 +207,14 @@ class RecaptchaTest extends WP_UnitTestCase {
 		foreach ( array( 'code', 'link', 'pl_request', 'pl_verify' ) as $action ) {
 			$this->assertWPError( Recaptcha::verify( 'good-token', $action ), $action );
 		}
-		$this->assertSame( array( 'step' => 'code' ), $this->log_rows( 'captcha_unavailable' )[0]['meta'], 'The row names the step and nothing else.' );
+		$this->assertSame(
+			array(
+				'step'        => 'code',
+				'summary_key' => 'captcha_unavailable',
+			),
+			$this->log_rows( 'captcha_unavailable' )[0]['meta'],
+			'The row names the step and its text key, nothing else.'
+		);
 	}
 
 	public function test_a_server_error_from_google_counts_as_unavailable() {

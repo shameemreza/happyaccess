@@ -188,11 +188,11 @@ final class AccountGuard {
 		AuditLog::add(
 			'wc_key_blocked',
 			array(
-				'feature'  => 'support',
-				'token_id' => Capabilities::grant_id( $user_id ),
-				'user_id'  => $user_id,
-				'summary'  => __( 'Blocked a WooCommerce API key request', 'happyaccess' ),
-				'meta'     => array( 'source' => $source ),
+				'feature'     => 'support',
+				'token_id'    => Capabilities::grant_id( $user_id ),
+				'user_id'     => $user_id,
+				'summary_key' => 'wc_key_blocked',
+				'meta'        => array( 'source' => $source ),
 			)
 		);
 	}
