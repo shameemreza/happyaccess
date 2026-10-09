@@ -397,6 +397,33 @@
 		}
 	}
 
+	// Beside the cut-out, a narrow card leaves the tip under 240px of text.
+	// There the tip and the tips text take the full width, and only the
+	// links sit beside the cut-out, in a band as tall as it, which keeps
+	// the text above the cut-out and its curve.
+	@container (max-width: 420px) {
+
+		.ha-author--intro .ha-author__foot {
+			justify-content: flex-start;
+			padding-inline-end: 0;
+		}
+
+		.ha-author--intro .ha-author__links {
+			align-content: center;
+			min-height: calc(var(--ha-author-notch) - var(--ha-author-pad-end));
+			padding-inline-end: calc(var(--ha-author-notch) - var(--ha-author-pad) + 10px);
+		}
+
+		.ha-author--tips .ha-author__body {
+			padding-inline-end: 24px;
+		}
+
+		.ha-author--tips .ha-author__foot {
+			justify-content: center;
+			min-height: calc(var(--ha-author-notch) - var(--ha-author-pad-end));
+		}
+	}
+
 	// The pill wraps to two lines in a narrow column, so it drops the
 	// round ends there.
 	@container (max-width: 320px) {

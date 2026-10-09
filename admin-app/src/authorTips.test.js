@@ -91,7 +91,7 @@ describe( 'tipLines', () => {
 			'passes-on'
 		);
 		expect( one.text ).toBe(
-			'1 support pass is on. It ends in 2 days 4 hours.'
+			'1 support pass is on, and it ends in 2 days 4 hours. You can extend it or end it early under Who has access.'
 		);
 
 		const two = line(
@@ -105,7 +105,7 @@ describe( 'tipLines', () => {
 			'passes-on'
 		);
 		expect( two.text ).toBe(
-			'2 support passes are on. The next one ends in 45 minutes.'
+			'2 support passes are on, and the next one ends in 45 minutes. You can extend or end any of them under Who has access.'
 		);
 
 		expect(
@@ -125,7 +125,9 @@ describe( 'tipLines', () => {
 				{ features: ALL_ON, facts: { lastPassLogin: NOW - 3 * DAY } },
 				'last-pass-login'
 			).text
-		).toBe( 'Last login with a support pass: 3 days ago.' );
+		).toBe(
+			'The last login with a support pass was 3 days ago. The Activity tab shows what they changed after that.'
+		);
 		expect(
 			line(
 				{
@@ -141,7 +143,9 @@ describe( 'tipLines', () => {
 				},
 				'last-pass-login'
 			).text
-		).toBe( 'Last login with a support pass: 14 minutes ago.' );
+		).toBe(
+			'The last login with a support pass was 14 minutes ago. The Activity tab shows what they changed after that.'
+		);
 		expect(
 			line( { features: ALL_ON, facts: {} }, 'last-pass-login' )
 		).toBeUndefined();
@@ -150,7 +154,7 @@ describe( 'tipLines', () => {
 	it( 'names the administrator count only from two up', () => {
 		expect( line( { facts: { admins: 1 } }, 'admins' ) ).toBeUndefined();
 		expect( line( { facts: { admins: 2 } }, 'admins' ).text ).toBe(
-			'This site has 2 administrator accounts. Remove the ones nobody uses.'
+			'This site has 2 administrator accounts. Remove the ones nobody uses, so there are fewer ways in.'
 		);
 	} );
 
@@ -162,11 +166,15 @@ describe( 'tipLines', () => {
 		expect(
 			line( { features: { two_step: true }, facts }, 'two-step-admins' )
 				.text
-		).toBe( '2 of 5 administrators have two-step login set up.' );
+		).toBe(
+			'2 of 5 administrators have two-step login set up. Login and security shows who still needs it.'
+		);
 		expect(
 			line( { features: { two_step: true }, facts }, 'device-alerts' )
 				.text
-		).toBe( 'New device alerts are on for administrators.' );
+		).toBe(
+			'New device alerts are on for administrators. They get an email when their account logs in from a new browser.'
+		);
 		expect( ids( { features: {}, facts } ) ).not.toContain(
 			'two-step-admins'
 		);
@@ -198,7 +206,9 @@ describe( 'tipLines', () => {
 		expect(
 			line( { features: { support_access: true } }, 'emergency-lock' )
 				.text
-		).toBe( 'Emergency lock, top right, ends every support pass at once.' );
+		).toBe(
+			'Emergency lock, top right, ends every support pass at once. Use it if a link or code ever reaches the wrong person.'
+		);
 	} );
 
 	it( 'explains new device alerts only while two-step login is on', () => {
@@ -206,7 +216,7 @@ describe( 'tipLines', () => {
 		expect(
 			line( { features: { two_step: true } }, 'device-alerts-tip' ).text
 		).toBe(
-			"New device alerts email an admin when their account logs in from a browser it hasn't seen."
+			"New device alerts email an admin when their account logs in from a browser it hasn't seen. Set the roles in Login and security."
 		);
 	} );
 
@@ -231,8 +241,66 @@ describe( 'tipLines', () => {
 			'registration'
 		);
 		expect( textOf( line( {}, 'registration' ) ) ).toBe(
-			'Leave Anyone can register off under Settings, General, unless your site needs sign-ups.'
+			'Leave Anyone can register off under Settings, General, unless your site needs visitors to sign up on their own.'
 		);
+	} );
+
+	it( 'keeps every line at 90 to 130 characters, with real numbers in', () => {
+		const passes = ( count, ends ) =>
+			Array.from( { length: count }, () => ( {
+				status: 'active',
+				expires_at: NOW + ends,
+				last_login_at: 0,
+			} ) );
+		const cases = [
+			// One pass and several, ending soon or in days.
+			{ passes: passes( 1, 45 * 60 ) },
+			{ passes: passes( 1, 2 * DAY + 4 * HOUR ) },
+			{ passes: passes( 3, 12 * DAY + 23 * HOUR ) },
+			{
+				facts: {
+					admins: 2,
+					lastPassLogin: NOW - 5 * 60,
+					twoStepAdmins: { enabled: 1, total: 1 },
+				},
+			},
+			{
+				facts: {
+					admins: 12,
+					lastPassLogin: NOW - 11 * DAY,
+					twoStepAdmins: { enabled: 9, total: 12 },
+				},
+			},
+		];
+		const seen = new Set();
+		for ( const input of cases ) {
+			const lines = tipLines( {
+				features: ALL_ON,
+				now: NOW,
+				passes: [],
+				...input,
+				facts: {
+					deviceAlerts: true,
+					woocommerce: true,
+					...input.facts,
+				},
+			} );
+			for ( const item of lines ) {
+				const text = textOf( item );
+				seen.add( item.id );
+				expect(
+					text.length,
+					`${ item.id }: ${ text }`
+				).toBeGreaterThanOrEqual( 90 );
+				expect(
+					text.length,
+					`${ item.id }: ${ text }`
+				).toBeLessThanOrEqual( 130 );
+			}
+		}
+		// Every line the card can show was measured: 17 ids, with the passes
+		// line in both its singular and plural forms.
+		expect( seen.size ).toBe( 17 );
 	} );
 
 	it( 'never uses quote marks or dashes in a line', () => {

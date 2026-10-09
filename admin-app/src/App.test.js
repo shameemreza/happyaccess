@@ -225,7 +225,7 @@ describe( 'App shell', () => {
 				expect(
 					container.querySelector( '.ha-author__body' )
 				).toHaveTextContent(
-					'2 support passes are on. The next one ends in 2 hours 2 minutes.'
+					'2 support passes are on, and the next one ends in 2 hours 2 minutes. You can extend or end any of them under Who has access.'
 				)
 			);
 		} finally {

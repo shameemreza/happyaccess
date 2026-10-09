@@ -181,7 +181,7 @@ describe( 'AuthorCard', () => {
 
 		await waitFor( () =>
 			expect( body( container ) ).toHaveTextContent(
-				'This site has 4 administrator accounts. Remove the ones nobody uses.'
+				'This site has 4 administrator accounts. Remove the ones nobody uses, so there are fewer ways in.'
 			)
 		);
 		expect( screen.queryByRole( 'heading' ) ).toBeNull();
@@ -403,7 +403,7 @@ describe( 'AuthorCard rotation', () => {
 		);
 		await waitFor( () =>
 			expect( body( container ) ).toHaveTextContent(
-				'1 support pass is on. It ends in 1 hour.'
+				'1 support pass is on, and it ends in 1 hour. You can extend it or end it early under Who has access.'
 			)
 		);
 
@@ -418,7 +418,7 @@ describe( 'AuthorCard rotation', () => {
 			/>
 		);
 		expect( body( container ) ).toHaveTextContent(
-			'1 support pass is on. It ends in 1 hour.'
+			'1 support pass is on, and it ends in 1 hour. You can extend it or end it early under Who has access.'
 		);
 
 		// Emergency lock ended every pass, so that line stopped being true.
@@ -508,5 +508,48 @@ describe( 'AuthorCard tips layout', () => {
 			clear
 		);
 		expect( styleBlock( '.ha-author__foot' ) ).toContain( clear );
+	} );
+
+	it( 'has no border, so only the green fill follows the cut-out', () => {
+		// The card's own block, not the side column rule above it.
+		const card = styleBlock( '\t.ha-author' );
+		expect( card ).toMatch( /background: var\(--ha-author-card\);/ );
+		expect( card ).not.toMatch( /\bborder:/ );
+	} );
+
+	it( 'gives the tip the full width in a narrow card and keeps the links beside the cut-out', () => {
+		const scss = readFileSync(
+			path.resolve( 'admin-app/src/style.scss' ),
+			'utf8'
+		);
+		const start = scss.indexOf( '@container (max-width: 420px) {' );
+		expect( start ).toBeGreaterThan( -1 );
+		const narrow = scss.slice( start, scss.indexOf( '\n\t}\n', start ) );
+		const block = ( selector ) => {
+			const at = narrow.indexOf( selector + ' {' );
+			return -1 === at
+				? ''
+				: narrow.slice( at, narrow.indexOf( '}', at ) );
+		};
+
+		// The intro tip box spans the card; the links take the band beside
+		// the cut-out, as tall as it, so the box ends above it.
+		const foot = block( '.ha-author--intro .ha-author__foot' );
+		expect( foot ).toMatch( /padding-inline-end: 0;/ );
+		const links = block( '.ha-author--intro .ha-author__links' );
+		expect( links ).toContain(
+			'min-height: calc(var(--ha-author-notch) - var(--ha-author-pad-end));'
+		);
+		expect( links ).toContain(
+			'padding-inline-end: calc(var(--ha-author-notch) - var(--ha-author-pad) + 10px);'
+		);
+
+		// The tips text does the same.
+		expect( block( '.ha-author--tips .ha-author__body' ) ).toMatch(
+			/padding-inline-end: 24px;/
+		);
+		expect( block( '.ha-author--tips .ha-author__foot' ) ).toContain(
+			'min-height: calc(var(--ha-author-notch) - var(--ha-author-pad-end));'
+		);
 	} );
 } );

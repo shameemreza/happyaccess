@@ -46,8 +46,8 @@ function siteLines( { features, facts, passes, now } ) {
 				text: sprintf(
 					/* translators: 1: number of support passes that are on. 2: time until the next one ends, like "2 days 4 hours". */
 					_n(
-						'%1$d support pass is on. It ends in %2$s.',
-						'%1$d support passes are on. The next one ends in %2$s.',
+						'%1$d support pass is on, and it ends in %2$s. You can extend it or end it early under Who has access.',
+						'%1$d support passes are on, and the next one ends in %2$s. You can extend or end any of them under Who has access.',
 						on.length,
 						'happyaccess'
 					),
@@ -67,7 +67,7 @@ function siteLines( { features, facts, passes, now } ) {
 				text: sprintf(
 					/* translators: %s: how long ago, like "3 hours". */
 					__(
-						'Last login with a support pass: %s ago.',
+						'The last login with a support pass was %s ago. The Activity tab shows what they changed after that.',
 						'happyaccess'
 					),
 					durationWords( Math.max( 60, now - last ), 1 )
@@ -83,8 +83,8 @@ function siteLines( { features, facts, passes, now } ) {
 			text: sprintf(
 				/* translators: %d: number of administrator accounts. */
 				_n(
-					'This site has %d administrator account. Remove the ones nobody uses.',
-					'This site has %d administrator accounts. Remove the ones nobody uses.',
+					'This site has %d administrator account. Remove the ones nobody uses, so there are fewer ways in.',
+					'This site has %d administrator accounts. Remove the ones nobody uses, so there are fewer ways in.',
 					admins,
 					'happyaccess'
 				),
@@ -101,8 +101,8 @@ function siteLines( { features, facts, passes, now } ) {
 			text: sprintf(
 				/* translators: 1: administrators with two-step login. 2: all administrators. */
 				_n(
-					'%1$d of %2$d administrator has two-step login set up.',
-					'%1$d of %2$d administrators have two-step login set up.',
+					'%1$d of %2$d administrator has two-step login set up. Login and security shows who still needs it.',
+					'%1$d of %2$d administrators have two-step login set up. Login and security shows who still needs it.',
 					total,
 					'happyaccess'
 				),
@@ -116,7 +116,7 @@ function siteLines( { features, facts, passes, now } ) {
 		lines.push( {
 			id: 'device-alerts',
 			text: __(
-				'New device alerts are on for administrators.',
+				'New device alerts are on for administrators. They get an email when their account logs in from a new browser.',
 				'happyaccess'
 			),
 		} );
@@ -141,28 +141,28 @@ function tips( { features, facts } ) {
 			{
 				id: 'emergency-lock',
 				text: __(
-					'Emergency lock, top right, ends every support pass at once.',
+					'Emergency lock, top right, ends every support pass at once. Use it if a link or code ever reaches the wrong person.',
 					'happyaccess'
 				),
 			},
 			{
 				id: 'suspend',
 				text: __(
-					'Suspend a pass to pause it. Resume it later and the same link works again.',
+					'Suspend a pass to pause it. Resume it later and the same link and code work again, with no new email.',
 					'happyaccess'
 				),
 			},
 			{
 				id: 'activity',
 				text: __(
-					'The Activity tab shows what each pass changed. Export it as CSV for your records.',
+					'The Activity tab shows what each pass changed. Export it as CSV when a client asks for a record.',
 					'happyaccess'
 				),
 			},
 			{
 				id: 'protected',
 				text: __(
-					"Protected admin can't change passwords or emails, delete admins, or turn off HappyAccess.",
+					"Protected admin can't change passwords or emails, delete admins, or turn off HappyAccess. It fits most support work.",
 					'happyaccess'
 				),
 			}
@@ -173,7 +173,7 @@ function tips( { features, facts } ) {
 		list.push( {
 			id: 'woo-passwordless',
 			text: __(
-				'Passwordless login can show on WooCommerce My Account and checkout too.',
+				'Passwordless login can show on WooCommerce My Account and checkout too. Customers log in with an email code instead.',
 				'happyaccess'
 			),
 		} );
@@ -183,21 +183,21 @@ function tips( { features, facts } ) {
 			{
 				id: 'require-admins',
 				text: __(
-					'You can require two-step login for administrators only, and leave customers alone.',
+					'You can require two-step login for administrators only. Customers and other roles keep logging in the way they do now.',
 					'happyaccess'
 				),
 			},
 			{
 				id: 'backup-codes',
 				text: __(
-					'Keep your two-step backup codes somewhere safe. Each code works once.',
+					"Keep your two-step backup codes somewhere safe, like a password manager. Each code works once, then it's gone.",
 					'happyaccess'
 				),
 			},
 			{
 				id: 'device-alerts-tip',
 				text: __(
-					"New device alerts email an admin when their account logs in from a browser it hasn't seen.",
+					"New device alerts email an admin when their account logs in from a browser it hasn't seen. Set the roles in Login and security.",
 					'happyaccess'
 				),
 			}
@@ -207,14 +207,14 @@ function tips( { features, facts } ) {
 		{
 			id: 'own-accounts',
 			text: __(
-				'Give each person their own account. A shared login makes the activity log useless.',
+				"Give each person their own account. With a shared login, the activity log can't tell you who changed what.",
 				'happyaccess'
 			),
 		},
 		{
 			id: 'unused-admins',
 			text: __(
-				'Remove admin accounts nobody uses. Go to Users, then filter the list by Administrator.',
+				'Remove admin accounts nobody uses. Go to Users, then filter the list by Administrator to see every one of them.',
 				'happyaccess'
 			),
 		}
@@ -235,7 +235,7 @@ function tips( { features, facts } ) {
 			text: createInterpolateElement(
 				/* translators: <b> wraps the name of a WordPress setting. */
 				__(
-					'Leave <b>Anyone can register</b> off under Settings, General, unless your site needs sign-ups.',
+					'Leave <b>Anyone can register</b> off under Settings, General, unless your site needs visitors to sign up on their own.',
 					'happyaccess'
 				),
 				{ b: <b /> }
