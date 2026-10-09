@@ -140,6 +140,14 @@ final class Challenge {
 	private static $redirector = null;
 
 	/**
+	 * Ids of users whose password was reset in this request and who need
+	 * the second step. No auth cookie goes out for them until it passes.
+	 *
+	 * @var array<int,bool>
+	 */
+	private static $reset_users = array();
+
+	/**
 	 * Request kind override for tests: browser, xmlrpc or api.
 	 *
 	 * @var string|null
@@ -155,6 +163,8 @@ final class Challenge {
 		Router::add_step( self::STEP, array( __CLASS__, 'run_step' ) );
 		add_action( 'after_password_reset', array( __CLASS__, 'end_account_lock' ), 10, 1 );
 		add_action( 'after_password_reset', array( __CLASS__, 'after_woo_reset' ), PHP_INT_MAX, 1 );
+		add_action( 'set_auth_cookie', array( __CLASS__, 'drop_reset_session' ), PHP_INT_MAX, 6 );
+		add_filter( 'send_auth_cookies', array( __CLASS__, 'hold_reset_cookie' ), PHP_INT_MAX, 4 );
 		add_filter( 'authenticate', array( __CLASS__, 'filter_authenticate' ), 50, 3 );
 		add_filter( 'authenticate', array( __CLASS__, 'finish_authenticate' ), PHP_INT_MAX, 3 );
 		add_action( 'application_password_did_authenticate', array( __CLASS__, 'note_application_password' ), 10, 1 );
@@ -346,18 +356,25 @@ final class Challenge {
 	 * password and its reset action fires.
 	 *
 	 * Core's reset on wp-login.php never logs in, so only WooCommerce's form
-	 * is handled.
+	 * is sent to the step. For any reset of a user who needs the step, the
+	 * auth cookie is also held back for the rest of the request, so other
+	 * code that logs in after a reset gets no session either.
 	 *
 	 * @param \WP_User $user The user whose password was reset.
 	 * @return void
 	 */
 	public static function after_woo_reset( $user ) {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read as a flag only; WooCommerce checked its reset nonce before the reset.
-		if ( ! $user instanceof \WP_User || ! isset( $_POST['wc_reset_password'] ) || ! function_exists( 'wc_get_page_permalink' ) ) {
+		if ( ! $user instanceof \WP_User ) {
 			return;
 		}
 		self::forget_stale_grace( $user );
 		if ( ! self::applies( $user ) ) {
+			return;
+		}
+		// Whatever logs the user in after this reset, no cookie goes out before the step.
+		self::$reset_users[ (int) $user->ID ] = true;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read as a flag only; WooCommerce checked its reset nonce before the reset.
+		if ( ! isset( $_POST['wc_reset_password'] ) || ! function_exists( 'wc_get_page_permalink' ) ) {
 			return;
 		}
 
@@ -383,6 +400,47 @@ final class Challenge {
 		do_action( 'woocommerce_customer_reset_password', $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hook, so its listeners see the reset.
 
 		self::redirect( $url );
+	}
+
+	/**
+	 * When code logs in a user right after their password reset and before
+	 * the second step, drops the session that wp_set_auth_cookie() just made
+	 * and the current user. hold_reset_cookie() keeps the cookie back.
+	 *
+	 * @param string $cookie     Cookie value.
+	 * @param int    $expire     Cookie expiry.
+	 * @param int    $expiration Session expiry.
+	 * @param int    $user_id    User id.
+	 * @param string $scheme     Cookie scheme.
+	 * @param string $token      Session token.
+	 * @return void
+	 */
+	public static function drop_reset_session( $cookie, $expire = 0, $expiration = 0, $user_id = 0, $scheme = '', $token = '' ) {
+		unset( $cookie, $expire, $expiration, $scheme );
+		if ( ! isset( self::$reset_users[ (int) $user_id ] ) ) {
+			return;
+		}
+		if ( is_string( $token ) && '' !== $token ) {
+			\WP_Session_Tokens::get_instance( (int) $user_id )->destroy( $token );
+		}
+		if ( (int) $user_id === get_current_user_id() ) {
+			wp_set_current_user( 0 );
+		}
+	}
+
+	/**
+	 * Holds back the auth cookie of a user whose password was reset in this
+	 * request and who has not passed the second step.
+	 *
+	 * @param bool $send       Whether to send the cookies.
+	 * @param int  $expire     Cookie expiry.
+	 * @param int  $expiration Session expiry.
+	 * @param int  $user_id    User id.
+	 * @return bool
+	 */
+	public static function hold_reset_cookie( $send, $expire = 0, $expiration = 0, $user_id = 0 ) {
+		unset( $expire, $expiration );
+		return isset( self::$reset_users[ (int) $user_id ] ) ? false : $send;
 	}
 
 	/**
@@ -630,6 +688,7 @@ final class Challenge {
 	 */
 	public static function reset() {
 		self::$app_password_users = array();
+		self::$reset_users        = array();
 		self::$redirector         = null;
 		self::$context            = null;
 	}
@@ -1215,6 +1274,7 @@ final class Challenge {
 	 * @return array
 	 */
 	private static function succeed( \WP_User $user, array $pending, array $carry, $passed = true ) {
+		unset( self::$reset_users[ (int) $user->ID ] );
 		RateLimiter::clear( self::CODE_ACTION, 'ip', RateLimiter::ip_subject() );
 		self::send_cookie( self::COOKIE, '', Clock::now() - HOUR_IN_SECONDS );
 		if ( 'backup' === $carry['method'] ) {

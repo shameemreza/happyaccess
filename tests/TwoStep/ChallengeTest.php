@@ -1533,6 +1533,26 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( array( $user->ID ), $this->auth );
 	}
 
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_reset_that_logs_in_outside_the_form_gets_no_session() {
+		$this->load_woocommerce();
+		$made = $this->app_user( 'customer' );
+
+		// The reset itself, without WooCommerce's form around it.
+		@WC_Shortcode_My_Account::reset_password( $made['user'], wp_generate_password( 24, false ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- WooCommerce's reset cookie warns under the CLI.
+
+		$this->assertSame( 0, get_current_user_id(), 'The user is not logged in for the rest of the request.' );
+		$this->assertSame( array(), WP_Session_Tokens::get_instance( $made['user']->ID )->get_all(), 'The session made for the cookie is gone.' );
+		remove_filter( 'send_auth_cookies', '__return_false' );
+		$this->assertFalse( apply_filters( 'send_auth_cookies', true, 0, 0, $made['user']->ID, 'auth', '' ), 'The cookie is held back.' );
+		$this->assertSame( 0, $this->wp_login_count );
+	}
+
 	public function test_a_core_password_reset_is_left_alone() {
 		$made = $this->app_user();
 		reset_password( $made['user'], wp_generate_password( 24, false ) );
