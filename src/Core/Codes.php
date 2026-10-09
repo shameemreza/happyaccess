@@ -21,6 +21,21 @@ final class Codes {
 	const BACKUP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 	/**
+	 * Where a numeric code is used. Each place hashes the same digits
+	 * differently, so a stored hash only ever passes where it was made.
+	 */
+	const PURPOSE_SUPPORT       = 'support';
+	const PURPOSE_PASSWORDLESS  = 'passwordless';
+	const PURPOSE_TWOSTEP_EMAIL = 'twostep_email';
+
+	/**
+	 * Option with the UTC time from which every new code hash has a purpose.
+	 * A row made at or before it may still hold a hash without one, and
+	 * that hash keeps passing until the row's own expiry ends it.
+	 */
+	const PURPOSE_SINCE_OPTION = 'happyaccess_code_purpose_since';
+
+	/**
 	 * Random numeric code.
 	 *
 	 * @param int $digits Length, 4 to 12.
@@ -69,14 +84,44 @@ final class Codes {
 	}
 
 	/**
-	 * Stored hash of a numeric code. Numeric codes only: backup codes are
-	 * hashed with wp_hash_password() in Stage 4, never with hash_code().
+	 * Stored hash of a numeric code for one purpose. Numeric codes only:
+	 * backup codes are hashed with wp_hash_password(), never with this.
+	 *
+	 * @param string $code    Code.
+	 * @param string $purpose One of the PURPOSE_ constants.
+	 * @return string
+	 */
+	public static function hash_code( $code, $purpose ) {
+		return Secrets::hmac( 'code:' . (string) $purpose . ':' . self::normalize_code( $code ) );
+	}
+
+	/**
+	 * The hash codes had before they had a purpose. Only for finding and
+	 * checking rows made before PURPOSE_SINCE_OPTION; nothing new is
+	 * stored this way.
 	 *
 	 * @param string $code Code.
 	 * @return string
 	 */
-	public static function hash_code( $code ) {
+	public static function legacy_hash_code( $code ) {
 		return Secrets::hmac( 'code:' . self::normalize_code( $code ) );
+	}
+
+	/**
+	 * Whether a row may still hold a hash without a purpose: it was made at
+	 * or before the time in PURPOSE_SINCE_OPTION. Without that time, or a
+	 * row without a date, the answer is yes, so no code that is out is
+	 * ever locked out.
+	 *
+	 * @param string|null $created_at Row creation time, UTC Y-m-d H:i:s.
+	 * @return bool
+	 */
+	public static function accepts_legacy( $created_at ) {
+		$since = get_option( self::PURPOSE_SINCE_OPTION, '' );
+		if ( ! is_string( $since ) || '' === $since || ! is_string( $created_at ) || '' === $created_at ) {
+			return true;
+		}
+		return strcmp( $created_at, $since ) <= 0;
 	}
 
 	/**
@@ -91,13 +136,16 @@ final class Codes {
 
 	/**
 	 * Checks a typed numeric code against a stored hash. Numeric codes only:
-	 * backup codes are checked against wp_hash_password() hashes in Stage 4.
+	 * backup codes are checked against wp_hash_password() hashes.
 	 *
 	 * @param string $input       Typed code.
 	 * @param string $stored_hash Stored hash.
+	 * @param string $purpose     One of the PURPOSE_ constants.
+	 * @param bool   $legacy      Whether the hash without a purpose passes too,
+	 *                            from accepts_legacy() for the row.
 	 * @return bool
 	 */
-	public static function verify_code( $input, $stored_hash ) {
+	public static function verify_code( $input, $stored_hash, $purpose, $legacy = false ) {
 		if ( ! is_string( $input ) ) {
 			return false;
 		}
@@ -105,7 +153,11 @@ final class Codes {
 		if ( '' === $code || ! is_string( $stored_hash ) || '' === $stored_hash ) {
 			return false;
 		}
-		return hash_equals( $stored_hash, self::hash_code( $code ) );
+		$match = hash_equals( $stored_hash, self::hash_code( $code, $purpose ) );
+		if ( $legacy && hash_equals( $stored_hash, self::legacy_hash_code( $code ) ) ) {
+			$match = true;
+		}
+		return $match;
 	}
 
 	/**

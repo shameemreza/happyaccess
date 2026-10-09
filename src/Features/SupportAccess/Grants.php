@@ -373,7 +373,13 @@ final class Grants {
 		if ( '' === Codes::normalize_code( $code ) ) {
 			return null;
 		}
-		return self::find_by_hash( 'code_hash', Codes::hash_code( $code ), $code, array( Codes::class, 'verify_code' ) );
+		return self::find_by_hash(
+			'code_hash',
+			array( Codes::hash_code( $code, Codes::PURPOSE_SUPPORT ), Codes::legacy_hash_code( $code ) ),
+			static function ( array $row ) use ( $code ) {
+				return Codes::verify_code( $code, (string) $row['code_hash'], Codes::PURPOSE_SUPPORT, Codes::accepts_legacy( $row['created_at'] ) );
+			}
+		);
 	}
 
 	/**
@@ -386,7 +392,14 @@ final class Grants {
 		if ( ! is_string( $key ) || '' === $key ) {
 			return null;
 		}
-		return self::find_by_hash( 'link_hash', Codes::hash_key( $key ), $key, array( Codes::class, 'verify_key' ) );
+		$hash = Codes::hash_key( $key );
+		return self::find_by_hash(
+			'link_hash',
+			array( $hash, $hash ),
+			static function ( array $row ) use ( $key ) {
+				return Codes::verify_key( $key, (string) $row['link_hash'] );
+			}
+		);
 	}
 
 	/**
@@ -546,10 +559,15 @@ final class Grants {
 	 *
 	 * @param int $id Grant id.
 	 * @return array|null code and link_key, or null for an unknown, revoked or expired grant.
-	 * @throws \RuntimeException When no free code was found.
+	 * @throws \RuntimeException When the site key is not stored or no free code was found.
 	 */
 	public static function regenerate( $id ) {
 		global $wpdb;
+		// Codes hashed with a key that isn't stored would stop working on the next request.
+		if ( ! Secrets::is_persisted() ) {
+			throw new \RuntimeException( 'site key not stored' );
+		}
+
 		$grant = self::get( $id );
 		if ( null === $grant || ! in_array( $grant['status'], array( 'active', 'used', 'suspended' ), true ) ) {
 			return null;
@@ -838,7 +856,8 @@ final class Grants {
 	}
 
 	/**
-	 * Finds a code that no current grant uses.
+	 * Finds a code that no current grant uses, in either hash form, so a
+	 * grant from before code purposes can't share its code with a new one.
 	 *
 	 * @return array The code and its hash.
 	 * @throws \RuntimeException When every attempt hit a used code.
@@ -848,9 +867,9 @@ final class Grants {
 		$table = Installer::table( 'tokens' );
 		for ( $attempt = 0; $attempt < self::CODE_ATTEMPTS; $attempt++ ) {
 			$candidate = Codes::numeric( 8 );
-			$hash      = Codes::hash_code( $candidate );
+			$hash      = Codes::hash_code( $candidate, Codes::PURPOSE_SUPPORT );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-			$taken = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE code_hash = %s AND revoked_at IS NULL AND expires_at > %s LIMIT 1", $hash, Clock::mysql() ) );
+			$taken = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$table} WHERE code_hash IN ( %s, %s ) AND revoked_at IS NULL AND expires_at > %s LIMIT 1", $hash, Codes::legacy_hash_code( $candidate ), Clock::mysql() ) );
 			if ( ! $taken ) {
 				return array( $candidate, $hash );
 			}
@@ -880,23 +899,27 @@ final class Grants {
 
 	/**
 	 * Looks a grant up by a stored hash, then confirms it with the verifier.
+	 * A grant that hasn't ended comes first, then the newest: an older grant
+	 * whose new code matches a newer ended one is still found.
 	 *
 	 * @param string   $column   code_hash or link_hash.
-	 * @param string   $hash     Hash to look for.
-	 * @param string   $input    Raw input.
-	 * @param callable $verifier Constant-time check taking input and stored hash.
+	 * @param string[] $hashes   The two hashes to look for (the same one twice when there is one).
+	 * @param callable $verifier Constant-time check that takes the row.
 	 * @return array|null
 	 */
-	private static function find_by_hash( $column, $hash, $input, $verifier ) {
+	private static function find_by_hash( $column, array $hashes, $verifier ) {
 		global $wpdb;
 		$table  = Installer::table( 'tokens' );
 		$column = 'link_hash' === $column ? 'link_hash' : 'code_hash';
+		$hashes = array_values( $hashes );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table; column is one of two fixed names.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$column} = %s ORDER BY id DESC LIMIT 1", $hash ), ARRAY_A );
-		if ( ! is_array( $row ) || ! call_user_func( $verifier, $input, (string) $row[ $column ] ) ) {
-			return null;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$column} IN ( %s, %s ) ORDER BY ( revoked_at IS NULL AND expires_at > %s ) DESC, id DESC LIMIT 5", (string) $hashes[0], (string) $hashes[ count( $hashes ) - 1 ], Clock::mysql() ), ARRAY_A );
+		foreach ( (array) $rows as $row ) {
+			if ( is_array( $row ) && call_user_func( $verifier, $row ) ) {
+				return self::normalize( $row );
+			}
 		}
-		return self::normalize( $row );
+		return null;
 	}
 
 	/**

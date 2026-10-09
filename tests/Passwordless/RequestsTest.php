@@ -96,7 +96,7 @@ class RequestsTest extends WP_UnitTestCase {
 		$row = $rows[0];
 		$this->assertSame( 'passwordless', $row['purpose'] );
 		$this->assertSame( (int) $this->user->ID, (int) $row['user_id'] );
-		$this->assertSame( Codes::hash_code( $made['code'] ), $row['code_hash'] );
+		$this->assertSame( Codes::hash_code( $made['code'], Codes::PURPOSE_PASSWORDLESS ), $row['code_hash'] );
 		$this->assertSame( Codes::hash_key( $made['link_key'] ), $row['link_hash'] );
 		$this->assertSame( Codes::hash_key( self::KEY ), $row['request_key_hash'] );
 		$this->assertSame( gmdate( 'Y-m-d H:i:s', $made['expires_at'] ), $row['expires_at'] );
@@ -104,6 +104,31 @@ class RequestsTest extends WP_UnitTestCase {
 		$this->assertNull( $row['used_at'] );
 		$this->assertSame( 0, (int) $row['attempts'] );
 		$this->assertNotSame( '', $row['ip'] );
+	}
+
+	public function test_an_open_code_hashed_before_purposes_still_logs_in() {
+		global $wpdb;
+		$made = $this->make();
+		$row  = $this->rows()[0];
+		$wpdb->update( Installer::table( 'challenges' ), array( 'code_hash' => Codes::legacy_hash_code( $made['code'] ) ), array( 'id' => $row['id'] ) );
+
+		update_option( Codes::PURPOSE_SINCE_OPTION, Clock::mysql( Clock::now() + 1 ), false );
+		$user = Requests::verify_code( self::KEY, $made['code'] );
+		delete_option( Codes::PURPOSE_SINCE_OPTION );
+		$this->assertInstanceOf( WP_User::class, $user );
+		$this->assertSame( $this->user->ID, $user->ID );
+	}
+
+	public function test_an_old_style_hash_on_a_request_made_after_purposes_is_refused() {
+		global $wpdb;
+		$made = $this->make();
+		$row  = $this->rows()[0];
+		$wpdb->update( Installer::table( 'challenges' ), array( 'code_hash' => Codes::legacy_hash_code( $made['code'] ) ), array( 'id' => $row['id'] ) );
+
+		update_option( Codes::PURPOSE_SINCE_OPTION, Clock::mysql( Clock::now() - 1 ), false );
+		$result = Requests::verify_code( self::KEY, $made['code'] );
+		delete_option( Codes::PURPOSE_SINCE_OPTION );
+		$this->assertWPError( $result );
 	}
 
 	public function test_no_plain_code_or_key_is_ever_in_the_table() {

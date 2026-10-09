@@ -82,7 +82,7 @@ final class Requests {
 			array(
 				'user_id'          => (int) $user->ID,
 				'purpose'          => self::PURPOSE,
-				'code_hash'        => Codes::hash_code( $code ),
+				'code_hash'        => Codes::hash_code( $code, Codes::PURPOSE_PASSWORDLESS ),
 				'link_hash'        => Codes::hash_key( $link_key ),
 				'request_key_hash' => Codes::hash_key( $request_key ),
 				'attempts'         => 0,
@@ -121,13 +121,13 @@ final class Requests {
 		$table = Installer::table( 'challenges' );
 		$now   = Clock::mysql();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, user_id, code_hash FROM {$table} WHERE purpose = %s AND request_key_hash = %s AND used_at IS NULL AND expires_at > %s ORDER BY id DESC LIMIT 1", self::PURPOSE, Codes::hash_key( $request_key ), $now ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, user_id, code_hash, created_at FROM {$table} WHERE purpose = %s AND request_key_hash = %s AND used_at IS NULL AND expires_at > %s ORDER BY id DESC LIMIT 1", self::PURPOSE, Codes::hash_key( $request_key ), $now ), ARRAY_A );
 		if ( ! is_array( $row ) ) {
 			return self::invalid_code();
 		}
 
 		$id = (int) $row['id'];
-		if ( is_string( $code ) && self::CODE_DIGITS === strlen( Codes::normalize_code( $code ) ) && Codes::verify_code( $code, (string) $row['code_hash'] ) ) {
+		if ( is_string( $code ) && self::CODE_DIGITS === strlen( Codes::normalize_code( $code ) ) && Codes::verify_code( $code, (string) $row['code_hash'], Codes::PURPOSE_PASSWORDLESS, Codes::accepts_legacy( $row['created_at'] ) ) ) {
 			if ( ! self::consume( $id ) ) {
 				return self::invalid_code();
 			}

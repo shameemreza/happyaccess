@@ -7,6 +7,7 @@
 
 use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
+use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Features\SupportAccess\Grants;
@@ -25,6 +26,7 @@ class GrantsTest extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		delete_option( Codes::PURPOSE_SINCE_OPTION );
 		Clock::freeze( null );
 		parent::tear_down();
 	}
@@ -107,6 +109,74 @@ class GrantsTest extends WP_UnitTestCase {
 		$this->assertSame( $made['id'], Grants::find_by_link( $made['link_key'] )['id'] );
 		$this->assertNull( Grants::find_by_code( '00000000' === $made['code'] ? '11111111' : '00000000' ) );
 		$this->assertNull( Grants::find_by_link( $made['link_key'] . 'x' ) );
+	}
+
+	public function test_new_grant_codes_are_stored_with_the_support_purpose() {
+		global $wpdb;
+		$made = Grants::create( array( 'label' => 'x' ) );
+		$hash = $wpdb->get_var( $wpdb->prepare( 'SELECT code_hash FROM ' . Installer::table( 'tokens' ) . ' WHERE id = %d', $made['id'] ) );
+		$this->assertSame( Codes::hash_code( $made['code'], Codes::PURPOSE_SUPPORT ), $hash );
+		$this->assertNotSame( Codes::legacy_hash_code( $made['code'] ), $hash );
+
+		$fresh = Grants::regenerate( $made['id'] );
+		$hash  = $wpdb->get_var( $wpdb->prepare( 'SELECT code_hash FROM ' . Installer::table( 'tokens' ) . ' WHERE id = %d', $made['id'] ) );
+		$this->assertSame( Codes::hash_code( $fresh['code'], Codes::PURPOSE_SUPPORT ), $hash );
+	}
+
+	public function test_a_code_hashed_before_purposes_keeps_working_for_a_grant_made_before() {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		update_option( Codes::PURPOSE_SINCE_OPTION, Clock::mysql( 1790000000 + 60 ), false );
+		$made = Grants::create( array( 'label' => 'old' ) );
+		$wpdb->update( $table, array( 'code_hash' => Codes::legacy_hash_code( $made['code'] ) ), array( 'id' => $made['id'] ) );
+
+		$found = Grants::find_by_code( $made['code'] );
+		$this->assertNotNull( $found, 'A code issued before the change still logs in.' );
+		$this->assertSame( $made['id'], $found['id'] );
+
+		$wpdb->update( $table, array( 'created_at' => Clock::mysql( 1790000000 + 120 ) ), array( 'id' => $made['id'] ) );
+		$this->assertNull( Grants::find_by_code( $made['code'] ), 'A grant made after the change only takes the new hash.' );
+	}
+
+	public function test_find_prefers_a_current_grant_over_a_newer_ended_one_with_the_same_hash() {
+		global $wpdb;
+		$table   = Installer::table( 'tokens' );
+		$older   = Grants::create( array( 'label' => 'older' ) );
+		$revoked = Grants::create( array( 'label' => 'revoked' ) );
+		$expired = Grants::create( array( 'label' => 'expired', 'duration' => Grants::MIN_DURATION ) );
+		Grants::revoke( $revoked['id'] );
+
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT code_hash, link_hash FROM {$table} WHERE id = %d", $revoked['id'] ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->update( $table, $row, array( 'id' => $older['id'] ) );
+		$this->assertSame( $older['id'], Grants::find_by_code( $revoked['code'] )['id'] );
+		$this->assertSame( $older['id'], Grants::find_by_link( $revoked['link_key'] )['id'] );
+
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT code_hash, link_hash FROM {$table} WHERE id = %d", $expired['id'] ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->update( $table, $row, array( 'id' => $older['id'] ) );
+		Clock::freeze( 1790000000 + Grants::MIN_DURATION + 1 );
+		$this->assertSame( $older['id'], Grants::find_by_code( $expired['code'] )['id'] );
+		$this->assertSame( $older['id'], Grants::find_by_link( $expired['link_key'] )['id'] );
+
+		Grants::revoke( $older['id'] );
+		$this->assertSame( $expired['id'], Grants::find_by_code( $expired['code'] )['id'], 'With no current grant, the newest row is still found.' );
+	}
+
+	public function test_regenerate_refuses_when_site_key_is_not_stored() {
+		$made = Grants::create( array( 'label' => 'x' ) );
+		add_filter( 'pre_option_' . Secrets::OPTION, '__return_empty_string' );
+		Secrets::reset_cache();
+		$thrown = false;
+		try {
+			Grants::regenerate( $made['id'] );
+		} catch ( RuntimeException $e ) {
+			$thrown = true;
+		}
+		remove_filter( 'pre_option_' . Secrets::OPTION, '__return_empty_string' );
+		Secrets::reset_cache();
+
+		$this->assertTrue( $thrown );
+		$this->assertSame( $made['id'], Grants::find_by_code( $made['code'] )['id'], 'The code that was out keeps working.' );
+		$this->assertSame( $made['id'], Grants::find_by_link( $made['link_key'] )['id'] );
 	}
 
 	public function test_status_order() {

@@ -78,7 +78,7 @@ class MigrationTest extends WP_UnitTestCase {
 
 		$active = $this->token( 'a' );
 		$this->assertNull( $active['otp_code'] );
-		$this->assertTrue( Codes::verify_code( '123456', $active['code_hash'] ) );
+		$this->assertTrue( Codes::verify_code( '123456', $active['code_hash'], Codes::PURPOSE_SUPPORT ) );
 
 		$expired = $this->token( 'b' );
 		$this->assertNull( $expired['otp_code'] );
@@ -126,7 +126,7 @@ class MigrationTest extends WP_UnitTestCase {
 		Installer::migrate();
 
 		$this->assertSame( 1, AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['total'] );
-		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'] ) );
+		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'], Codes::PURPOSE_SUPPORT ) );
 	}
 
 	public function test_maybe_upgrade_only_runs_when_behind() {
@@ -217,7 +217,7 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
 		$this->assertFalse( Installer::table_exists( 'magic_links' ) );
 		$this->assertNull( $this->token( 'a' )['otp_code'] );
-		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'] ) );
+		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'], Codes::PURPOSE_SUPPORT ) );
 		$this->assertSame( 1, AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['total'] );
 	}
 	private function insert_legacy_token( $hash, array $extra = array() ) {
@@ -251,7 +251,7 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( $id, (int) $row['id'] );
 		$this->assertSame( 1, (int) $row['max_uses'] );
 		$this->assertSame( 0, (int) $row['use_count'] );
-		$this->assertTrue( Codes::verify_code( '333333', $row['code_hash'] ) );
+		$this->assertTrue( Codes::verify_code( '333333', $row['code_hash'], Codes::PURPOSE_SUPPORT ) );
 	}
 
 	public function test_suspension_is_carried_by_the_token_user_id_and_the_flag_is_kept() {
@@ -622,7 +622,7 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertSame( Clock::mysql( 1790000000 + 7 * DAY_IN_SECONDS ), $this->token( 'long' )['expires_at'] );
 		$this->assertSame( Clock::mysql( 1790000000 + 2 * DAY_IN_SECONDS ), $this->token( 'short' )['expires_at'] );
 		$this->assertSame( Clock::mysql( 1790000000 + 20 * DAY_IN_SECONDS ), $this->token( 'link-only' )['expires_at'], 'Rows without a code keep their expiry.' );
-		$this->assertTrue( Codes::verify_code( '444444', $this->token( 'long' )['code_hash'] ) );
+		$this->assertTrue( Codes::verify_code( '444444', $this->token( 'long' )['code_hash'], Codes::PURPOSE_SUPPORT ) );
 	}
 
 	/**

@@ -77,11 +77,35 @@ class EmailMethodTest extends WP_UnitTestCase {
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'twostep_email', $rows[0]['purpose'] );
 		$this->assertSame( (int) $this->user->ID, (int) $rows[0]['user_id'] );
-		$this->assertSame( Codes::hash_code( $code ), $rows[0]['code_hash'] );
+		$this->assertSame( Codes::hash_code( $code, Codes::PURPOSE_TWOSTEP_EMAIL ), $rows[0]['code_hash'] );
 		$this->assertSame( gmdate( 'Y-m-d H:i:s', 1790000600 ), $rows[0]['expires_at'] );
 		$this->assertSame( 0, (int) $rows[0]['attempts'] );
 		$this->assertNull( $rows[0]['used_at'] );
 		$this->assertStringNotContainsString( $code, wp_json_encode( $rows ) );
+	}
+
+	public function test_an_open_code_hashed_before_purposes_still_passes() {
+		global $wpdb;
+		$code = $this->send_and_read();
+		$rows = $this->rows();
+		$wpdb->update( Installer::table( 'challenges' ), array( 'code_hash' => Codes::legacy_hash_code( $code ) ), array( 'id' => $rows[0]['id'] ) );
+
+		update_option( Codes::PURPOSE_SINCE_OPTION, Clock::mysql( Clock::now() + 1 ), false );
+		$result = EmailMethod::verify( $this->user->ID, $code );
+		delete_option( Codes::PURPOSE_SINCE_OPTION );
+		$this->assertTrue( $result );
+	}
+
+	public function test_an_old_style_hash_on_a_code_sent_after_purposes_is_refused() {
+		global $wpdb;
+		$code = $this->send_and_read();
+		$rows = $this->rows();
+		$wpdb->update( Installer::table( 'challenges' ), array( 'code_hash' => Codes::legacy_hash_code( $code ) ), array( 'id' => $rows[0]['id'] ) );
+
+		update_option( Codes::PURPOSE_SINCE_OPTION, Clock::mysql( Clock::now() - 1 ), false );
+		$result = EmailMethod::verify( $this->user->ID, $code );
+		delete_option( Codes::PURPOSE_SINCE_OPTION );
+		$this->assertWPError( $result );
 	}
 
 	public function test_the_email_has_the_code_the_expiry_the_ip_and_a_text_part() {

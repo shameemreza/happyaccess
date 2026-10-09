@@ -118,7 +118,9 @@ final class Installer {
 	}
 
 	/**
-	 * Creates or updates all tables and the site key.
+	 * Creates or updates all tables and the site key, and notes once when
+	 * code hashes started to carry a purpose, so codes hashed before that
+	 * keep working until they end.
 	 *
 	 * @return void
 	 */
@@ -129,6 +131,7 @@ final class Installer {
 			dbDelta( $sql );
 		}
 		Secrets::key();
+		self::insert_option_once( Codes::PURPOSE_SINCE_OPTION, Clock::mysql() );
 	}
 
 	/**
@@ -573,7 +576,7 @@ final class Installer {
 			$exhausted = $max_uses > 0 && (int) $row['use_count'] >= $max_uses;
 			$active    = empty( $row['revoked_at'] ) && ! $exhausted && Clock::from_mysql( $row['expires_at'] ) > Clock::now();
 			if ( $active ) {
-				$data['code_hash'] = Codes::hash_code( $row['otp_code'] );
+				$data['code_hash'] = Codes::hash_code( $row['otp_code'], Codes::PURPOSE_SUPPORT );
 				// A 6-digit code is the weakest secret here, so it can't outlive a week.
 				$data['expires_at'] = Clock::mysql( min( Clock::from_mysql( $row['expires_at'] ), Clock::now() + self::LEGACY_CODE_MAX_AGE ) );
 			}

@@ -6,6 +6,8 @@
  */
 
 use HappyAccess\Core\Capabilities;
+use HappyAccess\Core\Clock;
+use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Features\SupportAccess\CapabilityGuard;
@@ -38,6 +40,21 @@ class InstallerTest extends WP_UnitTestCase {
 		Installer::install();
 		Installer::install();
 		$this->assertTrue( Installer::table_exists( 'tokens' ) );
+	}
+
+	public function test_install_notes_once_when_codes_started_carrying_a_purpose() {
+		delete_option( Codes::PURPOSE_SINCE_OPTION );
+		Clock::freeze( 1790000000 );
+		try {
+			Installer::install();
+			$this->assertSame( Clock::mysql( 1790000000 ), get_option( Codes::PURPOSE_SINCE_OPTION ) );
+
+			Clock::freeze( 1790000000 + HOUR_IN_SECONDS );
+			Installer::install();
+			$this->assertSame( Clock::mysql( 1790000000 ), get_option( Codes::PURPOSE_SINCE_OPTION ), 'A later install keeps the first date.' );
+		} finally {
+			Clock::freeze( null );
+		}
 	}
 
 	private function become_temp_user() {
