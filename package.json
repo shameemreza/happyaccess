@@ -9,7 +9,8 @@
 		"start": "wp-scripts start admin-app/src/index.js blocks=./admin-app/src/blocks/login/index.js --output-path=build",
 		"test:js": "wp-scripts test-unit-js admin-app",
 		"lint:js": "wp-scripts lint-js admin-app/src",
-		"lint:css": "wp-scripts lint-style 'admin-app/src/**/*.scss'"
+		"lint:css": "wp-scripts lint-style 'admin-app/src/**/*.scss'",
+		"size": "node -e \"const max = 140000; const size = require( 'fs' ).statSync( 'build/index.js' ).size; console.log( 'build/index.js: ' + size + ' of ' + max + ' bytes' ); if ( size > max ) { console.error( 'build/index.js is over the 140 KB budget.' ); process.exit( 1 ); }\""
 	},
 	"devDependencies": {
 		"@testing-library/dom": "10.4.1",
