@@ -511,6 +511,35 @@ class UninstallerTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * @group ms-required
+	 */
+	public function test_a_network_account_with_no_inheritor_on_one_site_is_stripped_on_every_site() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$lonely  = self::factory()->blog->create();
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		add_user_to_blog( $lonely, $user_id, 'administrator' );
+		// The site's creator is its only other administrator; without them nobody can inherit there.
+		remove_user_from_blog( 1, $lonely );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		// Names no live site, so only the network sweep handles it.
+		update_user_meta( $user_id, 'happyaccess_blog_id', 987654 );
+		wp_set_current_user( 0 );
+
+		Uninstaller::run();
+
+		$this->assertNotFalse( get_userdata( $user_id ), 'With nobody to inherit on one site, the account stays.' );
+		foreach ( array( get_current_blog_id(), $lonely ) as $blog_id ) {
+			switch_to_blog( $blog_id );
+			$user = new WP_User( $user_id );
+			$this->assertSame( array(), $user->roles, 'site ' . $blog_id );
+			$this->assertFalse( $user->has_cap( 'manage_options' ), 'site ' . $blog_id );
+			restore_current_blog();
+		}
+	}
+
+	/**
 	 * Gives a user every two-step meta key.
 	 *
 	 * @param int $user_id User id.

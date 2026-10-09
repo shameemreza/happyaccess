@@ -533,25 +533,25 @@ final class Installer {
 	}
 
 	/**
-	 * Activation entry point, including network activation.
+	 * Activation entry point, including network activation. A network
+	 * activation migrates the main site only and schedules the batched
+	 * network loop for the other sites, so a big network isn't migrated in
+	 * the one request that activates the plugin.
 	 *
 	 * @param bool $network_wide Whether the plugin is network activated.
 	 * @return void
 	 */
 	public static function activate( $network_wide ) {
 		if ( is_multisite() && $network_wide ) {
-			foreach ( get_sites(
-				array(
-					'fields' => 'ids',
-					'number' => 0,
-				)
-			) as $site_id ) {
-				switch_to_blog( (int) $site_id );
-				try {
-					self::migrate();
-				} finally {
-					restore_current_blog();
+			switch_to_blog( get_main_site_id() );
+			try {
+				self::migrate();
+				// Core marks the plugin network active only after this hook, so maybe_schedule_network_upgrade() would skip it here.
+				if ( ! wp_next_scheduled( self::NETWORK_HOOK ) ) {
+					wp_schedule_single_event( time(), self::NETWORK_HOOK );
 				}
+			} finally {
+				restore_current_blog();
 			}
 			return;
 		}

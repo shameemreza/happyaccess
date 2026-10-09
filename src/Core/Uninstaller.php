@@ -274,7 +274,9 @@ final class Uninstaller {
 	/**
 	 * Deletes a temp user from every site it belongs to, then from the network.
 	 * Stops and leaves the account if any site has nobody to inherit its
-	 * content, or if taking the account off a site fails.
+	 * content, or if taking the account off a site fails. An account left
+	 * this way is stripped on every site it belongs to, not only the one
+	 * with nobody to inherit.
 	 *
 	 * @param int $user_id User id.
 	 * @return void
@@ -286,19 +288,18 @@ final class Uninstaller {
 		}
 
 		TempUsers::destroy_sessions( $user_id );
+		$blogs   = array_map( 'intval', array_keys( (array) get_blogs_of_user( $user_id ) ) );
 		$targets = array();
-		foreach ( array_keys( (array) get_blogs_of_user( $user_id ) ) as $blog_id ) {
-			switch_to_blog( (int) $blog_id );
+		foreach ( $blogs as $blog_id ) {
+			switch_to_blog( $blog_id );
 			try {
 				TempUsers::delete_wc_api_keys( $user_id );
-				$targets[ (int) $blog_id ] = TempUsers::reassign_target( $user_id );
-				if ( null === $targets[ (int) $blog_id ] ) {
-					self::keep( $user_id );
-				}
+				$targets[ $blog_id ] = TempUsers::reassign_target( $user_id );
 			} finally {
 				restore_current_blog();
 			}
-			if ( null === $targets[ (int) $blog_id ] ) {
+			if ( null === $targets[ $blog_id ] ) {
+				self::keep_everywhere( $user_id, $blogs );
 				return;
 			}
 		}
@@ -315,6 +316,25 @@ final class Uninstaller {
 			require_once ABSPATH . 'wp-admin/includes/ms.php';
 		}
 		wpmu_delete_user( $user_id );
+	}
+
+	/**
+	 * Strips an account that has to stay on each of the given sites, since
+	 * its role and caps are kept per site.
+	 *
+	 * @param int   $user_id  User id.
+	 * @param int[] $blog_ids Sites the account belongs to.
+	 * @return void
+	 */
+	private static function keep_everywhere( $user_id, array $blog_ids ) {
+		foreach ( $blog_ids as $blog_id ) {
+			switch_to_blog( (int) $blog_id );
+			try {
+				self::keep( $user_id );
+			} finally {
+				restore_current_blog();
+			}
+		}
 	}
 
 	/**

@@ -197,6 +197,27 @@ class CoverageTest extends WP_UnitTestCase {
 		$this->assertFalse( $this->get()->get_data()['large'] );
 	}
 
+	public function test_says_how_many_people_use_each_method() {
+		$app = self::factory()->user->create( array( 'role' => 'editor' ) );
+		UserState::enable_app( $app, Totp::new_secret() );
+		$both = self::factory()->user->create( array( 'role' => 'author' ) );
+		UserState::enable_app( $both, Totp::new_secret() );
+		UserState::enable_email( $both );
+		$email = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		UserState::enable_email( $email );
+		// A temp user never counts.
+		$made = Grants::create( array( 'label' => 'Agent' ) );
+		UserState::enable_email( TempUsers::get_or_create( Grants::get( $made['id'] ) ) );
+
+		$this->assertSame(
+			array(
+				'app'   => 2,
+				'email' => 2,
+			),
+			$this->get()->get_data()['methods']
+		);
+	}
+
 	public function test_grace_by_days_runs_out_by_date() {
 		Settings::update(
 			array(

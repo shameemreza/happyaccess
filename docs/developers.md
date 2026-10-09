@@ -226,10 +226,12 @@ These routes aren't a public API. They can change in any release without notice.
 HappyAccess works network activated or activated per site.
 
 - **Each site on its own:** every site has its own passes, activity log, settings and database tables, and its own Users > HappyAccess screen for that site's administrators. There's no network admin screen.
+- **Network activation:** the main site is set up at once. A WP-Cron task then sets up the other sites, 20 at a time, so a big network isn't set up in one request. A site that gets a visit first sets itself up.
 - **New sites:** while HappyAccess is network active, a new site gets its tables when it's created.
 - **Two-step login when network active:** the Two-step login switch, each role's choice, the grace period and the XML-RPC setting come from the main site, applied to each person's roles on the site they log in to. A login on one site can be good on others, so one site's rules can't be weaker than another's. The other sites show a note in place of their own settings.
 - **Two-step login per site:** on a subdirectory network without network activation, sites share their logins, so the Login and security tab suggests network activation or the same roles on every site.
-- **Super admins:** for two-step login they count as administrators under the main site's rules. They can always log in with a password, whatever Email code only says.
+- **Super admins:** for two-step login they count as administrators under the main site's rules, and the "Who has two-step login" counts of every site include them as administrators. They can always log in with a password, whatever Email code only says.
+- **Wrong two-step codes:** the limit of 10 wrong codes an hour per account is counted in the main site's table, so it covers every site. When HappyAccess isn't active on the main site, each site counts its own.
 - **Email code logins:** only work for people who are members of the site.
 - **Temporary accounts:** when a pass ends, its account is removed from the site, and deleted from the network if it belongs to no other site. A pass never gets network admin permissions.
 - **Network deactivation:** ends every pass on every site.

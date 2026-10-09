@@ -1280,24 +1280,33 @@ final class Challenge {
 	 * pauses the account's code step, emails the user and writes a log row.
 	 * The profile re-check counts its wrong codes here too. Only a password
 	 * reset or the end of the window clears the count; a right password or
-	 * code doesn't.
+	 * code doesn't. On a network the count is kept on the main site (see
+	 * on_account_table()), so it covers every site the account logs in to.
 	 *
 	 * @param \WP_User $user The user the code was for.
 	 * @return void
 	 */
 	public static function count_account_wrong_code( \WP_User $user ) {
-		$subject = self::account_subject( $user->ID );
-		RateLimiter::hit( self::CODE_ACTION, 'account', $subject );
-		if ( self::account_wait( $user->ID ) > 0 ) {
-			return;
+		$wait = self::on_account_table(
+			static function () use ( $user ) {
+				$subject = self::account_subject( $user->ID );
+				RateLimiter::hit( self::CODE_ACTION, 'account', $subject );
+				if ( self::paused_for( $user->ID ) > 0 ) {
+					return 0;
+				}
+				if ( RateLimiter::count( self::CODE_ACTION, 'account', $subject, self::ACCOUNT_WINDOW ) < self::ACCOUNT_CODE_CAP ) {
+					return 0;
+				}
+				// The pause is one row on its own action, and the next pause needs ten new wrong codes.
+				RateLimiter::hit( self::LOCK_ACTION, 'account', $subject );
+				RateLimiter::clear( self::CODE_ACTION, 'account', $subject );
+				return self::paused_for( $user->ID );
+			}
+		);
+		// The row and the email belong to the site where the code was typed.
+		if ( $wait > 0 ) {
+			self::account_lock_alert( $user, $wait );
 		}
-		if ( RateLimiter::count( self::CODE_ACTION, 'account', $subject, self::ACCOUNT_WINDOW ) < self::ACCOUNT_CODE_CAP ) {
-			return;
-		}
-		// The pause is one row on its own action, and the next pause needs ten new wrong codes.
-		RateLimiter::hit( self::LOCK_ACTION, 'account', $subject );
-		RateLimiter::clear( self::CODE_ACTION, 'account', $subject );
-		self::account_lock_alert( $user, self::account_wait( $user->ID ) );
 	}
 
 	/**
@@ -1308,6 +1317,20 @@ final class Challenge {
 	 * @return int
 	 */
 	public static function account_wait( $user_id ) {
+		return (int) self::on_account_table(
+			static function () use ( $user_id ) {
+				return self::paused_for( $user_id );
+			}
+		);
+	}
+
+	/**
+	 * account_wait() on the table already chosen by on_account_table().
+	 *
+	 * @param int $user_id User id.
+	 * @return int
+	 */
+	private static function paused_for( $user_id ) {
 		$subject = self::account_subject( $user_id );
 		$pauses  = RateLimiter::count( self::LOCK_ACTION, 'account', $subject, DAY_IN_SECONDS );
 		if ( $pauses < 1 ) {
@@ -1330,8 +1353,38 @@ final class Challenge {
 			return;
 		}
 		$subject = self::account_subject( $user->ID );
-		RateLimiter::clear( self::CODE_ACTION, 'account', $subject );
-		RateLimiter::clear( self::LOCK_ACTION, 'account', $subject );
+		self::on_account_table(
+			static function () use ( $subject ) {
+				RateLimiter::clear( self::CODE_ACTION, 'account', $subject );
+				RateLimiter::clear( self::LOCK_ACTION, 'account', $subject );
+			}
+		);
+	}
+
+	/**
+	 * Runs an account wrong-code read or write on the table that holds it.
+	 * A login is good on every site of a network, so on a network the count
+	 * lives in the main site's attempts table and ten wrong codes are ten
+	 * across all sites. When the main site has no HappyAccess tables, which
+	 * happens when the plugin is active on some sites only, each site keeps
+	 * its own count.
+	 *
+	 * @param callable $callback What to run.
+	 * @return mixed What the callback returns.
+	 */
+	private static function on_account_table( callable $callback ) {
+		if ( ! is_multisite() || is_main_site() ) {
+			return $callback();
+		}
+		switch_to_blog( get_main_site_id() );
+		try {
+			if ( Installer::table_exists( 'attempts' ) ) {
+				return $callback();
+			}
+		} finally {
+			restore_current_blog();
+		}
+		return $callback();
 	}
 
 	/**

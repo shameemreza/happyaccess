@@ -279,6 +279,28 @@ class TempUsersTest extends WP_UnitTestCase {
 		$this->assertSame( $this->owner, (int) get_post( $post_id )->post_author );
 	}
 
+	/**
+	 * A custom pass has no role, only its caps. On a network the caps alone
+	 * must still make the account a member of the site it was made for.
+	 *
+	 * @group ms-required
+	 */
+	public function test_a_custom_temp_user_is_a_member_of_the_current_site() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$other          = self::factory()->blog->create();
+		$grant          = $this->grant();
+		$grant['level'] = 'custom';
+		$grant['caps']  = array( 'edit_posts' );
+		$user_id        = TempUsers::create( $grant );
+
+		$this->assertTrue( is_user_member_of_blog( $user_id, get_current_blog_id() ) );
+		$this->assertFalse( is_user_member_of_blog( $user_id, $other ) );
+		$this->assertSame( array(), get_userdata( $user_id )->roles );
+		$this->assertTrue( user_can( $user_id, 'edit_posts' ) );
+	}
+
 	private function ensure_api_keys_table() {
 		global $wpdb;
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_api_keys ( key_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, description VARCHAR(200) NULL )" );

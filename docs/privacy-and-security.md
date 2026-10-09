@@ -81,7 +81,7 @@ Wrong codes are limited per IP address, per account and across the whole site.
 
 - **Per IP address:** every code screen follows Settings > Wrong codes before a pause. The default is 5 tries, then a 30-minute pause.
 - **Per code:** an email code is cancelled after 5 wrong tries.
-- **Per account, for two-step login:** after 10 wrong codes in an hour, the account takes no codes for an hour. Each pause in the same day lasts twice as long, up to 16 hours, and the person gets an email. Resetting the password ends it.
+- **Per account, for two-step login:** after 10 wrong codes in an hour, the account takes no codes for an hour. Each pause in the same day lasts twice as long, up to 16 hours, and the person gets an email. Resetting the password ends it. On a multisite network the 10 are counted across every site, since one login works on all of them.
 - **Email code requests:** 3 per account every 15 minutes, and 10 per IP address an hour.
 - **Across the site:** after 30 access code tries in an hour, the access code screen pauses for an hour. After 100 wrong email codes in an hour, email code logins pause for an hour. After 100 wrong two-step codes in an hour, HappyAccess only sends a warning, so one account can't pause two-step login for everyone. Each of these emails the site's email address.
 

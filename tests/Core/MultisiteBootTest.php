@@ -86,6 +86,76 @@ class MultisiteBootTest extends WP_UnitTestCase {
 		$this->assertFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
 	}
 
+	public function test_network_activation_migrates_the_main_site_and_leaves_the_rest_to_the_loop() {
+		$site_ids = self::factory()->blog->create_many( 3 );
+		delete_option( 'happyaccess_db_version' );
+
+		Installer::activate( true );
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( 0, $this->migrated( $site_ids ), 'Only the main site is migrated during activation.' );
+		$this->assertNotFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+
+		// Core marks the plugin network active once the activation hook has run.
+		$this->activate_network_wide();
+		$this->run_network_event();
+
+		$this->assertSame( 3, $this->migrated( $site_ids ) );
+		$this->assertSame( Installer::DB_VERSION, get_site_option( Installer::NETWORK_OPTION ) );
+	}
+
+	public function test_network_activation_from_a_subsite_still_migrates_the_main_site() {
+		$site_id = self::factory()->blog->create();
+		delete_option( 'happyaccess_db_version' );
+
+		switch_to_blog( $site_id );
+		Installer::activate( true );
+		restore_current_blog();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( 0, $this->migrated( array( $site_id ) ) );
+		$this->assertNotFalse( wp_next_scheduled( Installer::NETWORK_HOOK ) );
+	}
+
+	public function test_a_new_site_is_left_alone_when_the_plugin_is_not_network_active() {
+		Plugin::init();
+
+		$site_id = self::factory()->blog->create();
+
+		$this->assertSame( 0, $this->migrated( array( $site_id ) ) );
+		switch_to_blog( $site_id );
+		$this->assertFalse( Installer::table_exists( 'tokens' ) );
+		restore_current_blog();
+	}
+
+	public function test_the_network_loop_gives_a_subsite_legacy_temp_user_its_blog_id() {
+		global $wpdb;
+		$site_id = self::factory()->blog->create();
+		$user_id = self::factory()->user->create();
+		add_user_to_blog( $site_id, $user_id, 'administrator' );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+
+		switch_to_blog( $site_id );
+		Installer::install();
+		$wpdb->insert(
+			Installer::table( 'tokens' ),
+			array(
+				'token_hash' => 'legacy-sub',
+				'user_id'    => $user_id,
+				'created_by' => 1,
+				'expires_at' => gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ),
+			)
+		);
+		delete_option( 'happyaccess_db_version' );
+		restore_current_blog();
+		$this->activate_network_wide();
+
+		Installer::network_upgrade();
+
+		$this->assertSame( 1, $this->migrated( array( $site_id ) ) );
+		$this->assertSame( (string) $site_id, get_user_meta( $user_id, 'happyaccess_blog_id', true ) );
+	}
+
 	public function test_the_loop_is_not_scheduled_from_a_subsite_or_without_network_activation() {
 		$site_id = self::factory()->blog->create();
 

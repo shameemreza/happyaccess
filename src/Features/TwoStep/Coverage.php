@@ -7,6 +7,7 @@
 
 namespace HappyAccess\Features\TwoStep;
 
+use HappyAccess\Core\Internal;
 use HappyAccess\Core\Settings;
 use HappyAccess\Rest\Routes;
 
@@ -26,11 +27,28 @@ defined( 'ABSPATH' ) || exit;
  * The answer is kept in a transient for 5 minutes. UserState drops it when
  * someone turns a method on or off, and a settings save or a role change
  * drops it too. New accounts and grace logins wait for the 5 minutes, so a
- * busy store doesn't count again on every sign-up.
+ * busy store doesn't count again on every sign-up. On a network, accounts
+ * and the main site's settings are shared, so dropping it on one site
+ * drops it on every site.
+ *
+ * On a network a super admin counts as an administrator on every site,
+ * member or not, because two-step login treats them as one there
+ * (Enforcement::policy()).
+ *
+ * The answer also says how many people use each method, for the drawing
+ * of the login screen.
  */
 final class Coverage {
 
 	const TRANSIENT = 'happyaccess_twostep_coverage';
+
+	/**
+	 * Network option bumped each time the counts are dropped on a network,
+	 * and the per-site transient that remembers the value the kept counts
+	 * were made with.
+	 */
+	const NETWORK_GEN = 'happyaccess_twostep_coverage_gen';
+	const SEEN_GEN    = 'happyaccess_twostep_coverage_seen';
 
 	const TTL = 300;
 
@@ -153,27 +171,69 @@ final class Coverage {
 	}
 
 	/**
-	 * Drops the kept answer.
+	 * Drops the kept answer, and on a network the kept answer of every site.
 	 *
 	 * @return void
 	 */
 	public static function forget() {
 		delete_transient( self::TRANSIENT );
+		if ( ! is_multisite() ) {
+			return;
+		}
+		$next = self::network_gen() + 1;
+		// A temp user's role change lands here too, and the guards keep happyaccess_ options from them.
+		Internal::run(
+			static function () use ( $next ) {
+				update_site_option( self::NETWORK_GEN, $next );
+			}
+		);
 	}
 
 	/**
 	 * The counts, from the transient when it holds them.
 	 *
-	 * @return array{roles: array, large: bool}
+	 * @return array{roles: array, large: bool, methods: array}
 	 */
 	public static function counts() {
-		$kept = get_transient( self::TRANSIENT );
-		if ( is_array( $kept ) && isset( $kept['roles'] ) ) {
+		$kept = self::kept();
+		if ( null !== $kept ) {
 			return $kept;
 		}
 		$counts = self::compute();
 		set_transient( self::TRANSIENT, $counts, self::TTL );
+		if ( is_multisite() ) {
+			set_transient( self::SEEN_GEN, self::network_gen(), self::TTL );
+		}
 		return $counts;
+	}
+
+	/**
+	 * The kept answer of this site, or null when there is none or, on a
+	 * network, it was dropped from another site since it was made.
+	 *
+	 * @return array|null
+	 */
+	private static function kept() {
+		$kept = get_transient( self::TRANSIENT );
+		if ( ! is_array( $kept ) || ! isset( $kept['roles'] ) || ! is_array( $kept['roles'] ) ) {
+			return null;
+		}
+		if ( is_multisite() ) {
+			$seen = get_transient( self::SEEN_GEN );
+			if ( false !== $seen && self::network_gen() !== (int) $seen ) {
+				return null;
+			}
+		}
+		return $kept;
+	}
+
+	/**
+	 * How many times the counts were dropped on this network.
+	 *
+	 * @return int
+	 */
+	private static function network_gen() {
+		return (int) get_site_option( self::NETWORK_GEN, 0 );
 	}
 
 	/**
@@ -185,8 +245,8 @@ final class Coverage {
 	 * @return array{enabled:int,total:int}|null Null when not counted or the role has no users.
 	 */
 	public static function role_counts( $slug, $count = true ) {
-		$kept = get_transient( self::TRANSIENT );
-		if ( is_array( $kept ) && isset( $kept['roles'] ) && is_array( $kept['roles'] ) ) {
+		$kept = self::kept();
+		if ( null !== $kept ) {
 			foreach ( $kept['roles'] as $row ) {
 				if ( isset( $row['slug'], $row['enabled'], $row['total'] ) && $slug === $row['slug'] ) {
 					return array(
@@ -199,12 +259,13 @@ final class Coverage {
 		if ( ! $count ) {
 			return null;
 		}
-		$total = self::count( $slug );
+		$supers = self::super_admins();
+		$total  = self::total( (string) $slug, $supers );
 		if ( $total < 1 ) {
 			return null;
 		}
 		return array(
-			'enabled' => self::count( $slug, self::enabled_clause() ),
+			'enabled' => self::enabled( (string) $slug, $supers ),
 			'total'   => $total,
 		);
 	}
@@ -228,10 +289,11 @@ final class Coverage {
 		$policy = Settings::shared( 'two_step.role_policy', array() );
 		$policy = is_array( $policy ) ? $policy : array();
 
-		$rows = array();
+		$supers = self::super_admins();
+		$rows   = array();
 		foreach ( wp_roles()->roles as $slug => $role ) {
 			$slug  = (string) $slug;
-			$total = self::count( $slug );
+			$total = self::total( $slug, $supers );
 			if ( $total < 1 ) {
 				continue;
 			}
@@ -246,8 +308,8 @@ final class Coverage {
 
 		foreach ( $rows as $i => $row ) {
 			$required = isset( $policy[ $row['slug'] ] ) && Enforcement::REQUIRED === $policy[ $row['slug'] ];
-			$enabled  = self::count( $row['slug'], self::enabled_clause() );
-			$past     = $required ? self::past_grace( $row['slug'] ) : 0;
+			$enabled  = self::enabled( $row['slug'], $supers );
+			$past     = $required ? self::past_grace( $row['slug'], $supers ) : 0;
 
 			$rows[ $i ] = array(
 				'slug'       => $row['slug'],
@@ -261,9 +323,79 @@ final class Coverage {
 		}
 
 		return array(
-			'roles' => $rows,
-			'large' => self::is_large( self::count( '' ) ),
+			'roles'   => $rows,
+			'large'   => self::is_large( self::count( '' ) ),
+			'methods' => array(
+				'app'   => self::count(
+					'',
+					array(
+						'key'     => UserState::META_TOTP,
+						'compare' => 'EXISTS',
+					)
+				),
+				'email' => self::count(
+					'',
+					array(
+						'key'     => UserState::META_STATE,
+						'value'   => self::EMAIL_ON,
+						'compare' => 'LIKE',
+					)
+				),
+			),
 		);
+	}
+
+	/**
+	 * On a network, the super admins, temp users left out. Empty on a
+	 * single site.
+	 *
+	 * @return int[]
+	 */
+	private static function super_admins() {
+		if ( ! is_multisite() ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( get_super_admins() as $login ) {
+			$user = get_user_by( 'login', $login );
+			if ( $user instanceof \WP_User && '' === (string) get_user_meta( $user->ID, 'happyaccess_temp_user', true ) ) {
+				$ids[] = (int) $user->ID;
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * Users in a role. Super admins count as administrators only, wherever
+	 * they are members and whatever role they hold here.
+	 *
+	 * @param string $role   Role slug.
+	 * @param int[]  $supers Super admin ids.
+	 * @return int
+	 */
+	private static function total( $role, array $supers ) {
+		$total = self::count( $role, array(), $supers );
+		return 'administrator' === $role ? $total + count( $supers ) : $total;
+	}
+
+	/**
+	 * Users in a role with the app or email codes on, super admins counted
+	 * the way total() counts them.
+	 *
+	 * @param string $role   Role slug.
+	 * @param int[]  $supers Super admin ids.
+	 * @return int
+	 */
+	private static function enabled( $role, array $supers ) {
+		$enabled = self::count( $role, self::enabled_clause(), $supers );
+		if ( 'administrator' === $role ) {
+			foreach ( $supers as $id ) {
+				if ( UserState::app_configured( $id ) || UserState::email_enabled( $id ) ) {
+					++$enabled;
+				}
+			}
+		}
+		return $enabled;
 	}
 
 	/**
@@ -283,11 +415,12 @@ final class Coverage {
 	/**
 	 * Users of this site in a role, temp users left out.
 	 *
-	 * @param string $role   Role slug, or empty for every user of the site.
-	 * @param array  $clause An extra meta query clause.
+	 * @param string $role    Role slug, or empty for every user of the site.
+	 * @param array  $clause  An extra meta query clause.
+	 * @param int[]  $exclude User ids to leave out.
 	 * @return int
 	 */
-	private static function count( $role, array $clause = array() ) {
+	private static function count( $role, array $clause = array(), array $exclude = array() ) {
 		$args = array(
 			'number'        => 1,
 			'fields'        => 'ID',
@@ -300,6 +433,9 @@ final class Coverage {
 		if ( '' !== $role ) {
 			$args['role'] = $role;
 		}
+		if ( $exclude ) {
+			$args['exclude'] = $exclude;
+		}
 		return (int) ( new \WP_User_Query( $args ) )->get_total();
 	}
 
@@ -309,10 +445,13 @@ final class Coverage {
 	 * a batch at a time after the last id read, and each one is checked the
 	 * way the login does.
 	 *
-	 * @param string $role Role slug.
+	 * Super admins count under administrator only, each checked the same way.
+	 *
+	 * @param string $role   Role slug.
+	 * @param int[]  $supers Super admin ids.
 	 * @return int
 	 */
-	private static function past_grace( $role ) {
+	private static function past_grace( $role, array $supers = array() ) {
 		$clause = array(
 			'relation' => 'AND',
 			array(
@@ -345,6 +484,7 @@ final class Coverage {
 						'fields'        => 'ID',
 						'count_total'   => false,
 						'cache_results' => false,
+						'exclude'       => $supers,
 						self::AFTER_ID  => $after,
 						// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Only users whose grace started, then kept for 5 minutes.
 						'meta_query'    => self::meta_query( $clause ),
@@ -368,6 +508,14 @@ final class Coverage {
 			} while ( self::BATCH === $read );
 		} finally {
 			remove_action( 'pre_user_query', array( __CLASS__, 'after_id' ) );
+		}
+
+		if ( 'administrator' === $role ) {
+			foreach ( $supers as $id ) {
+				if ( ! UserState::app_configured( $id ) && ! UserState::email_enabled( $id ) && UserState::grace_started_at( $id ) > 0 && ! Enforcement::in_grace( $id ) ) {
+					++$past;
+				}
+			}
 		}
 
 		return $past;
