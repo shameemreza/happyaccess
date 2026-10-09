@@ -52,6 +52,10 @@ const rateLink = () =>
 	screen.queryByRole( 'link', {
 		name: 'Rate it on WordPress.org (opens in a new tab)',
 	} );
+const docsLink = () =>
+	screen.getByRole( 'link', { name: 'Docs (opens in a new tab)' } );
+const supportLink = () =>
+	screen.getByRole( 'link', { name: 'Support (opens in a new tab)' } );
 const tellLink = () =>
 	screen.queryByRole( 'link', {
 		name: 'Something missing? Tell me (opens in a new tab)',
@@ -73,7 +77,7 @@ describe( 'AuthorCard', () => {
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
-	it( 'starts early with the credit, the photo and a Docs link, and no ask', async () => {
+	it( 'starts early with the photo, and Docs and Support on the role line, and no ask', async () => {
 		const { container } = setup( 'early' );
 
 		expect( container ).toHaveTextContent( 'Shameem Reza' );
@@ -86,9 +90,23 @@ describe( 'AuthorCard', () => {
 			'src',
 			PHOTO
 		);
+		expect( docsLink() ).toHaveAttribute( 'href', DOCS_URL );
+		expect( docsLink() ).toHaveAttribute( 'target', '_blank' );
+		expect( docsLink() ).toHaveAttribute( 'rel', 'noopener noreferrer' );
+		expect( supportLink() ).toHaveAttribute( 'href', SUPPORT_URL );
+		expect( supportLink() ).toHaveAttribute( 'target', '_blank' );
+		expect( supportLink() ).toHaveAttribute( 'rel', 'noopener noreferrer' );
+
+		// One role line holds the credit and both links, with decorative
+		// separators, and no link sits on a row of its own.
+		const role = container.querySelector( '.ha-author__role' );
+		expect( role ).toContainElement( docsLink() );
+		expect( role ).toContainElement( supportLink() );
+		expect( role ).toHaveTextContent( /^Built HappyAccess\s*·\s*Docs/ );
 		expect(
-			screen.getByRole( 'link', { name: 'Docs (opens in a new tab)' } )
-		).toHaveAttribute( 'href', DOCS_URL );
+			role.querySelectorAll( 'span[aria-hidden="true"]' )
+		).toHaveLength( 2 );
+		expect( container.querySelector( '.ha-author__docs' ) ).toBeNull();
 		expect( rateLink() ).toBeNull();
 		expect( tellLink() ).toBeNull();
 		expect( hideButton() ).toBeNull();
@@ -112,6 +130,8 @@ describe( 'AuthorCard', () => {
 		expect( hideButton() ).toBeInTheDocument();
 		expect( authorLink() ).toHaveAttribute( 'href', AUTHOR_URL );
 		expect( container ).toHaveTextContent( 'Built HappyAccess' );
+		expect( docsLink() ).toHaveAttribute( 'href', DOCS_URL );
+		expect( supportLink() ).toHaveAttribute( 'href', SUPPORT_URL );
 		// The close button sits outside the name row, so it never crowds it.
 		expect(
 			container.querySelector( '.ha-author__top .ha-author__hide' )

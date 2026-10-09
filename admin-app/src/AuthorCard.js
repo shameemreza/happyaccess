@@ -167,9 +167,27 @@ export default function AuthorCard() {
 						{ __( 'Shameem Reza', 'happyaccess' ) }
 						<NewTabNote />
 					</a>
-					<span className="ha-author__role">
+					<div className="ha-author__role">
 						{ __( 'Built HappyAccess', 'happyaccess' ) }
-					</span>
+						<span aria-hidden="true"> · </span>
+						<a
+							href={ DOCS_URL }
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{ __( 'Docs', 'happyaccess' ) }
+							<NewTabNote />
+						</a>
+						<span aria-hidden="true"> · </span>
+						<a
+							href={ SUPPORT_URL }
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{ __( 'Support', 'happyaccess' ) }
+							<NewTabNote />
+						</a>
+					</div>
 				</div>
 			</div>
 			{ 'ask' === view && (
@@ -181,17 +199,6 @@ export default function AuthorCard() {
 					label={ __( 'Hide this', 'happyaccess' ) }
 					onClick={ () => choose( 'dismissed', 'credit' ) }
 				/>
-			) }
-			{ 'early' === view && (
-				<a
-					className="ha-author__docs"
-					href={ DOCS_URL }
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					{ __( 'Docs', 'happyaccess' ) }
-					<NewTabNote />
-				</a>
 			) }
 			{ 'ask' === view && (
 				<>

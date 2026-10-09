@@ -102,7 +102,7 @@
 
 	.ha-author {
 		position: relative;
-		padding: 16px 20px 20px;
+		padding: 12px 14px;
 		border: 1px solid var(--ha-line);
 		border-radius: 8px;
 		background: #fff;
@@ -114,9 +114,9 @@
 		gap: 12px;
 	}
 
-	// Room for the close button, so the name never runs under it.
+	// Room for the close button, so the text never runs under it.
 	.ha-author--ask .ha-author__top {
-		padding-inline-end: 28px;
+		padding-inline-end: 24px;
 	}
 
 	.ha-author__photo {
@@ -127,6 +127,7 @@
 		object-fit: cover;
 	}
 
+	// Two lines, centered against the photo: the name, then the role line.
 	.ha-author__who {
 		display: flex;
 		flex-direction: column;
@@ -135,7 +136,7 @@
 	}
 
 	.ha-author__name {
-		font-size: 13px;
+		align-self: flex-start;
 		font-weight: 600;
 	}
 
@@ -144,27 +145,30 @@
 		font-size: 12px;
 	}
 
+	.ha-author__role a {
+		color: var(--ha-muted);
+		text-decoration: underline;
+		white-space: nowrap;
+	}
+
+	.ha-author__role a:hover,
+	.ha-author__role a:focus {
+		color: var(--ha-text);
+	}
+
 	.ha-author-credit a {
 		font-weight: 500;
 	}
 
 	.ha-author__hide.components-button {
 		position: absolute;
-		inset-block-start: 8px;
-		inset-inline-end: 8px;
+		inset-block-start: 6px;
+		inset-inline-end: 6px;
 		color: var(--ha-muted);
 	}
 
-	.ha-author__docs {
-		display: inline-flex;
-		align-items: center;
-		min-height: 24px;
-		margin-block-start: 4px;
-		margin-inline-start: 52px;
-	}
-
 	.ha-author__line {
-		margin: 12px 0 0;
+		margin: 10px 0 0;
 		color: var(--ha-text);
 	}
 
@@ -181,7 +185,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-		margin-block-start: 12px;
+		margin-block-start: 10px;
 	}
 
 	.ha-author-credit {
@@ -210,7 +214,6 @@
 	@media (pointer: coarse) {
 
 		.ha-header__help,
-		.ha-author__docs,
 		.ha-disclosure,
 		.ha-row__link,
 		.ha-active__foot a,
