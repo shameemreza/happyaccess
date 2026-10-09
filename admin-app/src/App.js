@@ -68,6 +68,33 @@ function RefreshOnLock( { count } ) {
 }
 
 /**
+ * The author card's provider, fed with the pass list the app already
+ * keeps, so its lines about passes need no request of their own.
+ *
+ * @param {Object}  props          Props.
+ * @param {Object}  props.card     authorCard from the boot data.
+ * @param {Object}  props.features The feature switches as they are now.
+ * @param {Element} props.children The app.
+ * @return {Element} The provider.
+ */
+function AuthorCardWithPasses( { card, features, children } ) {
+	const { grants, loading } = useGrants();
+	const passes = useMemo(
+		() => ( { items: grants, loading } ),
+		[ grants, loading ]
+	);
+	return (
+		<AuthorCardProvider
+			card={ card }
+			features={ features }
+			passes={ passes }
+		>
+			{ children }
+		</AuthorCardProvider>
+	);
+}
+
+/**
  * The app shell: header, then either the setup screen or the tabs.
  *
  * @param {Object}  props            Props.
@@ -166,8 +193,11 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 
 	return (
 		<AnnounceProvider>
-			<AuthorCardProvider card={ boot.authorCard }>
-				<DataProvider enabled={ ! needsSetup }>
+			<DataProvider enabled={ ! needsSetup }>
+				<AuthorCardWithPasses
+					card={ boot.authorCard }
+					features={ features }
+				>
 					<RefreshOnLock count={ lockCount } />
 					<Header onLocked={ onLocked } />
 					{ needsSetup ? (
@@ -225,8 +255,8 @@ export default function App( { boot = DEFAULT_BOOT, loginReady: readyProp } ) {
 							) }
 						</>
 					) }
-				</DataProvider>
-			</AuthorCardProvider>
+				</AuthorCardWithPasses>
+			</DataProvider>
 		</AnnounceProvider>
 	);
 }

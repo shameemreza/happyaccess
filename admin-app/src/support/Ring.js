@@ -58,15 +58,13 @@ const minutes = ( n ) =>
 	);
 
 /**
- * The spoken form: "Ends in 2 days 4 hours".
+ * A length of time in words: "2 days 4 hours", or "2 days" with one unit.
  *
- * @param {number} seconds Seconds left.
- * @return {string} Sentence for screen readers and tooltips.
+ * @param {number} seconds Seconds, more than 0.
+ * @param {number} units   How many units to name, largest first.
+ * @return {string} The length in words.
  */
-export function longLeft( seconds ) {
-	if ( seconds <= 0 ) {
-		return __( 'Ending now', 'happyaccess' );
-	}
+export function durationWords( seconds, units = 2 ) {
 	const d = Math.floor( seconds / DAY );
 	const h = Math.floor( ( seconds % DAY ) / HOUR );
 	const m = Math.max( 1, Math.floor( ( seconds % HOUR ) / 60 ) );
@@ -79,8 +77,24 @@ export function longLeft( seconds ) {
 	} else {
 		parts = [ minutes( m ) ];
 	}
-	/* translators: %s: time left, like 2 days 4 hours. */
-	return sprintf( __( 'Ends in %s', 'happyaccess' ), parts.join( ' ' ) );
+	return parts.slice( 0, Math.max( 1, units ) ).join( ' ' );
+}
+
+/**
+ * The spoken form: "Ends in 2 days 4 hours".
+ *
+ * @param {number} seconds Seconds left.
+ * @return {string} Sentence for screen readers and tooltips.
+ */
+export function longLeft( seconds ) {
+	if ( seconds <= 0 ) {
+		return __( 'Ending now', 'happyaccess' );
+	}
+	return sprintf(
+		/* translators: %s: time left, like 2 days 4 hours. */
+		__( 'Ends in %s', 'happyaccess' ),
+		durationWords( seconds )
+	);
 }
 
 /**

@@ -1,19 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import AuthorCard, {
 	AuthorCardProvider,
 	AUTHOR_URL,
+	LAST_TIP_KEY,
 	RATE_URL,
 	SUPPORT_URL,
 } from './AuthorCard';
+import { TIP_BUCKET, tipLines } from './authorTips';
 
 vi.mock( '@wordpress/api-fetch' );
 
 const PHOTO =
 	'https://example.test/wp-content/plugins/happyaccess/assets/author.jpg';
+
+// The start of a three-hour slot, so a test knows which line shows.
+const NOW = 1800000000 - ( 1800000000 % TIP_BUCKET );
+const SLOT = NOW / TIP_BUCKET;
+
+const ALL_ON = { support_access: true, passwordless: true, two_step: true };
 
 // A link with target="_blank" would ask jsdom to open a window. The app's own
 // click handlers still run.
@@ -23,137 +31,197 @@ const stopNavigation = ( event ) => {
 	}
 };
 
+let clock;
+
 beforeEach( () => {
 	apiFetch.mockReset();
-	apiFetch.mockResolvedValue( { state: 'credit' } );
+	apiFetch.mockResolvedValue( { state: 'tips' } );
 	document.addEventListener( 'click', stopNavigation );
+	clock = vi.spyOn( Date, 'now' ).mockReturnValue( NOW * 1000 );
+	window.localStorage.clear();
 } );
 
 afterEach( () => {
 	document.removeEventListener( 'click', stopNavigation );
+	clock.mockRestore();
 } );
 
-function setup( state ) {
-	const user = userEvent.setup();
-	const view = render(
-		<AuthorCardProvider card={ { state, photo: PHOTO } }>
+/**
+ * The user id that shows the line at `index` in the current slot.
+ *
+ * @param {number} index Line index.
+ * @param {number} count How many lines there are.
+ * @return {number} User id.
+ */
+const userFor = ( index, count ) =>
+	( ( ( index - SLOT ) % count ) + count ) % count;
+
+function Card( { state, user = 1, facts = {}, features = ALL_ON, passes } ) {
+	return (
+		<AuthorCardProvider
+			card={ { state, photo: PHOTO, user, facts } }
+			features={ features }
+			passes={ passes }
+		>
 			<AuthorCard />
 		</AuthorCardProvider>
 	);
+}
+
+function setup( state, props = {} ) {
+	const user = userEvent.setup();
+	const view = render( <Card state={ state } { ...props } /> );
 	return { user, ...view };
 }
 
-const authorLink = () =>
-	screen.getByRole( 'link', {
-		name: 'Shameem Reza (opens in a new tab)',
-	} );
-const rateLink = () =>
-	screen.queryByRole( 'link', {
-		name: 'Rate it on WordPress.org (opens in a new tab)',
-	} );
-const NOTE =
-	'I kept seeing admin passwords sent by email, and accounts nobody deleted. HappyAccess is my fix for that.';
-const forumLink = () =>
-	screen.queryByRole( 'link', {
-		name: 'Questions? Ask in the forum (opens in a new tab)',
-	} );
-const docsLink = () => screen.queryByRole( 'link', { name: /Docs/ } );
-const tellLink = () =>
-	screen.queryByRole( 'link', {
-		name: 'Something missing? Tell me (opens in a new tab)',
-	} );
-const hideButton = () => screen.queryByRole( 'button', { name: 'Hide this' } );
+const link = ( name ) =>
+	screen.queryByRole( 'link', { name: `${ name } (opens in a new tab)` } );
+const helloLink = () => link( 'Say hello' );
+const forumLink = () => link( 'Questions? Ask in the forum' );
+const rateLink = () => link( 'Rate it on WordPress.org' );
+const tellLink = () => link( 'Something missing? Tell me' );
+const hideButton = () => screen.queryByRole( 'button', { name: 'Hide tips' } );
+const laterButton = () => screen.queryByRole( 'button', { name: 'Not now' } );
+const body = ( container ) => container.querySelector( '.ha-author__body' );
+
+const INTRO =
+	'I kept seeing admin passwords sent by email, and accounts nobody deleted. So I built HappyAccess: access that ends on its own, and logins that skip the password.';
+const ASK =
+	'If it saved you from sending a password, a rating on WordPress.org helps the next site owner find it. It takes a minute.';
+const THANKS =
+	'Ratings are how other site owners find HappyAccess. Yours just made that a little easier.';
+
+function expectHelloLinks() {
+	expect( helloLink() ).toHaveAttribute( 'href', AUTHOR_URL );
+	expect( forumLink() ).toHaveAttribute( 'href', SUPPORT_URL );
+	for ( const item of [ helloLink(), forumLink() ] ) {
+		expect( item ).toHaveAttribute( 'target', '_blank' );
+		expect( item ).toHaveAttribute( 'rel', 'noopener noreferrer' );
+		expect( item ).toHaveClass( 'ha-author__link' );
+		expect( item ).toHaveTextContent( /↗/ );
+	}
+}
+
+function expectPhoto( container ) {
+	const photo = container.querySelector( '.ha-author__photo' );
+	expect( photo ).toHaveAttribute( 'src', PHOTO );
+	expect( photo ).toHaveAttribute( 'alt', '' );
+	expect( photo ).toHaveAttribute( 'width', '76' );
+	expect(
+		container.querySelectorAll( '.ha-author__curve[aria-hidden="true"]' )
+	).toHaveLength( 2 );
+}
+
+function expectNoTimerOrCounter( container ) {
+	expect( container ).not.toHaveTextContent( /Next tip/ );
+	expect( container ).not.toHaveTextContent( /Tip \d+ of \d+/ );
+	expect( container.querySelector( '[aria-live]' ) ).toBeNull();
+	expect( screen.queryByRole( 'button', { name: /tip/i } ) ).toBe(
+		hideButton()
+	);
+}
 
 describe( 'AuthorCard', () => {
-	it( 'shows nothing without boot data or outside the provider', () => {
+	it( 'shows nothing without boot data, outside the provider, or once hidden', () => {
 		const { container, unmount } = render( <AuthorCard /> );
 		expect( container ).toBeEmptyDOMElement();
 		unmount();
 
-		const view = render(
+		const empty = render(
 			<AuthorCardProvider>
 				<AuthorCard />
 			</AuthorCardProvider>
 		);
-		expect( view.container ).toBeEmptyDOMElement();
+		expect( empty.container ).toBeEmptyDOMElement();
+		empty.unmount();
+
+		const hidden = render( <Card state="none" /> );
+		expect( hidden.container ).toBeEmptyDOMElement();
 		expect( apiFetch ).not.toHaveBeenCalled();
 	} );
 
-	it( 'starts early as a note from the maker, signed, with the forum link and no ask', async () => {
-		const { container } = setup( 'early' );
+	it( 'says hello in the intro, with the rotating line in a white tip box and no button in it', async () => {
+		const { container } = setup( 'intro', { features: {}, user: 0 } );
 
-		const note = container.querySelector( '.ha-author__note' );
-		expect( note ).toHaveTextContent( NOTE );
-		const quote = note.querySelector( 'svg' );
-		expect( quote ).toHaveAttribute( 'aria-hidden', 'true' );
-		expect( quote ).toHaveAttribute( 'focusable', 'false' );
-
-		// The signature row comes after the note: photo, name, role, forum.
-		const sign = container.querySelector( '.ha-author__sign' );
 		expect(
-			Array.from( container.querySelector( '.ha-author' ).children )
-		).toEqual( [ note, sign ] );
-		const photo = sign.querySelector( 'img' );
-		expect( photo ).toHaveAttribute( 'src', PHOTO );
-		expect( photo ).toHaveAttribute( 'alt', '' );
-		expect( photo ).toHaveAttribute( 'width', '28' );
-		expect( sign ).toContainElement( authorLink() );
-		expect( authorLink() ).toHaveAttribute( 'href', AUTHOR_URL );
-		expect( authorLink() ).toHaveAttribute( 'target', '_blank' );
-		expect( authorLink() ).toHaveAttribute( 'rel', 'noopener noreferrer' );
-		expect( sign ).toHaveTextContent(
-			/^Shameem Reza \(opens in a new tab\)\s*·\s*built HappyAccess/
+			screen.getByRole( 'heading', { name: "Hi, I'm Shameem." } )
+		).toBeInTheDocument();
+		expect( container ).toHaveTextContent( INTRO );
+		const tipBox = await waitFor( () => {
+			const found = container.querySelector( '.ha-author__tip' );
+			expect( found ).not.toBeNull();
+			return found;
+		} );
+		const lines = tipLines( { now: NOW } );
+		expect( tipBox ).toHaveTextContent( lines[ SLOT % lines.length ].text );
+		expect( tipBox.querySelector( 'svg' ) ).toHaveAttribute(
+			'aria-hidden',
+			'true'
 		);
-		expect(
-			sign.querySelectorAll( 'span[aria-hidden="true"]' )
-		).toHaveLength( 1 );
-		expect( sign ).toContainElement( forumLink() );
-		expect( forumLink() ).toHaveAttribute( 'href', SUPPORT_URL );
-		expect( forumLink() ).toHaveAttribute( 'target', '_blank' );
-		expect( forumLink() ).toHaveAttribute( 'rel', 'noopener noreferrer' );
-
-		expect( docsLink() ).toBeNull();
-		expect( container ).not.toHaveTextContent( 'Docs' );
-		expect( container ).not.toHaveTextContent( 'Built by' );
-		expect( rateLink() ).toBeNull();
-		expect( tellLink() ).toBeNull();
+		expect( tipBox.querySelector( 'button' ) ).toBeNull();
+		expect( tipBox.parentElement ).toHaveClass( 'ha-author__foot' );
+		expectHelloLinks();
+		expectPhoto( container );
 		expect( hideButton() ).toBeNull();
-		expect( container ).not.toHaveTextContent(
-			'Is HappyAccess helping you?'
-		);
-		expect( apiFetch ).not.toHaveBeenCalled();
+		expect( rateLink() ).toBeNull();
+		expectNoTimerOrCounter( container );
+		expect( container ).not.toHaveTextContent( /["“”]/ );
 		expect( await axe( container ) ).toHaveNoViolations();
 	} );
 
-	it( 'puts the rating ask where the note was, keeps the signature, and drops the forum link', async () => {
+	it( 'shows the line as the body in tips, with Hide tips and the two links, and no heading', async () => {
+		const facts = { admins: 4 };
+		const count = tipLines( { features: ALL_ON, facts, now: NOW } ).length;
+		const { container } = setup( 'tips', {
+			facts,
+			user: userFor( 0, count ),
+		} );
+
+		await waitFor( () =>
+			expect( body( container ) ).toHaveTextContent(
+				'This site has 4 administrator accounts. Remove the ones nobody uses.'
+			)
+		);
+		expect( screen.queryByRole( 'heading' ) ).toBeNull();
+		expect( hideButton() ).toBeInTheDocument();
+		expect( container.querySelector( '.ha-author__tip' ) ).toBeNull();
+		expectHelloLinks();
+		expectPhoto( container );
+		expectNoTimerOrCounter( container );
+		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+
+	it( 'asks for a rating with one button to the review form, stars for the eye only', async () => {
 		const { container } = setup( 'ask' );
 
-		expect( container ).toHaveTextContent(
-			'Is HappyAccess helping you? A quick rating helps others find it.'
-		);
-		expect( container ).not.toHaveTextContent( NOTE );
-		expect( container.querySelector( '.ha-author__note' ) ).toBeNull();
+		expect(
+			screen.getByRole( 'heading', {
+				name: 'Has HappyAccess earned a few stars?',
+			} )
+		).toBeInTheDocument();
+		expect( container ).toHaveTextContent( ASK );
 		expect( rateLink() ).toHaveAttribute( 'href', RATE_URL );
 		expect( rateLink() ).toHaveAttribute( 'target', '_blank' );
+		expect( rateLink() ).toHaveAttribute( 'rel', 'noopener noreferrer' );
+		const stars = rateLink().querySelector( '.ha-author__stars' );
+		expect( stars ).toHaveAttribute( 'aria-hidden', 'true' );
+		expect( stars.textContent ).toBe( '★★★★★' );
+		expect( rateLink() ).toHaveTextContent(
+			'★★★★★Rate it on WordPress.org↗'
+		);
+		// One link to the reviews, never one per star, and none to the forum
+		// in its place.
+		const toReviews = screen
+			.getAllByRole( 'link' )
+			.filter( ( item ) => item.href.includes( '/reviews/' ) );
+		expect( toReviews ).toEqual( [ rateLink() ] );
 		expect( tellLink() ).toHaveAttribute( 'href', SUPPORT_URL );
-		expect( tellLink() ).toHaveAttribute( 'target', '_blank' );
-		expect( hideButton() ).toBeInTheDocument();
-		expect( authorLink() ).toHaveAttribute( 'href', AUTHOR_URL );
-		expect(
-			container.querySelector( '.ha-author__sign' )
-		).toHaveTextContent( 'built HappyAccess' );
+		expect( laterButton() ).toBeInTheDocument();
+		expect( hideButton() ).toBeNull();
+		expect( helloLink() ).toBeNull();
 		expect( forumLink() ).toBeNull();
-		expect( docsLink() ).toBeNull();
-		// The rating line comes first, the signature row last.
-		const card = container.querySelector( '.ha-author' );
-		expect(
-			Array.from( card.children ).map( ( child ) => child.className )
-		).toEqual( [
-			expect.stringContaining( 'ha-author__hide' ),
-			'ha-author__line',
-			'ha-author__actions',
-			'ha-author__sign',
-		] );
+		expectPhoto( container );
+		expect( apiFetch ).not.toHaveBeenCalled();
 		expect( await axe( container ) ).toHaveNoViolations();
 	} );
 
@@ -169,27 +237,7 @@ describe( 'AuthorCard', () => {
 		);
 	} );
 
-	it( 'hides on dismiss, saves it and moves focus to the small credit', async () => {
-		const { user, container } = setup( 'ask' );
-
-		await user.click( hideButton() );
-
-		expect( apiFetch ).toHaveBeenCalledWith(
-			expect.objectContaining( {
-				path: '/happyaccess/v1/author-card',
-				method: 'POST',
-				data: { choice: 'dismissed' },
-			} )
-		);
-		expect( rateLink() ).toBeNull();
-		expect( hideButton() ).toBeNull();
-		expect( container.querySelector( 'img' ) ).toBeNull();
-		expect( container ).toHaveTextContent( 'Built by Shameem Reza' );
-		await waitFor( () => expect( authorLink() ).toHaveFocus() );
-		expect( await axe( container ) ).toHaveNoViolations();
-	} );
-
-	it( 'thanks the user after a rate click and saves it', async () => {
+	it( 'thanks the user after the rating click, with the heart on the photo', async () => {
 		const { user, container } = setup( 'ask' );
 
 		await user.click( rateLink() );
@@ -201,16 +249,34 @@ describe( 'AuthorCard', () => {
 				data: { choice: 'rated' },
 			} )
 		);
-		const thanks = screen.getByText( 'Thank you! That really helps.' );
-		expect( thanks ).toBeInTheDocument();
-		await waitFor( () => expect( thanks ).toHaveFocus() );
+		const title = screen.getByRole( 'heading', {
+			name: 'Thank you. Really.',
+		} );
+		await waitFor( () => expect( title ).toHaveFocus() );
+		expect( container ).toHaveTextContent( THANKS );
+		expect(
+			container.querySelector( '.ha-author__badge' )
+		).toHaveAttribute( 'aria-hidden', 'true' );
+		expectHelloLinks();
 		expect( rateLink() ).toBeNull();
-		expect( tellLink() ).toBeNull();
-		expect( authorLink() ).toBeInTheDocument();
-		expect( container ).toHaveTextContent( 'built HappyAccess' );
-		expect( container ).not.toHaveTextContent( NOTE );
-		expect( forumLink() ).toBeNull();
+		expect( laterButton() ).toBeNull();
 		expect( await axe( container ) ).toHaveNoViolations();
+	} );
+
+	it( 'moves to tips after Not now, saves later, and focuses the line', async () => {
+		const { user, container } = setup( 'ask' );
+
+		await user.click( laterButton() );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( { data: { choice: 'later' } } )
+		);
+		await waitFor( () => expect( body( container ) ).toHaveFocus() );
+		expect( container.querySelector( '.ha-author' ) ).toHaveClass(
+			'ha-author--tips'
+		);
+		expect( rateLink() ).toBeNull();
+		expect( hideButton() ).toBeInTheDocument();
 	} );
 
 	it( 'keeps the ask after a click on Tell me, and saves nothing', async () => {
@@ -222,57 +288,185 @@ describe( 'AuthorCard', () => {
 		expect( rateLink() ).toBeInTheDocument();
 	} );
 
+	it( 'hides the card for good with Hide tips, and leaves no credit line', async () => {
+		const { user, container } = setup( 'tips' );
+		await waitFor( () => expect( hideButton() ).toBeInTheDocument() );
+
+		await user.click( hideButton() );
+
+		expect( apiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/happyaccess/v1/author-card',
+				method: 'POST',
+				data: { choice: 'hidden' },
+			} )
+		);
+		expect( container ).toBeEmptyDOMElement();
+		expect( container ).not.toHaveTextContent( 'Built by' );
+	} );
+
 	it( 'stays hidden when the save fails', async () => {
 		apiFetch.mockRejectedValue( { code: 'fetch_error' } );
-		const { user } = setup( 'ask' );
+		const { user, container } = setup( 'tips' );
+		await waitFor( () => expect( hideButton() ).toBeInTheDocument() );
 
 		await user.click( hideButton() );
 
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalled() );
-		expect( rateLink() ).toBeNull();
-		expect( authorLink() ).toBeInTheDocument();
+		expect( container ).toBeEmptyDOMElement();
 	} );
 
-	it( 'shows only the small credit line once a choice was made', async () => {
+	it( 'reads an unknown state as tips', async () => {
 		const { container } = setup( 'credit' );
 
-		expect( container ).toHaveTextContent( 'Built by Shameem Reza' );
-		expect( authorLink() ).toHaveAttribute( 'href', AUTHOR_URL );
-		expect( container.querySelector( 'img' ) ).toBeNull();
-		expect( rateLink() ).toBeNull();
-		expect( hideButton() ).toBeNull();
-		expect(
-			screen.queryByRole( 'link', { name: /Docs/ } )
-		).not.toBeInTheDocument();
-		expect( await axe( container ) ).toHaveNoViolations();
+		await waitFor( () => expect( body( container ) ).not.toBeNull() );
+		expect( container ).not.toHaveTextContent( 'Built by' );
 	} );
 
-	it( 'shares one state, so a card placed later shows the choice', async () => {
+	it( 'shares one state and one line, so a card placed later shows both', async () => {
 		const user = userEvent.setup();
 		function Tabs( { second } ) {
 			return (
-				<AuthorCardProvider card={ { state: 'ask', photo: PHOTO } }>
-					{ second ? (
-						<div data-testid="second">
-							<AuthorCard />
-						</div>
-					) : (
-						<div data-testid="first">
-							<AuthorCard />
-						</div>
-					) }
+				<AuthorCardProvider
+					card={ { state: 'ask', photo: PHOTO, user: 2, facts: {} } }
+					features={ ALL_ON }
+				>
+					<div data-testid={ second ? 'second' : 'first' }>
+						<AuthorCard key={ second ? 'b' : 'a' } />
+					</div>
 				</AuthorCardProvider>
 			);
 		}
-		const { rerender } = render( <Tabs second={ false } /> );
+		const { rerender, container } = render( <Tabs second={ false } /> );
 
-		await user.click( hideButton() );
+		await user.click( laterButton() );
+		const line = await waitFor( () => {
+			expect( body( container ) ).not.toBeNull();
+			return body( container ).textContent;
+		} );
 		rerender( <Tabs second /> );
 
-		expect( screen.getByTestId( 'second' ) ).toHaveTextContent(
-			'Built by Shameem Reza'
-		);
+		expect( screen.getByTestId( 'second' ) ).toHaveTextContent( line );
 		expect( rateLink() ).toBeNull();
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'AuthorCard rotation', () => {
+	it( 'shows the same line all through a three-hour slot and moves on in the next', async () => {
+		const first = render( <Card state="tips" user={ 3 } /> );
+		await waitFor( () => expect( body( first.container ) ).not.toBeNull() );
+		const line = body( first.container ).textContent;
+		first.unmount();
+
+		clock.mockReturnValue( ( NOW + TIP_BUCKET - 1 ) * 1000 );
+		const later = render( <Card state="tips" user={ 3 } /> );
+		await waitFor( () => expect( body( later.container ) ).not.toBeNull() );
+		expect( body( later.container ) ).toHaveTextContent( line );
+		later.unmount();
+
+		clock.mockReturnValue( ( NOW + TIP_BUCKET ) * 1000 );
+		const next = render( <Card state="tips" user={ 3 } /> );
+		await waitFor( () => expect( body( next.container ) ).not.toBeNull() );
+		expect( body( next.container ).textContent ).not.toBe( line );
+	} );
+
+	it( 'gives two users a different line in the same slot', async () => {
+		const one = render( <Card state="tips" user={ 1 } /> );
+		await waitFor( () => expect( body( one.container ) ).not.toBeNull() );
+		const line = body( one.container ).textContent;
+		one.unmount();
+
+		const two = render( <Card state="tips" user={ 2 } /> );
+		await waitFor( () => expect( body( two.container ) ).not.toBeNull() );
+		expect( body( two.container ).textContent ).not.toBe( line );
+	} );
+
+	it( 'never changes the line while the page is open, even as the passes refresh', async () => {
+		const passes = ( items ) => ( { items, loading: false } );
+		const pass = {
+			id: 1,
+			status: 'active',
+			expires_at: NOW + 3600,
+			last_login_at: 0,
+		};
+		const count = tipLines( {
+			features: ALL_ON,
+			passes: [ pass ],
+			now: NOW,
+		} ).length;
+		const user = userFor( 0, count );
+		const { container, rerender } = render(
+			<Card state="tips" user={ user } passes={ passes( [ pass ] ) } />
+		);
+		await waitFor( () =>
+			expect( body( container ) ).toHaveTextContent(
+				'1 support pass is on right now. It ends in 1 hour.'
+			)
+		);
+
+		// A minute later the list loads again with a second pass. The line
+		// keeps its first numbers.
+		clock.mockReturnValue( ( NOW + 60 ) * 1000 );
+		rerender(
+			<Card
+				state="tips"
+				user={ user }
+				passes={ passes( [ pass, { ...pass, id: 2 } ] ) }
+			/>
+		);
+		expect( body( container ) ).toHaveTextContent(
+			'1 support pass is on right now. It ends in 1 hour.'
+		);
+
+		// Emergency lock ended every pass, so that line stopped being true.
+		rerender( <Card state="tips" user={ user } passes={ passes( [] ) } /> );
+		await waitFor( () =>
+			expect( body( container ) ).not.toHaveTextContent( 'support pass' )
+		);
+	} );
+
+	it( 'waits for the pass list before it picks a line', async () => {
+		const { container, rerender } = render(
+			<Card state="tips" passes={ { items: [], loading: true } } />
+		);
+		expect( container ).toBeEmptyDOMElement();
+
+		rerender(
+			<Card state="tips" passes={ { items: [], loading: false } } />
+		);
+		await waitFor( () => expect( body( container ) ).not.toBeNull() );
+	} );
+
+	it( 'fades a line in once when it is new to this browser, and not again', async () => {
+		const first = render( <Card state="tips" /> );
+		await waitFor( () => expect( body( first.container ) ).not.toBeNull() );
+		const text = body( first.container );
+		expect( text ).toHaveClass( 'ha-author__fresh' );
+		const stored = window.localStorage.getItem( LAST_TIP_KEY );
+		expect( stored ).toBeTruthy();
+
+		fireEvent.animationEnd( text );
+		expect( text ).not.toHaveClass( 'ha-author__fresh' );
+		first.unmount();
+
+		const again = render( <Card state="tips" /> );
+		await waitFor( () => expect( body( again.container ) ).not.toBeNull() );
+		expect( body( again.container ) ).not.toHaveClass( 'ha-author__fresh' );
+	} );
+
+	it( 'shows the line without a fade when storage is blocked', async () => {
+		const blocked = vi
+			.spyOn( Storage.prototype, 'getItem' )
+			.mockImplementation( () => {
+				throw new Error( 'blocked' );
+			} );
+		try {
+			const { container } = render( <Card state="tips" /> );
+			await waitFor( () => expect( body( container ) ).not.toBeNull() );
+			expect( body( container ) ).not.toHaveClass( 'ha-author__fresh' );
+		} finally {
+			blocked.mockRestore();
+		}
 	} );
 } );

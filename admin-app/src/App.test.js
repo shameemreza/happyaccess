@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import apiFetch from '@wordpress/api-fetch';
 import App, { readBoot } from './App';
+import { TIP_BUCKET, tipLines } from './authorTips';
 import { settingsFixture } from './settings/fixtures';
 import { grantFixture } from './support/fixtures';
 
@@ -115,7 +116,7 @@ describe( 'App shell', () => {
 		expect( card().parentElement ).toHaveClass( 'ha-support__side' );
 		expect( card().parentElement.lastElementChild ).toBe( card() );
 		expect( card() ).toHaveTextContent(
-			'Is HappyAccess helping you? A quick rating helps others find it.'
+			'Has HappyAccess earned a few stars?'
 		);
 		expect( header.querySelector( '.ha-author' ) ).toBeNull();
 		expect( apiFetch ).not.toHaveBeenCalledWith(
@@ -143,32 +144,93 @@ describe( 'App shell', () => {
 		expect( card().parentElement ).toHaveClass( 'ha-side' );
 		expect( card().previousElementSibling ).toHaveClass( 'ha-loginprev' );
 		expect( card().parentElement.lastElementChild ).toBe( card() );
-		expect(
-			header.querySelector( '.ha-author, .ha-author-credit' )
-		).toBeNull();
+		expect( header.querySelector( '.ha-author' ) ).toBeNull();
 	} );
 
-	it( 'keeps a dismiss in step across tabs, with the small credit line in the side column', async () => {
+	it( 'keeps Not now in step across tabs, with the same line on each', async () => {
 		const user = userEvent.setup();
 		const { container } = render(
 			<App
 				boot={ boot( {
-					authorCard: { state: 'ask', photo: '/author.jpg' },
+					authorCard: {
+						state: 'ask',
+						photo: '/author.jpg',
+						user: 1,
+						facts: { admins: 3 },
+					},
 				} ) }
 			/>
 		);
 
-		await user.click( screen.getByRole( 'button', { name: 'Hide this' } ) );
+		await user.click( screen.getByRole( 'button', { name: 'Not now' } ) );
+		const line = await waitFor( () => {
+			const body = container.querySelector( '.ha-author__body' );
+			expect( body ).not.toBeNull();
+			return body.textContent;
+		} );
 		await user.click( screen.getByRole( 'link', { name: 'Settings' } ) );
 		await screen.findByRole( 'heading', { name: 'Safety and privacy' } );
 
-		expect( container.querySelector( '.ha-author' ) ).toBeNull();
-		const credit = container.querySelector( '.ha-author-credit' );
-		expect( credit ).toHaveTextContent( 'Built by Shameem Reza' );
-		expect( credit.parentElement ).toHaveClass( 'ha-side' );
+		const card = container.querySelector( '.ha-author' );
+		expect( card ).toHaveClass( 'ha-author--tips' );
+		expect( card.parentElement ).toHaveClass( 'ha-side' );
+		expect( card.querySelector( '.ha-author__body' ) ).toHaveTextContent(
+			line
+		);
 		expect(
-			screen.getByRole( 'banner' ).querySelector( '.ha-author-credit' )
+			screen.queryByRole( 'link', { name: /Rate it on WordPress.org/ } )
 		).toBeNull();
+		expect(
+			screen.getByRole( 'banner' ).querySelector( '.ha-author' )
+		).toBeNull();
+	} );
+
+	it( 'names the passes from the list the app already loads', async () => {
+		const now = 1800000000 - ( 1800000000 % TIP_BUCKET );
+		const clock = vi.spyOn( Date, 'now' ).mockReturnValue( now * 1000 );
+		grantsOnServer = [
+			grantFixture( { id: 1, expires_at: now + 2 * 3600 + 120 } ),
+			grantFixture( { id: 2, expires_at: now + 5 * 86400 } ),
+			grantFixture( {
+				id: 3,
+				status: 'suspended',
+				expires_at: now + 600,
+			} ),
+		];
+		const features = { support_access: true };
+		const count = tipLines( {
+			features,
+			facts: {},
+			passes: grantsOnServer,
+			now,
+		} ).length;
+		// The user id that puts the passes line, the first one, in this slot.
+		const user = ( count - ( ( now / TIP_BUCKET ) % count ) ) % count;
+		try {
+			const { container } = render(
+				<App
+					boot={ boot( {
+						features,
+						authorCard: {
+							state: 'tips',
+							photo: '/author.jpg',
+							user,
+							facts: {},
+						},
+					} ) }
+				/>
+			);
+
+			await waitFor( () =>
+				expect(
+					container.querySelector( '.ha-author__body' )
+				).toHaveTextContent(
+					'2 support passes are on right now. The next one ends in 2 hours 2 minutes.'
+				)
+			);
+		} finally {
+			clock.mockRestore();
+		}
 	} );
 
 	it( 'renders four tabs when Login is available', () => {

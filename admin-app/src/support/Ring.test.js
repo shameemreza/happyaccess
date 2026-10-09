@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { axe } from 'jest-axe';
-import Ring, { longLeft, shortLeft } from './Ring';
+import Ring, { durationWords, longLeft, shortLeft } from './Ring';
 
 const DAY = 86400;
 const HOUR = 3600;
@@ -23,6 +23,13 @@ describe( 'time labels', () => {
 		expect( longLeft( 40 * 60 ) ).toBe( 'Ends in 40 minutes' );
 		expect( longLeft( 20 ) ).toBe( 'Ends in 1 minute' );
 		expect( longLeft( 0 ) ).toBe( 'Ending now' );
+	} );
+
+	it( 'names a length with the largest units first, as many as asked', () => {
+		expect( durationWords( 2 * DAY + 4 * HOUR ) ).toBe( '2 days 4 hours' );
+		expect( durationWords( 2 * DAY + 4 * HOUR, 1 ) ).toBe( '2 days' );
+		expect( durationWords( 3 * HOUR + 5 * 60, 1 ) ).toBe( '3 hours' );
+		expect( durationWords( 30, 1 ) ).toBe( '1 minute' );
 	} );
 } );
 

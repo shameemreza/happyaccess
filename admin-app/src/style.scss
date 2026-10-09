@@ -10,6 +10,7 @@
 @use "settings/settings";
 @use "login/login";
 @use "setup/setup";
+@use "support/motion";
 
 .happyaccess-app {
 	--ha-text: #1e1e1e;
@@ -95,115 +96,297 @@
 	}
 
 	// The author card closes the right-hand column of a tab.
-	.ha-support__side > .ha-author,
-	.ha-support__side > .ha-author-credit {
+	.ha-support__side > .ha-author {
 		margin-block-start: 24px;
 	}
 
-	// A short note from the maker, then the signature row under it.
+	// A light green card with a cut-out at the bottom right that holds the
+	// photo. The cut-out and its two curves are drawn in the page color, so
+	// the card must sit on the admin page background. The foot, beside the
+	// cut-out, keeps its text clear of it at any width.
 	.ha-author {
+		--ha-author-page: #f0f0f1;
+		--ha-author-card: #e4f2ea;
+		--ha-author-green: #0e8a5f;
+		--ha-author-link: #0b6e4c;
+		--ha-author-notch: 92px;
+		--ha-author-pad: 22px;
+		--ha-author-pad-end: 18px;
+		container-type: inline-size;
 		position: relative;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding: 12px 14px;
-		border: 1px solid var(--ha-line);
-		border-radius: 8px;
-		background: #fff;
-	}
-
-	.ha-author__note,
-	.ha-author__line {
-		margin: 0;
+		padding: 20px var(--ha-author-pad) var(--ha-author-pad-end);
+		border-radius: 18px;
+		background: var(--ha-author-card);
 		color: var(--ha-text);
 		font-size: 13px;
 		line-height: 1.5;
 	}
 
-	// Room for the close button, so the rating line never runs under it.
-	.ha-author--ask .ha-author__line {
-		padding-inline-end: 24px;
+	.ha-author::before {
+		content: "";
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		width: var(--ha-author-notch);
+		height: var(--ha-author-notch);
+		border-top-left-radius: 28px;
+		background: var(--ha-author-page);
 	}
 
-	.ha-author__quote {
-		margin-inline-end: 6px;
-		vertical-align: 0;
-		color: #0e8a5f;
+	.ha-author__curve {
+		position: absolute;
+		width: 18px;
+		height: 18px;
+		background: var(--ha-author-page);
 	}
 
-	.ha-author__line:focus {
-		outline: none;
+	.ha-author__curve::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		border-bottom-right-radius: 18px;
+		background: var(--ha-author-card);
 	}
 
-	.ha-author__line:focus-visible {
-		outline: 2px solid var(--ha-accent);
-		outline-offset: 2px;
+	.ha-author__curve--top {
+		right: 0;
+		bottom: var(--ha-author-notch);
 	}
 
-	.ha-author__actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-
-	// The forum link sits at the end of the row, and wraps under it when
-	// the column is narrow.
-	.ha-author__sign {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 4px 8px;
-		font-size: 12px;
-		line-height: 1.4;
+	.ha-author__curve--side {
+		right: var(--ha-author-notch);
+		bottom: 0;
 	}
 
 	.ha-author__photo {
-		flex-shrink: 0;
-		inline-size: 28px;
-		block-size: 28px;
+		position: absolute;
+		right: 6px;
+		bottom: 6px;
+		width: 76px;
+		height: 76px;
 		border-radius: 50%;
+		box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--ha-author-green);
 		object-fit: cover;
 	}
 
-	.ha-author__by {
-		min-width: 0;
+	.ha-author__badge {
+		position: absolute;
+		right: 4px;
+		bottom: 62px;
+		display: grid;
+		place-items: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background: var(--ha-author-green);
+		box-shadow: 0 0 0 2px #fff;
+		color: #fff;
 	}
 
-	.ha-author__name {
-		font-size: 13px;
+	.ha-author__title {
+		margin: 0 0 4px;
+		padding: 0;
+		color: var(--ha-text);
+		font-size: 15px;
+		font-weight: 700;
+		line-height: 1.4;
+	}
+
+	.ha-author__text {
+		margin: 0 0 12px;
+		font-size: 13.5px;
+		line-height: 1.6;
+	}
+
+	.ha-author__body {
+		margin: 0 0 12px;
+		padding-inline-end: 24px;
+		font-size: 14px;
+		line-height: 1.6;
+	}
+
+	.ha-author__title:focus,
+	.ha-author__body:focus {
+		outline: none;
+	}
+
+	.ha-author__title:focus-visible,
+	.ha-author__body:focus-visible {
+		outline: 2px solid var(--ha-author-link);
+		outline-offset: 2px;
+	}
+
+	// Everything beside the cut-out. Its least height is the cut-out's
+	// height above the card's bottom padding, so nothing above it can
+	// reach the photo.
+	.ha-author__foot {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		gap: 10px;
+		min-height: calc(var(--ha-author-notch) - var(--ha-author-pad-end));
+		padding-inline-end: calc(var(--ha-author-notch) - var(--ha-author-pad) + 10px);
+	}
+
+	.ha-author__tip {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		margin: 0;
+		padding: 9px 12px;
+		border-radius: 12px;
+		background: #fff;
+		font-size: 12.5px;
+		line-height: 1.5;
+	}
+
+	.ha-author__bulb {
+		flex-shrink: 0;
+		margin-block-start: 1px;
+		color: var(--ha-author-green);
+	}
+
+	.ha-author__tip b,
+	.ha-author__body b {
 		font-weight: 600;
 	}
 
-	.ha-author__role {
-		color: var(--ha-muted);
+	.ha-author__links {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 2px 14px;
+		margin: 0;
 	}
 
-	.ha-author__forum {
-		margin-inline-start: auto;
-		color: var(--ha-muted);
+	.ha-author__link {
+		color: var(--ha-author-link);
+		font-size: 12.5px;
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	// A flex link drops a leading space, so the arrow keeps its own gap.
+	.ha-author__arrow {
+		margin-inline-start: 0.25em;
+	}
+
+	.ha-author__link:hover,
+	.ha-author__link:focus-visible {
+		color: var(--ha-author-link);
 		text-decoration: underline;
 	}
 
-	.ha-author__forum:hover,
-	.ha-author__forum:focus {
+	.ha-author__later {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--ha-muted);
+		font: inherit;
+		font-size: 12.5px;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	.ha-author__later:hover {
 		color: var(--ha-text);
 	}
 
-	.ha-author-credit a {
-		font-weight: 500;
+	.ha-author__later:focus-visible {
+		outline: 2px solid var(--ha-author-link);
+		outline-offset: 2px;
+	}
+
+	// One button for everyone, to the review form. The stars are drawn for
+	// the eye only and light up one by one on hover.
+	.ha-author__rate {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 2px 10px;
+		max-width: 100%;
+		box-sizing: border-box;
+		margin: 2px 0 12px;
+		padding: 8px 16px;
+		border-radius: 999px;
+		background: var(--ha-author-green);
+		color: #fff;
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.ha-author__rate:hover,
+	.ha-author__rate:focus {
+		background: var(--ha-author-link);
+		color: #fff;
+	}
+
+	.ha-author__rate:focus {
+		box-shadow: none;
+		outline: none;
+	}
+
+	.ha-author__rate:focus-visible {
+		outline: 2px solid var(--ha-author-link);
+		outline-offset: 2px;
+	}
+
+	.ha-author__stars {
+		display: inline-flex;
+		gap: 2px;
+	}
+
+	.ha-author__star {
+		color: #f2c14e;
+	}
+
+	.ha-author__rate:hover .ha-author__star,
+	.ha-author__rate:focus-visible .ha-author__star {
+		color: #ffe08a;
 	}
 
 	.ha-author__hide.components-button {
 		position: absolute;
-		inset-block-start: 6px;
-		inset-inline-end: 6px;
+		top: 8px;
+		right: 8px;
 		color: var(--ha-muted);
 	}
 
-	.ha-author-credit {
-		margin: 0;
-		color: var(--ha-muted);
-		font-size: 12px;
+	@include motion.motion {
+
+		.ha-author__star {
+			display: inline-block;
+			transition: color 0.15s ease, transform 0.15s ease;
+		}
+
+		@for $i from 2 through 5 {
+
+			.ha-author__star:nth-child(#{$i}) {
+				transition-delay: #{( $i - 1 ) * 70}ms;
+			}
+		}
+
+		.ha-author__rate:hover .ha-author__star,
+		.ha-author__rate:focus-visible .ha-author__star {
+			transform: scale(1.15);
+		}
+
+		.ha-author__fresh {
+			animation: ha-author-fade 0.3s ease-out;
+		}
+
+		.ha-author__badge {
+			animation: ha-author-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+		}
+	}
+
+	// The pill wraps to two lines in a narrow column, so it drops the
+	// round ends there.
+	@container (max-width: 320px) {
+
+		.ha-author__rate {
+			border-radius: 14px;
+		}
 	}
 
 	// Links and buttons stay at least 24px tall, and 44px for touch.
@@ -211,7 +394,7 @@
 	.ha-disclosure,
 	.ha-row__link,
 	.ha-active__foot a,
-	.ha-author__forum {
+	.ha-author__link {
 		display: inline-flex;
 		align-items: center;
 		min-height: 24px;
@@ -298,5 +481,29 @@
 		.components-button {
 			min-height: 44px;
 		}
+	}
+}
+
+@keyframes ha-author-fade {
+
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes ha-author-pop {
+
+	0% {
+		opacity: 0;
+		transform: scale(0.4);
+	}
+
+	100% {
+		opacity: 1;
+		transform: scale(1);
 	}
 }
