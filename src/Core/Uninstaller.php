@@ -275,8 +275,8 @@ final class Uninstaller {
 	 * Deletes a temp user from every site it belongs to, then from the network.
 	 * Stops and leaves the account if any site has nobody to inherit its
 	 * content, or if taking the account off a site fails. An account left
-	 * this way is stripped on every site it belongs to, not only the one
-	 * with nobody to inherit.
+	 * this way is stripped on every site it belonged to, not only the one
+	 * where it stopped.
 	 *
 	 * @param int $user_id User id.
 	 * @return void
@@ -304,11 +304,15 @@ final class Uninstaller {
 			}
 		}
 
+		$ahead = array_keys( $targets );
 		foreach ( $targets as $blog_id => $target ) {
 			// Taking the account off the site first hands its posts to the target; wpmu_delete_user alone would delete them.
 			if ( is_wp_error( remove_user_from_blog( $user_id, $blog_id, $target ) ) ) {
+				// The account stays, so it keeps no role on this site or the ones still ahead.
+				self::keep_everywhere( $user_id, $ahead );
 				return;
 			}
+			array_shift( $ahead );
 		}
 
 		// Uninstall can run outside wp-admin, where the network user functions aren't loaded.

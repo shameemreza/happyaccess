@@ -511,6 +511,79 @@ class UninstallerTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The users row a failing removal took away, put back on the next
+	 * switch, so only that one removal fails.
+	 *
+	 * @var object|null
+	 */
+	private $vanished = null;
+
+	/**
+	 * Site whose removal fails.
+	 *
+	 * @var int
+	 */
+	private $failing_site = 0;
+
+	public function vanish_on_failing_site( $user_id, $blog_id ) {
+		global $wpdb;
+		if ( (int) $blog_id !== $this->failing_site || null !== $this->vanished ) {
+			return;
+		}
+		$this->vanished = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->users} WHERE ID = %d", $user_id ), ARRAY_A );
+		$wpdb->delete( $wpdb->users, array( 'ID' => $user_id ) );
+		clean_user_cache( $user_id );
+	}
+
+	public function bring_back_vanished_user() {
+		global $wpdb;
+		if ( ! is_array( $this->vanished ) ) {
+			return;
+		}
+		$row            = $this->vanished;
+		$this->vanished = false;
+		$wpdb->insert( $wpdb->users, $row );
+		clean_user_cache( (int) $row['ID'] );
+	}
+
+	/**
+	 * @group ms-required
+	 */
+	public function test_a_failed_removal_strips_the_account_on_the_sites_not_reached() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs multisite.' );
+		}
+		$site_a  = self::factory()->blog->create();
+		$site_b  = self::factory()->blog->create();
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		add_user_to_blog( $site_a, $user_id, 'administrator' );
+		add_user_to_blog( $site_b, $user_id, 'administrator' );
+		// A real administrator on each site, so every site has someone to inherit.
+		add_user_to_blog( $site_a, 1, 'administrator' );
+		add_user_to_blog( $site_b, 1, 'administrator' );
+		update_user_meta( $user_id, 'happyaccess_temp_user', 1 );
+		update_user_meta( $user_id, 'happyaccess_blog_id', 987654 );
+		wp_set_current_user( 0 );
+
+		$this->failing_site = $site_a;
+		add_action( 'remove_user_from_blog', array( $this, 'vanish_on_failing_site' ), 10, 2 );
+		add_action( 'switch_blog', array( $this, 'bring_back_vanished_user' ) );
+
+		Uninstaller::run();
+
+		remove_action( 'remove_user_from_blog', array( $this, 'vanish_on_failing_site' ), 10 );
+		remove_action( 'switch_blog', array( $this, 'bring_back_vanished_user' ) );
+		$this->assertFalse( $this->vanished, 'The removal from site A failed.' );
+		$this->assertNotFalse( get_userdata( $user_id ), 'The account stays after the failure.' );
+		switch_to_blog( $site_b );
+		$user = new WP_User( $user_id );
+		$this->assertSame( array(), $user->roles, 'No role is left on the site the sweep never reached.' );
+		$this->assertFalse( $user->has_cap( 'manage_options' ) );
+		restore_current_blog();
+		$this->assertSame( array(), get_blogs_of_user( $user_id ), 'The account holds a role on no site.' );
+	}
+
+	/**
 	 * @group ms-required
 	 */
 	public function test_a_network_account_with_no_inheritor_on_one_site_is_stripped_on_every_site() {
