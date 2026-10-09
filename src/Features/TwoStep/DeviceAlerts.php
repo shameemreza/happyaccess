@@ -91,9 +91,9 @@ final class DeviceAlerts {
 	private static $queue = array();
 
 	/**
-	 * Which listener checked each user in this request: 'wp_login' or
-	 * 'two_factor'. A user checked by one listener is skipped by the other,
-	 * so one login never sends two alerts.
+	 * Which listener checked each user in this request: 'wp_login',
+	 * 'two_factor' or 'wp_2fa'. A user checked by one listener is skipped by
+	 * the others, so one login never sends two alerts.
 	 *
 	 * @var array<int, string>
 	 */
@@ -105,13 +105,17 @@ final class DeviceAlerts {
 	 *
 	 * The Two Factor plugin stops at wp_login priority 10 to show its own
 	 * step, and when that step passes it fires two_factor_user_authenticated
-	 * instead of wp_login, so its logins are watched there.
+	 * instead of wp_login, so its logins are watched there. WP 2FA does the
+	 * same at wp_login priority 20 and fires wp_2fa_user_authenticated once
+	 * its step passes. Kadence Security fires wp_login again after its step,
+	 * so its logins need no listener of their own.
 	 *
 	 * @return void
 	 */
 	public static function register() {
 		add_action( 'wp_login', array( __CLASS__, 'on_login' ), PHP_INT_MAX, 2 );
 		add_action( 'two_factor_user_authenticated', array( __CLASS__, 'on_two_factor_login' ), PHP_INT_MAX, 2 );
+		add_action( 'wp_2fa_user_authenticated', array( __CLASS__, 'on_wp_2fa_login' ), PHP_INT_MAX, 1 );
 	}
 
 	/**
@@ -141,10 +145,21 @@ final class DeviceAlerts {
 	}
 
 	/**
+	 * WP 2FA's wp_2fa_user_authenticated action, fired once its step passes
+	 * and the auth cookie is set.
+	 *
+	 * @param \WP_User|null $user The user who logged in.
+	 * @return void
+	 */
+	public static function on_wp_2fa_login( $user ) {
+		self::check( $user, 'wp_2fa' );
+	}
+
+	/**
 	 * Remembers the browser and alerts when it is new.
 	 *
 	 * @param mixed  $user   The user who logged in.
-	 * @param string $source The listener that called: 'wp_login' or 'two_factor'.
+	 * @param string $source The listener that called: 'wp_login', 'two_factor' or 'wp_2fa'.
 	 * @return void
 	 */
 	private static function check( $user, $source ) {
