@@ -148,6 +148,7 @@ final class Challenge {
 	public static function register() {
 		Router::add_step( self::STEP, array( __CLASS__, 'run_step' ) );
 		add_action( 'after_password_reset', array( __CLASS__, 'end_account_lock' ), 10, 1 );
+		add_action( 'after_password_reset', array( __CLASS__, 'after_woo_reset' ), PHP_INT_MAX, 1 );
 		add_filter( 'authenticate', array( __CLASS__, 'filter_authenticate' ), 50, 3 );
 		add_filter( 'authenticate', array( __CLASS__, 'finish_authenticate' ), PHP_INT_MAX, 3 );
 		add_action( 'application_password_did_authenticate', array( __CLASS__, 'note_application_password' ), 10, 1 );
@@ -326,6 +327,55 @@ final class Challenge {
 		}
 		$url = self::begin( $user, self::PURPOSE_AFTER_PASSWORDLESS, $carry );
 		return is_wp_error( $url ) ? self::login_url( 'unavailable', array() ) : $url;
+	}
+
+	/**
+	 * WooCommerce logs the shopper in right after its My Account password
+	 * reset, with wp_set_auth_cookie() and no authenticate filter. It fires
+	 * after_password_reset after the new password is saved and before that
+	 * cookie, so a user who needs the second step, or setup, goes there from
+	 * here and the request ends. WooCommerce's own steps after the cookie run
+	 * first: the reset cookie is cleared, the owner hears about the new
+	 * password and its reset action fires.
+	 *
+	 * Core's reset on wp-login.php never logs in, so only WooCommerce's form
+	 * is handled.
+	 *
+	 * @param \WP_User $user The user whose password was reset.
+	 * @return void
+	 */
+	public static function after_woo_reset( $user ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read as a flag only; WooCommerce checked its reset nonce before the reset.
+		if ( ! $user instanceof \WP_User || ! isset( $_POST['wc_reset_password'] ) || ! function_exists( 'wc_get_page_permalink' ) ) {
+			return;
+		}
+		self::forget_stale_grace( $user );
+		if ( ! self::applies( $user ) ) {
+			return;
+		}
+
+		$url = self::begin(
+			$user,
+			self::PURPOSE,
+			array(
+				'from'        => 'woo',
+				'redirect_to' => (string) wc_get_page_permalink( 'myaccount' ),
+			)
+		);
+		if ( is_wp_error( $url ) ) {
+			// The password is saved, so the user logs in again once the step can run.
+			$url = self::login_url( 'unavailable', array() );
+		}
+
+		if ( class_exists( 'WC_Shortcode_My_Account' ) && ! headers_sent() ) {
+			\WC_Shortcode_My_Account::set_reset_password_cookie();
+		}
+		if ( ! apply_filters( 'woocommerce_disable_password_change_notification', false ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hook.
+			wp_password_change_notification( $user );
+		}
+		do_action( 'woocommerce_customer_reset_password', $user ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hook, so its listeners see the reset.
+
+		self::redirect( $url );
 	}
 
 	/**

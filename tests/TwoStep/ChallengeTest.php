@@ -1330,6 +1330,146 @@ class ChallengeTest extends WP_UnitTestCase {
 		$this->assertSame( 1, $this->wp_login_count );
 	}
 
+	/**
+	 * Loads WooCommerce with a My Account page, and a session in memory so
+	 * its notices work. Only in a separate process.
+	 *
+	 * @return string My Account URL.
+	 */
+	private function load_woocommerce() {
+		$woo = WP_PLUGIN_DIR . '/woocommerce/woocommerce.php';
+		if ( ! file_exists( $woo ) ) {
+			$this->markTestSkipped( 'WooCommerce is not installed next to HappyAccess.' );
+		}
+		require_once $woo;
+		// WooCommerce's init needs its tables, so only its notice functions are told it ran.
+		$GLOBALS['wp_actions']['woocommerce_init'] = 1;
+		WC()->session                              = new class() extends WC_Session {};
+		$page                                      = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'my-account',
+			)
+		);
+		update_option( 'woocommerce_myaccount_page_id', $page );
+		if ( null === get_role( 'customer' ) ) {
+			add_role( 'customer', 'Customer', array( 'read' => true ) );
+		}
+		return wc_get_page_permalink( 'myaccount' );
+	}
+
+	/**
+	 * Posts WooCommerce's reset form with a real reset key, through its form handler.
+	 *
+	 * @param WP_User $user User.
+	 * @param string  $pass New password.
+	 * @return string Where the browser was sent, or an empty string.
+	 */
+	private function woo_reset( WP_User $user, $pass ) {
+		$_POST    = array(
+			'wc_reset_password'                => 'true',
+			'password_1'                       => $pass,
+			'password_2'                       => $pass,
+			'reset_key'                        => get_password_reset_key( $user ),
+			'reset_login'                      => $user->user_login,
+			'woocommerce-reset-password-nonce' => wp_create_nonce( 'reset_password' ),
+		);
+		$_REQUEST = $_POST;
+		$url      = '';
+		// WooCommerce's own redirect after the reset ends in exit, so it stops here instead.
+		add_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
+		try {
+			WC_Form_Handler::process_reset_password();
+		} catch ( HappyAccess_Test_TwoStep_Redirect $stop ) {
+			$url = $stop->url;
+		} finally {
+			remove_filter( 'wp_redirect', array( $this, 'stop_redirect' ) );
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+		return $url;
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_sends_an_app_user_to_the_step() {
+		$account = $this->load_woocommerce();
+		$made    = $this->app_user( 'customer' );
+		$pass    = wp_generate_password( 24, false );
+
+		$url = $this->woo_reset( $made['user'], $pass );
+
+		$this->assertSame( array(), $this->auth, 'No auth cookie before the second step.' );
+		$this->assertSame( 0, get_current_user_id() );
+		$this->assertSame( 0, $this->wp_login_count );
+		$args = $this->query( $url );
+		$this->assertSame( 'twostep', $args['step'] );
+		$this->assertSame( 'woo', $args['from'] );
+		$this->assertSame( $account, $args['redirect_to'] );
+		$this->assertTrue( wp_check_password( $pass, get_userdata( $made['user']->ID )->user_pass, $made['user']->ID ), 'The new password is saved.' );
+
+		$res = $this->post_code(
+			$this->pending_cookie(),
+			$this->app_code( $made['secret'] ),
+			'app',
+			array(
+				'redirect_to' => $args['redirect_to'],
+				'from'        => 'woo',
+			)
+		);
+		$this->assertSame( 'redirect', $res['type'] );
+		$this->assertSame( $account, $res['url'] );
+		$this->assertSame( array( $made['user']->ID ), $this->auth );
+		$this->assertSame( 1, $this->wp_login_count );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_sends_a_required_user_to_setup() {
+		$this->load_woocommerce();
+		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'customer' => 'required' ) ) ) );
+		$user = self::factory()->user->create_and_get( array( 'role' => 'customer' ) );
+
+		$url = $this->woo_reset( $user, wp_generate_password( 24, false ) );
+
+		$this->assertSame( array(), $this->auth );
+		$this->assertSame( 0, get_current_user_id() );
+		$this->assertSame( 'twostep_setup', $this->query( $url )['step'] );
+	}
+
+	/**
+	 * Loads WooCommerce, so this runs in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_woocommerce_password_reset_still_logs_in_a_user_without_two_step() {
+		$this->load_woocommerce();
+		$user = self::factory()->user->create_and_get( array( 'role' => 'customer' ) );
+
+		$url = @$this->woo_reset( $user, wp_generate_password( 24, false ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- WooCommerce's own redirect sends headers under the CLI.
+
+		$this->assertStringContainsString( 'password-reset=true', $url, 'HappyAccess leaves this reset to WooCommerce.' );
+		$this->assertSame( array( $user->ID ), $this->auth );
+	}
+
+	public function test_a_core_password_reset_is_left_alone() {
+		$made = $this->app_user();
+		reset_password( $made['user'], wp_generate_password( 24, false ) );
+		$this->assertSame( array(), $this->auth, 'wp-login.php never logs in after a reset.' );
+		$this->assertSame( array(), $this->cookies );
+		$this->assertSame( 0, get_current_user_id() );
+	}
+
 	public function test_an_api_login_of_a_user_who_must_set_up_says_how_and_stays_refused() {
 		Settings::update( array( 'two_step' => array( 'role_policy' => array( 'editor' => 'required' ) ) ) );
 		$user = self::factory()->user->create_and_get(
