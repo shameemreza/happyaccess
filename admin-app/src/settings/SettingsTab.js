@@ -619,7 +619,7 @@ export default function SettingsTab( {
 									'happyaccess'
 								) }
 								help={ __(
-									'Pick Cloudflare only if your site is behind Cloudflare. Your server must accept traffic only from Cloudflare.',
+									'Behind Cloudflare, pick Cloudflare. Pick Cloudflare, X-Forwarded-For or X-Real-IP only if your server accepts traffic from that proxy alone. Otherwise visitors can fake their IP address.',
 									'happyaccess'
 								) }
 								value={ val( 'security.proxy_header' ) }

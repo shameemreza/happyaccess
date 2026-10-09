@@ -9,15 +9,15 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-09T20:41:57+00:00\n"
+"POT-Creation-Date: 2026-10-09T21:07:30+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: happyaccess\n"
 
 #. Plugin Name of the plugin
 #: happyaccess.php
-#: src/Admin/Page.php:210
 #: src/Admin/Page.php:211
+#: src/Admin/Page.php:212
 #: src/Core/Privacy.php:193
 #: src/Core/Privacy.php:207
 #: build/index.js:2
@@ -53,45 +53,45 @@ msgid_plural "Emergency lock ended %d support passes."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/Page.php:160
+#: src/Admin/Page.php:161
 msgid "HappyAccess couldn't finish updating."
 msgstr ""
 
-#: src/Admin/Page.php:162
+#: src/Admin/Page.php:163
 msgid "Until it does, logins with support codes, email codes and two-step login wait. It tries again every 15 minutes."
 msgstr ""
 
 #. translators: %s: database table name.
-#: src/Admin/Page.php:178
+#: src/Admin/Page.php:179
 #, php-format
 msgid "The table %s is missing. Check that the database user can create tables."
 msgstr ""
 
 #. translators: 1: column name, 2: database table name.
-#: src/Admin/Page.php:183
+#: src/Admin/Page.php:184
 #, php-format
 msgid "The column %1$s of the table %2$s is missing. Check that the database user can change tables."
 msgstr ""
 
-#: src/Admin/Page.php:188
+#: src/Admin/Page.php:189
 msgid "The HappyAccess site key couldn't be saved in the options table."
 msgstr ""
 
-#: src/Admin/Page.php:190
+#: src/Admin/Page.php:191
 msgid "A database write failed."
 msgstr ""
 
-#: src/Admin/Page.php:192
+#: src/Admin/Page.php:193
 msgid "The plain codes from version 1.0 couldn't be removed."
 msgstr ""
 
 #. translators: %s: a short reason code.
-#: src/Admin/Page.php:195
+#: src/Admin/Page.php:196
 #, php-format
 msgid "Reason: %s"
 msgstr ""
 
-#: src/Admin/Page.php:360
+#: src/Admin/Page.php:361
 msgid "The HappyAccess admin app is not built yet. Run npm ci and npm run build in the plugin folder."
 msgstr ""
 
@@ -3753,7 +3753,7 @@ msgid "This one-time pass is used. For another login, use New link and code."
 msgstr ""
 
 #: build/index.js:57
-msgid "If they are not logged in, they use the link or code as before."
+msgid "If they're not logged in, they use the link or code as before."
 msgstr ""
 
 #. translators: %s: who the pass is for.
@@ -3890,7 +3890,7 @@ msgid "Safety and privacy"
 msgstr ""
 
 #: build/index.js:66
-msgid "Pick Cloudflare only if your site is behind Cloudflare. Your server must accept traffic only from Cloudflare."
+msgid "Behind Cloudflare, pick Cloudflare. Pick Cloudflare, X-Forwarded-For or X-Real-IP only if your server accepts traffic from that proxy alone. Otherwise visitors can fake their IP address."
 msgstr ""
 
 #: build/index.js:66

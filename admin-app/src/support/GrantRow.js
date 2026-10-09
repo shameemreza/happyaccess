@@ -380,7 +380,7 @@ export default function GrantRow( {
 									'happyaccess'
 								)
 							: __(
-									'If they are not logged in, they use the link or code as before.',
+									"If they're not logged in, they use the link or code as before.",
 									'happyaccess'
 								) }
 					</span>

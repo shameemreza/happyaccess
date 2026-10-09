@@ -169,7 +169,7 @@ describe( 'Settings tab', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByText(
-				'Pick Cloudflare only if your site is behind Cloudflare. Your server must accept traffic only from Cloudflare.'
+				'Behind Cloudflare, pick Cloudflare. Pick Cloudflare, X-Forwarded-For or X-Real-IP only if your server accepts traffic from that proxy alone. Otherwise visitors can fake their IP address.'
 			)
 		).toBeInTheDocument();
 		expect(

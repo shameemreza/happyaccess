@@ -134,7 +134,7 @@ describe( 'GrantRow', () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getByText(
-				'If they are not logged in, they use the link or code as before.'
+				"If they're not logged in, they use the link or code as before."
 			)
 		).toBeInTheDocument();
 	} );
