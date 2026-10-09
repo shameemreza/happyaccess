@@ -20,6 +20,18 @@ final class Installer {
 
 	const FAILED_TRANSIENT = 'happyaccess_migration_failed';
 
+	/**
+	 * Failed runs in a row, kept after the back-off transient runs out and
+	 * removed when a run finishes.
+	 */
+	const FAILURES_OPTION = 'happyaccess_migration_failures';
+
+	/**
+	 * Failed runs in a row before managers see the notice, so a single
+	 * failure gets its retry 15 minutes later before anyone is told.
+	 */
+	const NOTICE_AFTER = 2;
+
 	const LOCK_TTL = 300;
 
 	/**
@@ -201,6 +213,15 @@ final class Installer {
 	}
 
 	/**
+	 * Failed migration runs in a row on this site. Zero once a run finishes.
+	 *
+	 * @return int
+	 */
+	public static function failed_runs() {
+		return max( 0, (int) get_option( self::FAILURES_OPTION, 0 ) );
+	}
+
+	/**
 	 * On the main site of a network where the plugin is network active,
 	 * schedules the loop that brings every other site to DB_VERSION. Sites
 	 * without traffic would otherwise never run their own migration.
@@ -310,8 +331,10 @@ final class Installer {
 				static function () use ( $failure ) {
 					if ( '' === $failure ) {
 						delete_transient( self::FAILED_TRANSIENT );
+						delete_option( self::FAILURES_OPTION );
 					} else {
 						set_transient( self::FAILED_TRANSIENT, $failure, 15 * MINUTE_IN_SECONDS );
+						update_option( self::FAILURES_OPTION, self::failed_runs() + 1, false );
 					}
 				}
 			);

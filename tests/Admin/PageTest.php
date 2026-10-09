@@ -142,15 +142,27 @@ class PageTest extends WP_UnitTestCase {
 	 * Marks this site's migration as failed with a reason, and behind.
 	 *
 	 * @param string $reason Why it stopped.
+	 * @param int    $runs   Failed runs in a row.
 	 * @return void
 	 */
-	private function fail_migration( $reason ) {
+	private function fail_migration( $reason, $runs = 2 ) {
 		update_option( 'happyaccess_db_version', '1.1.0' );
 		HappyAccess\Core\Internal::run(
-			static function () use ( $reason ) {
+			static function () use ( $reason, $runs ) {
 				set_transient( Installer::FAILED_TRANSIENT, $reason, 15 * MINUTE_IN_SECONDS );
+				update_option( Installer::FAILURES_OPTION, $runs, false );
 			}
 		);
+	}
+
+	public function test_the_migration_notice_waits_for_a_second_failed_run() {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->fail_migration( 'write_failed', 1 );
+		$this->assertSame( '', $this->migration_notice(), 'The first failure is retried in 15 minutes, so nobody is told yet.' );
+
+		$this->fail_migration( 'write_failed', 2 );
+		$this->assertStringContainsString( "HappyAccess couldn't finish updating.", $this->migration_notice() );
 	}
 
 	public function test_register_hooks_the_migration_notice() {

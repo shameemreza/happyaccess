@@ -1100,6 +1100,43 @@ class MigrationTest extends WP_UnitTestCase {
 		$this->assertTrue( Codes::verify_code( '123456', $this->token( 'a' )['code_hash'], Codes::PURPOSE_SUPPORT ) );
 	}
 
+	public function test_failed_runs_are_counted_in_a_row_and_a_finished_run_resets_the_count() {
+		\HappyAccess\Core\Capabilities::register();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		add_filter( 'pre_option_' . Secrets::OPTION, '__return_empty_string' );
+		Secrets::reset_cache();
+
+		Installer::migrate();
+		$this->assertSame( 1, Installer::failed_runs() );
+		$this->assertSame( '', $this->migration_notice(), 'One failed run is retried before anyone is told.' );
+
+		// The back-off lasts 15 minutes; clear it to run the retry now.
+		delete_transient( Installer::FAILED_TRANSIENT );
+		Installer::migrate();
+		$this->assertSame( 2, Installer::failed_runs() );
+		$this->assertStringContainsString( "HappyAccess couldn't finish updating.", $this->migration_notice() );
+
+		remove_filter( 'pre_option_' . Secrets::OPTION, '__return_empty_string' );
+		Secrets::reset_cache();
+		delete_transient( Installer::FAILED_TRANSIENT );
+		Installer::migrate();
+
+		$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ) );
+		$this->assertSame( 0, Installer::failed_runs() );
+		$this->assertFalse( get_option( Installer::FAILURES_OPTION ) );
+	}
+
+	/**
+	 * The failed update notice as printed.
+	 *
+	 * @return string
+	 */
+	private function migration_notice() {
+		ob_start();
+		\HappyAccess\Admin\Page::migration_notice();
+		return html_entity_decode( (string) ob_get_clean(), ENT_QUOTES );
+	}
+
 	public function test_the_upgrade_from_1_0_x_notes_the_install_time() {
 		$this->assertFalse( get_option( Installer::INSTALLED_OPTION ) );
 

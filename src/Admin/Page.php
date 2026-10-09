@@ -135,7 +135,8 @@ final class Page {
 	 * this site, and why. Until it finishes, logins with support codes,
 	 * email codes and two-step login say "Login is updating". The failed
 	 * run is noted for 15 minutes, then retried, so the notice shows while
-	 * the update is behind and its last run failed.
+	 * the update is behind, its last run failed, and the run before that
+	 * failed too. A single failure gets its retry before anyone is told.
 	 *
 	 * @return void
 	 */
@@ -152,7 +153,7 @@ final class Page {
 				return get_transient( Installer::FAILED_TRANSIENT );
 			}
 		);
-		if ( ! is_string( $reason ) || '' === $reason ) {
+		if ( ! is_string( $reason ) || '' === $reason || Installer::failed_runs() < Installer::NOTICE_AFTER ) {
 			return;
 		}
 		printf(
