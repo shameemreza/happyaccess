@@ -213,6 +213,15 @@ class LogTextTest extends WP_UnitTestCase {
 		if ( 'Temporary access ended for %s' === $text ) {
 			return 'Accès terminé pour %10$s';
 		}
+		if ( 'Temporary access suspended for %s' === $text ) {
+			return 'Accès suspendu pour %0$s';
+		}
+		if ( 'Temporary access resumed for %s' === $text ) {
+			return 'Accès repris pour %s %';
+		}
+		if ( 'Temporary access extended for %s' === $text ) {
+			return "Accès prolongé de 100%% pour %1\$'*12s";
+		}
 		return $translation;
 	}
 
@@ -226,7 +235,10 @@ class LogTextTest extends WP_UnitTestCase {
 			$this->assertGreaterThan( 0, (int) $id, 'The row is still written.' );
 			$this->assertSame( 'Temporary access ended for Acme', AuditLog::query( array( 'event' => 'grant_ended' ) )['items'][0]['summary'] );
 
-			$this->assertSame( 'Temporary access extended for Acme', LogText::render( 'grant_extended', array( 'Acme' ) ), 'Other lines are left alone.' );
+			$this->assertSame( 'Temporary access suspended for Acme', LogText::render( 'grant_suspended', array( 'Acme' ) ), 'Argument 0 does not exist.' );
+			$this->assertSame( 'Temporary access resumed for Acme', LogText::render( 'grant_resumed', array( 'Acme' ) ), 'A lone % at the end is not a placeholder.' );
+			$this->assertSame( 'Accès prolongé de 100% pour ********Acme', LogText::render( 'grant_extended', array( 'Acme' ) ), 'A valid translation with flags and %% is used.' );
+			$this->assertSame( 'Temporary access code and link replaced for Acme', LogText::render( 'grant_regenerated', array( 'Acme' ) ), 'Other lines are left alone.' );
 		} finally {
 			remove_filter( 'gettext', array( __CLASS__, 'broken_translation' ), 10 );
 		}

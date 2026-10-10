@@ -372,18 +372,82 @@ final class LogText {
 
 	/**
 	 * Fills a template, or null when its placeholders don't fit the values.
+	 * The placeholders are checked first because PHP 7.4 doesn't throw: it
+	 * skips an unknown one such as "%y" and returns a broken line, and for a
+	 * missing value it warns and returns false. PHP 8 throws, which is
+	 * caught too.
 	 *
 	 * @param string $text   Template.
 	 * @param array  $values Values.
 	 * @return string|null
 	 */
 	private static function format( $text, array $values ) {
+		if ( ! self::placeholders_fit( (string) $text, count( $values ) ) ) {
+			return null;
+		}
 		try {
 			$line = vsprintf( $text, $values );
 		} catch ( \Throwable $e ) {
 			return null;
 		}
-		return is_string( $line ) ? $line : null;
+		return is_string( $line ) && '' !== $line ? $line : null;
+	}
+
+	/**
+	 * Whether every placeholder of a template is one vsprintf() knows on
+	 * PHP 7.4 and later, and points at one of the values.
+	 *
+	 * @param string $text  Template.
+	 * @param int    $count Number of values.
+	 * @return bool
+	 */
+	private static function placeholders_fit( $text, $count ) {
+		$length = strlen( $text );
+		$next   = 0;
+		for ( $i = 0; $i < $length; $i++ ) {
+			if ( '%' !== $text[ $i ] ) {
+				continue;
+			}
+			++$i;
+			if ( $i < $length && '%' === $text[ $i ] ) {
+				continue;
+			}
+			// An argument number, like the 2 in "%2$s".
+			$start = $i;
+			while ( $i < $length && ctype_digit( $text[ $i ] ) ) {
+				++$i;
+			}
+			$position = 0;
+			if ( $i > $start && $i < $length && '$' === $text[ $i ] ) {
+				$position = (int) substr( $text, $start, $i - $start );
+				if ( $position < 1 ) {
+					return false;
+				}
+				++$i;
+			} else {
+				$i = $start;
+			}
+			// Flags, then width and precision.
+			while ( $i < $length && false !== strpos( "-+ 0'", $text[ $i ] ) ) {
+				if ( "'" === $text[ $i ] ) {
+					++$i;
+				}
+				++$i;
+			}
+			while ( $i < $length && ( ctype_digit( $text[ $i ] ) || '.' === $text[ $i ] ) ) {
+				++$i;
+			}
+			if ( $i >= $length || false === strpos( 'bcdeEfFgGosuxX', $text[ $i ] ) ) {
+				return false;
+			}
+			if ( 0 === $position ) {
+				$position = ++$next;
+			}
+			if ( $position > $count ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
