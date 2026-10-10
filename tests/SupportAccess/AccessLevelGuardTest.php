@@ -312,18 +312,44 @@ class AccessLevelGuardTest extends WP_UnitTestCase {
 		$this->assertSame( 200, $this->rest( new WP_REST_Request( 'GET', '/wp/v2/users/' . $this->other_admin ) )->get_status() );
 	}
 
+	/**
+	 * The plugins route answers 404 unless the plugin file is under
+	 * WP_PLUGIN_DIR. In CI the checkout is somewhere else, so this links it
+	 * in as happyaccess/ for the test and the caller removes the link.
+	 *
+	 * @return string The link it made, or an empty string when none was needed.
+	 */
+	private function link_happyaccess_into_the_plugins_folder() {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		if ( file_exists( WP_PLUGIN_DIR . '/' . HAPPYACCESS_PLUGIN_BASENAME ) ) {
+			return '';
+		}
+		$link = WP_PLUGIN_DIR . '/' . dirname( HAPPYACCESS_PLUGIN_BASENAME );
+		$this->assertTrue( symlink( dirname( HAPPYACCESS_PLUGIN_FILE ), $link ), 'HappyAccess could be linked into ' . WP_PLUGIN_DIR );
+		wp_clean_plugins_cache( false );
+		return $link;
+	}
+
 	public function test_a_full_pass_cannot_deactivate_happyaccess_through_the_plugins_route() {
 		$this->site_admins_manage_plugins();
 		update_option( 'active_plugins', array( HAPPYACCESS_PLUGIN_BASENAME ) );
-		$this->full();
-		$request = new WP_REST_Request( 'PUT', '/wp/v2/plugins/' . substr( HAPPYACCESS_PLUGIN_BASENAME, 0, -4 ) );
-		$request->set_body_params( array( 'status' => 'inactive' ) );
+		$link = $this->link_happyaccess_into_the_plugins_folder();
+		try {
+			$this->full();
+			$request = new WP_REST_Request( 'PUT', '/wp/v2/plugins/' . substr( HAPPYACCESS_PLUGIN_BASENAME, 0, -4 ) );
+			$request->set_body_params( array( 'status' => 'inactive' ) );
 
-		$response = $this->rest( $request );
+			$response = $this->rest( $request );
 
-		$this->assertSame( 403, $response->get_status() );
-		$this->assertSame( 'rest_cannot_deactivate_plugin', $response->as_error()->get_error_code() );
-		$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
+			$this->assertSame( 403, $response->get_status() );
+			$this->assertSame( 'rest_cannot_deactivate_plugin', $response->as_error()->get_error_code() );
+			$this->assertContains( HAPPYACCESS_PLUGIN_BASENAME, (array) get_option( 'active_plugins' ) );
+		} finally {
+			if ( '' !== $link && is_link( $link ) ) {
+				unlink( $link ); // Only the link this test made; the plugin files stay.
+				wp_clean_plugins_cache( false );
+			}
+		}
 	}
 
 	public function test_custom_cannot_edit_the_fallback_owners_email() {
