@@ -134,9 +134,9 @@ final class Requests {
 			return self::user_for( (int) $row['user_id'], false );
 		}
 
-		// One statement: MySQL applies the assignments left to right, so the lockout sees the raised count.
+		// One statement. used_at comes first and reads the count before this try, which MySQL and SQLite both do for the first assignment, so the try that reaches the limit closes the code on both.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table.
-		$counted = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1, used_at = IF( attempts >= %d, %s, used_at ) WHERE id = %d AND used_at IS NULL AND attempts < %d", self::MAX_ATTEMPTS, $now, $id, self::MAX_ATTEMPTS ) );
+		$counted = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET used_at = CASE WHEN attempts + 1 >= %d THEN %s ELSE used_at END, attempts = attempts + 1 WHERE id = %d AND used_at IS NULL AND attempts < %d", self::MAX_ATTEMPTS, $now, $id, self::MAX_ATTEMPTS ) );
 		if ( 1 !== $counted ) {
 			return self::invalid_code();
 		}

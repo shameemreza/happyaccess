@@ -561,8 +561,9 @@ final class Privacy {
 			// Summaries end with the label ("Support access granted to Acme"). Only that trailing part is replaced, and short labels are skipped because they could match other text.
 			if ( mb_strlen( $grant['label'] ) >= 3 ) {
 				$suffix = ' ' . $grant['label'];
+				// LIKE instead of RIGHT(), which SQLite doesn't have.
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom table.
-				$wpdb->query( $wpdb->prepare( 'UPDATE %i SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND RIGHT( summary, CHAR_LENGTH( %s ) ) = %s', $logs, $suffix, ' [removed]', $grant['id'], $suffix, $suffix ) );
+				$wpdb->query( $wpdb->prepare( 'UPDATE %i SET summary = CONCAT( LEFT( summary, CHAR_LENGTH( summary ) - CHAR_LENGTH( %s ) ), %s ) WHERE token_id = %d AND summary LIKE %s', $logs, $suffix, ' [removed]', $grant['id'], '%' . $wpdb->esc_like( $suffix ) ) );
 				// The line is built from the label in the meta, so it goes there too.
 				$in_meta = '%' . $wpdb->esc_like( (string) wp_json_encode( $grant['label'] ) ) . '%';
 				self::scrub_label_in_meta( (int) $grant['id'], $grant['label'], $in_meta );

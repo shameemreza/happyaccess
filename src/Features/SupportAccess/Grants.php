@@ -35,6 +35,11 @@ final class Grants {
 	const CODE_ATTEMPTS = 5;
 
 	/**
+	 * Tries record_login() makes when other logins keep counting first.
+	 */
+	const LOGIN_TRIES = 5;
+
+	/**
 	 * Access levels a grant can have.
 	 */
 	const LEVELS = array( 'protected', 'custom', 'full' );
@@ -709,35 +714,52 @@ final class Grants {
 	}
 
 	/**
-	 * Counts one login. A single UPDATE checks the limits and writes the
-	 * counters, so two requests cannot both use the last login of a one-time
-	 * grant.
+	 * Counts one login. It reads the login count, then one UPDATE checks the
+	 * limits and writes the next count only while the row still holds the
+	 * count it read. Two requests can't both use the last login of a
+	 * one-time grant, and two parallel first logins can't both write 1: the
+	 * one that loses reads again and tries the next number, or stops when the
+	 * limits refuse it. Plain SQL, so it works on MySQL, MariaDB and SQLite.
 	 *
 	 * @param int $id Grant id.
 	 * @return bool True when this login was counted.
 	 */
 	public static function record_login( $id ) {
 		global $wpdb;
-		$now   = Clock::mysql();
 		$table = Installer::table( 'tokens' );
-		$sql   = "UPDATE {$table} SET use_count = use_count + 1, login_count = LAST_INSERT_ID( login_count + 1 ), last_login_at = %s, used_at = COALESCE( used_at, %s )
-			WHERE id = %d AND revoked_at IS NULL AND suspended_at IS NULL AND expires_at > %s AND ( max_uses = 0 OR use_count < max_uses )";
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Custom table; the query is prepared here.
-		$changed = $wpdb->query( $wpdb->prepare( $sql, $now, $now, (int) $id, $now ) );
-		self::flush_cache();
+		$seen  = null;
 
 		self::$last_login_count = 0;
-		if ( 1 !== $changed ) {
-			return false;
+		for ( $try = 0; $try < self::LOGIN_TRIES; $try++ ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Custom table; the row must be read fresh.
+			$count = $wpdb->get_var( $wpdb->prepare( "SELECT login_count FROM {$table} WHERE id = %d", (int) $id ) );
+			// The count didn't move since the last try, so the limits refused it, not another login.
+			if ( null === $count || ( null !== $seen && (int) $count === $seen ) ) {
+				break;
+			}
+			$seen = (int) $count;
+			$now  = Clock::mysql();
+			$sql  = "UPDATE {$table} SET use_count = use_count + 1, login_count = %d, last_login_at = %s, used_at = COALESCE( used_at, %s )
+				WHERE id = %d AND login_count = %d AND revoked_at IS NULL AND suspended_at IS NULL AND expires_at > %s AND ( max_uses = 0 OR use_count < max_uses )";
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Custom table; the query is prepared here.
+			$changed = $wpdb->query( $wpdb->prepare( $sql, $seen + 1, $now, $now, (int) $id, $seen, $now ) );
+			if ( 1 === $changed ) {
+				self::$last_login_count = $seen + 1;
+				break;
+			}
+			if ( false === $changed ) {
+				break;
+			}
 		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Reads this connection's value set by the UPDATE above.
-		self::$last_login_count = (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' );
-		return true;
+
+		self::flush_cache();
+		return self::$last_login_count > 0;
 	}
 
 	/**
-	 * Login count that the last successful record_login() wrote. It comes from
-	 * the same UPDATE, so two parallel first logins can't both see 1.
+	 * Login count that the last successful record_login() wrote. Only the
+	 * UPDATE that moved the count from the number it read gets that number,
+	 * so two parallel first logins can't both see 1.
 	 *
 	 * @return int 0 when unknown.
 	 */

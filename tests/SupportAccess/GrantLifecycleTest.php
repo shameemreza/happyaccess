@@ -439,6 +439,120 @@ class GrantLifecycleTest extends WP_UnitTestCase {
 		$this->assertFalse( Grants::record_login( $id ) );
 	}
 
+	public function test_record_login_counts_each_login_and_stamps_it() {
+		list( $id ) = $this->grant_with_user();
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$this->assertTrue( Grants::record_login( $id ) );
+			$this->assertSame( $i, Grants::last_login_count() );
+		}
+		$grant = Grants::get( $id );
+		$this->assertSame( 3, $grant['login_count'] );
+		$this->assertSame( 3, $grant['use_count'] );
+		$this->assertSame( 1790000000, $grant['last_login_at'] );
+		$this->assertSame( 'active', $grant['status'] );
+	}
+
+	public function test_record_login_fails_for_revoked_and_unknown_grants() {
+		list( $id ) = $this->grant_with_user();
+		Grants::revoke( $id );
+		$this->assertFalse( Grants::record_login( $id ) );
+		$this->assertSame( 0, Grants::last_login_count() );
+		$this->assertFalse( Grants::record_login( 987654 ) );
+	}
+
+	public function test_record_login_stops_at_once_when_the_limits_refuse_it() {
+		list( $id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->assertTrue( Grants::record_login( $id ) );
+		$updates = $this->count_login_updates();
+		$this->assertFalse( Grants::record_login( $id ) );
+		remove_all_filters( 'query' );
+		$this->assertSame( 1, $updates->count );
+		$this->assertSame( 1, Grants::get( $id )['login_count'] );
+	}
+
+	public function test_record_login_takes_the_next_count_when_another_login_counted_first() {
+		list( $id ) = $this->grant_with_user();
+		$this->count_another_login_before_each_update( $id, 1 );
+		$this->assertTrue( Grants::record_login( $id ) );
+		remove_all_filters( 'query' );
+		// The other request wrote 1, so this one is the second login.
+		$this->assertSame( 2, Grants::last_login_count() );
+		$grant = Grants::get( $id );
+		$this->assertSame( 2, $grant['login_count'] );
+		$this->assertSame( 2, $grant['use_count'] );
+	}
+
+	public function test_record_login_loses_the_last_use_of_a_one_time_grant_to_another_login() {
+		list( $id ) = $this->grant_with_user( array( 'one_time' => true ) );
+		$this->count_another_login_before_each_update( $id, 1 );
+		$this->assertFalse( Grants::record_login( $id ) );
+		remove_all_filters( 'query' );
+		$this->assertSame( 0, Grants::last_login_count() );
+		$grant = Grants::get( $id );
+		$this->assertSame( 1, $grant['login_count'] );
+		$this->assertSame( 1, $grant['use_count'] );
+		$this->assertSame( 'used', $grant['status'] );
+	}
+
+	public function test_record_login_gives_up_when_other_logins_always_count_first() {
+		list( $id ) = $this->grant_with_user();
+		$this->count_another_login_before_each_update( $id, PHP_INT_MAX );
+		$this->assertFalse( Grants::record_login( $id ) );
+		remove_all_filters( 'query' );
+		$this->assertSame( 0, Grants::last_login_count() );
+		$this->assertSame( Grants::LOGIN_TRIES, Grants::get( $id )['login_count'] );
+	}
+
+	/**
+	 * Counts the UPDATEs record_login() sends.
+	 *
+	 * @return object With a count property.
+	 */
+	private function count_login_updates() {
+		$seen  = (object) array( 'count' => 0 );
+		$table = Installer::table( 'tokens' );
+		add_filter(
+			'query',
+			static function ( $query ) use ( $seen, $table ) {
+				if ( 0 === strpos( ltrim( $query ), "UPDATE {$table} SET use_count = use_count + 1, login_count = " ) ) {
+					++$seen->count;
+				}
+				return $query;
+			}
+		);
+		return $seen;
+	}
+
+	/**
+	 * Plays a parallel request: just before record_login()'s UPDATE runs,
+	 * after it read the count, another login is counted on the same row.
+	 *
+	 * @param int $id    Grant id.
+	 * @param int $times How many UPDATEs get a login counted before them.
+	 */
+	private function count_another_login_before_each_update( $id, $times ) {
+		global $wpdb;
+		$table = Installer::table( 'tokens' );
+		$state = (object) array(
+			'left' => $times,
+			'busy' => false,
+		);
+		add_filter(
+			'query',
+			static function ( $query ) use ( $wpdb, $table, $id, $state ) {
+				if ( $state->busy || $state->left < 1 || 0 !== strpos( ltrim( $query ), "UPDATE {$table} SET use_count = use_count + 1, login_count = " ) ) {
+					return $query;
+				}
+				$state->busy = true;
+				--$state->left;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Test table.
+				$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET use_count = use_count + 1, login_count = login_count + 1 WHERE id = %d", $id ) );
+				$state->busy = false;
+				return $query;
+			}
+		);
+	}
+
 	public function test_cleanup_expired_ends_only_expired_grants() {
 		list( $old, $old_user ) = $this->grant_with_user( array( 'duration' => 3600 ) );
 		list( $new )            = $this->grant_with_user();
