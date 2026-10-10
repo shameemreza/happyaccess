@@ -16,9 +16,9 @@ concurrency:
 jobs:
   phpcs:
     name: PHPCS and PHPCompatibility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -37,12 +37,12 @@ jobs:
 
   js:
     name: JavaScript tests, lint and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The repo pins Node in .nvmrc. @wordpress/scripts 36 needs Node 22.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -67,7 +67,7 @@ jobs:
 
   phpunit:
     name: PHPUnit on PHP ${{ matrix.php }}, WooCommerce ${{ matrix.woocommerce }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -105,9 +105,9 @@ jobs:
       WOOCOMMERCE_VERSION: ${{ matrix.woocommerce }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
