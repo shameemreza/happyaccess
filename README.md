@@ -48,7 +48,7 @@ With HappyAccess, you create a pass in Users > HappyAccess and send them the log
 
 The Activity tab lists the posts, pages, products, settings, plugins, themes and users a temporary user changed, and order status changes, with times and IP addresses. Export it as CSV.
 
-![The HappyAccess Activity tab with a session summary for Acme support (1 login, 3 changes, 1 IP address) and a list of the product, page and settings they changed today](.github/assets/screenshots/activity-log.png)
+![The HappyAccess Activity tab with a session summary for Acme Hosting support (1 login, 3 changes, 1 IP address) and a list of the product, page and settings they changed today](.github/assets/screenshots/activity-log.png)
 
 *Activity: what the support person changed while they were in.*
 
