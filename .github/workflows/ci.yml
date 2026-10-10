@@ -148,3 +148,17 @@ jobs:
 
       - name: Release files
         run: composer test:release
+
+  # The one check branch protection requires. Its name never changes, so
+  # moving the WooCommerce or PHP versions in the matrix never blocks a PR.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [ phpcs, js, phpunit ]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check that every job passed
+        run: |
+          test "${{ needs.phpcs.result }}" = success
+          test "${{ needs.js.result }}" = success
+          test "${{ needs.phpunit.result }}" = success
