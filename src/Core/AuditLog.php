@@ -19,9 +19,11 @@ defined( 'ABSPATH' ) || exit;
  * LogText::summary() builds the line for the Activity tab, the CSV export,
  * the privacy export and the access-ended email. The summary column keeps
  * the line as written, in the writer's language, for search and for rows
- * read without the meta. Settings rows are built from their changed keys
- * (SettingLabels). Never store a sentence as the only record of a row, and
- * never put words of the sentence in a value.
+ * read without the meta. A row written before translations can load, such
+ * as the upgrade row at plugins_loaded, stores LogText::plain() there
+ * instead. Settings rows are built from their changed keys (SettingLabels).
+ * Never store a sentence as the only record of a row, and never put words
+ * of the sentence in a value.
  */
 final class AuditLog {
 
@@ -75,8 +77,9 @@ final class AuditLog {
 			_doing_it_wrong( __METHOD__, esc_html( sprintf( 'Unknown log text key: %s', (string) $args['summary_key'] ) ), '1.1.0' );
 		}
 		if ( LogText::exists( $args['summary_key'] ) ) {
+			// Before after_setup_theme the line can't be translated without a notice, so the row keeps its key and values and is built when read.
 			$values          = is_array( $args['summary_args'] ) ? array_values( $args['summary_args'] ) : array();
-			$args['summary'] = LogText::render( $args['summary_key'], $values );
+			$args['summary'] = LogText::can_translate() ? LogText::render( $args['summary_key'], $values ) : LogText::plain( $args['summary_key'], $values );
 			$args['meta']    = array_merge( is_array( $args['meta'] ) ? $args['meta'] : array(), LogText::meta( $args['summary_key'], $values ) );
 		}
 

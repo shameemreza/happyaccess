@@ -9,6 +9,7 @@ use HappyAccess\Core\AuditLog;
 use HappyAccess\Core\Clock;
 use HappyAccess\Core\Codes;
 use HappyAccess\Core\Installer;
+use HappyAccess\Core\LogText;
 use HappyAccess\Core\Secrets;
 use HappyAccess\Core\Settings;
 use HappyAccess\Features\SupportAccess\Grants;
@@ -72,6 +73,72 @@ class MigrationTest extends WP_UnitTestCase {
 	private function token( $hash ) {
 		global $wpdb;
 		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}happyaccess_tokens WHERE token_hash = %s", $hash ), ARRAY_A );
+	}
+
+	/**
+	 * The upgrade runs at plugins_loaded, before translations may load. This
+	 * rebuilds that moment: after_setup_theme and init haven't run, and the
+	 * happyaccess domain has a translation folder that isn't loaded yet, so
+	 * any translated string would make WordPress call
+	 * _load_textdomain_just_in_time() and flag it as too early.
+	 */
+	public function test_the_upgrade_before_init_loads_no_translations() {
+		global $wp_actions, $wp_textdomain_registry, $l10n;
+
+		$saved_actions  = $wp_actions;
+		$saved_registry = $wp_textdomain_registry;
+		$had_domain     = isset( $l10n['happyaccess'] );
+		$saved_domain   = $had_domain ? $l10n['happyaccess'] : null;
+
+		unset( $wp_actions['after_setup_theme'], $wp_actions['init'] );
+		$wp_textdomain_registry = new WP_Textdomain_Registry(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored below.
+		unset( $l10n['happyaccess'] );
+		$lang_dir = static function ( $path, $domain ) {
+			return 'happyaccess' === $domain ? trailingslashit( sys_get_temp_dir() ) : $path;
+		};
+		add_filter( 'lang_dir_for_domain', $lang_dir, 10, 2 );
+
+		$too_early = array();
+		$record    = static function ( $function_name ) use ( &$too_early ) {
+			$too_early[] = $function_name;
+		};
+		$gettext   = 0;
+		$count     = static function ( $translation ) use ( &$gettext ) {
+			++$gettext;
+			return $translation;
+		};
+		add_action( 'doing_it_wrong_run', $record );
+		add_filter( 'gettext_happyaccess', $count );
+		add_filter( 'ngettext_happyaccess', $count );
+
+		try {
+			$this->assertFalse( LogText::can_translate() );
+			Installer::maybe_upgrade();
+
+			$this->assertNotContains( '_load_textdomain_just_in_time', $too_early );
+			$this->assertSame( 0, $gettext, 'Nothing in the upgrade asked for a translation.' );
+			$this->assertSame( Installer::DB_VERSION, get_option( 'happyaccess_db_version' ), 'The migration ran.' );
+			$row = AuditLog::query( array( 'event' => 'plugin_upgraded' ) )['items'][0];
+			$this->assertSame( 'plugin_upgraded: 1.0.4, ' . Installer::DB_VERSION, $row['summary'] );
+
+			// The same setup does flag a translated string, so the checks above can fail.
+			$this->setExpectedIncorrectUsage( '_load_textdomain_just_in_time' );
+			__( 'Two-step login reset', 'happyaccess' );
+			$this->assertContains( '_load_textdomain_just_in_time', $too_early );
+		} finally {
+			remove_action( 'doing_it_wrong_run', $record );
+			remove_filter( 'gettext_happyaccess', $count );
+			remove_filter( 'ngettext_happyaccess', $count );
+			remove_filter( 'lang_dir_for_domain', $lang_dir, 10 );
+			$wp_actions             = $saved_actions; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the saved state.
+			$wp_textdomain_registry = $saved_registry; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the saved state.
+			if ( $had_domain ) {
+				$l10n['happyaccess'] = $saved_domain; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restoring the saved state.
+			} else {
+				unset( $l10n['happyaccess'] );
+			}
+		}
+		$this->assertSame( 'Upgraded from 1.0.4 to ' . Installer::DB_VERSION, LogText::summary( 'plugin_upgraded', $row['summary'], $row['meta'] ), 'The row reads as a line once translations can load.' );
 	}
 
 	public function test_active_codes_are_hashed_and_plain_codes_removed() {

@@ -38,6 +38,80 @@ final class LogText {
 	const MAX_ARGS = 9;
 
 	/**
+	 * Every text key of templates(), in the same order. exists() reads this
+	 * list, so checking a key loads no translations, and a row can be logged
+	 * before init, like the upgrade row. LogTextTest keeps both lists equal.
+	 */
+	const KEYS = array(
+		'grant_created',
+		'grant_extended',
+		'grant_suspended',
+		'grant_resumed',
+		'grant_regenerated',
+		'grant_ended',
+		'bundle_emailed',
+		'emergency_lock',
+		'login_success',
+		'login_setup_failed',
+		'admin_account_created',
+		'admin_account_changed',
+		'admin_role_default',
+		'admin_role_granted',
+		'wc_key_blocked',
+		'roles_changed_plugin_work',
+		'roles_changed',
+		'role_change_blocked',
+		'plugin_activated',
+		'plugin_deactivated',
+		'plugin_deleted',
+		'core_updated',
+		'translations_updated',
+		'plugins_updated',
+		'themes_updated',
+		'theme_switched',
+		'theme_deleted',
+		'post_created',
+		'post_updated',
+		'post_trashed',
+		'post_deleted',
+		'order_status_changed',
+		'user_updated',
+		'user_created',
+		'user_role_changed',
+		'user_role_added',
+		'privacy_erased',
+		'wc_webhook_created',
+		'settings_saved',
+		'plugin_upgraded',
+		'captcha_unavailable',
+		'captcha_failed',
+		'passwordless_requested',
+		'passwordless_rate_limited',
+		'passwordless_not_created',
+		'passwordless_attempts',
+		'passwordless_invalid_code',
+		'passwordless_invalid_link',
+		'passwordless_login',
+		'passwordless_site_locked',
+		'passwordless_policy_paused',
+		'twostep_secret_unreadable',
+		'twostep_app_enabled',
+		'twostep_app_disabled',
+		'twostep_email_enabled',
+		'twostep_email_disabled',
+		'twostep_reset',
+		'twostep_passed',
+		'twostep_failed',
+		'twostep_locked',
+		'twostep_account_paused',
+		'twostep_site_alert',
+		'twostep_skipped',
+		'twostep_backup_regenerated',
+		'twostep_backup_used',
+		'new_device_login',
+	);
+
+	/**
 	 * Every template, by text key. An entry is a string, or an array with:
 	 * - text:   the template.
 	 * - plural: a nooped plural, used instead of text.
@@ -203,7 +277,37 @@ final class LogText {
 	 * @return bool
 	 */
 	public static function exists( $key ) {
-		return is_string( $key ) && array_key_exists( $key, self::templates() );
+		return is_string( $key ) && in_array( $key, self::KEYS, true );
+	}
+
+	/**
+	 * Whether the plugin's translations can load now. WordPress logs a
+	 * notice when a text domain loads before after_setup_theme.
+	 *
+	 * @return bool
+	 */
+	public static function can_translate() {
+		return did_action( 'after_setup_theme' ) > 0 || doing_action( 'after_setup_theme' );
+	}
+
+	/**
+	 * A line with no words to translate: the text key and its values. It is
+	 * the stored summary of a row written before translations can load; the
+	 * row is still read through summary(), which builds the real line.
+	 *
+	 * @param string $key  Text key.
+	 * @param array  $args Values, in placeholder order.
+	 * @return string
+	 */
+	public static function plain( $key, array $args = array() ) {
+		$values = array();
+		foreach ( array_slice( array_values( $args ), 0, self::MAX_ARGS ) as $arg ) {
+			$value = self::value( $arg );
+			if ( '' !== $value ) {
+				$values[] = $value;
+			}
+		}
+		return $values ? $key . ': ' . implode( ', ', $values ) : (string) $key;
 	}
 
 	/**

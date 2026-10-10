@@ -233,6 +233,25 @@ class LogTextTest extends WP_UnitTestCase {
 		$this->assertSame( 'Temporary access granted to Acme', LogText::render( 'grant_created', array( 'Acme' ) ) );
 	}
 
+	public function test_the_key_list_matches_the_templates() {
+		$this->assertSame( array_keys( LogText::templates() ), LogText::KEYS );
+	}
+
+	public function test_checking_a_key_translates_nothing() {
+		$calls = 0;
+		$count = static function ( $translation ) use ( &$calls ) {
+			++$calls;
+			return $translation;
+		};
+		add_filter( 'gettext_happyaccess', $count );
+		add_filter( 'ngettext_happyaccess', $count );
+		$this->assertTrue( LogText::exists( 'plugin_upgraded' ) );
+		$this->assertFalse( LogText::exists( 'not_a_text' ) );
+		$this->assertSame( 'plugin_upgraded: 1.0.4, 1.1.1', LogText::plain( 'plugin_upgraded', array( '1.0.4', '1.1.1' ) ) );
+		$this->assertSame( 'twostep_reset', LogText::plain( 'twostep_reset' ) );
+		$this->assertSame( 0, $calls );
+	}
+
 	public function test_an_unknown_text_key_is_flagged_and_stores_no_line() {
 		$this->setExpectedIncorrectUsage( 'HappyAccess\Core\AuditLog::add' );
 		AuditLog::add( 'note', array( 'summary_key' => 'grant_craeted' ) );
